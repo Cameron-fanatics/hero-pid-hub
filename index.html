@@ -1188,7 +1188,28 @@ function processImportFile(file) {
   reader.onload = e => {
     try {
       // Read shared strings directly from XML to avoid XLSX browser encoding bugs
-    readWorkbookDirect(e.target.result, clubId, seasonId, file.name);
+    // Read and fix encoding issues from XLSX.js browser bugs
+    const wb = XLSX.read(e.target.result, {type:'array', cellText:false, cellDates:false});
+    // Fix U+25C6 diamond replacement chars by using raw XML cell values
+    wb.SheetNames.forEach(sheetName => {
+      const ws = wb.Sheets[sheetName];
+      Object.keys(ws).forEach(addr => {
+        if (addr.startsWith('!')) return;
+        const cell = ws[addr];
+        if (cell && cell.t === 's' && cell.v && typeof cell.v === 'string') {
+          if (cell.v.includes('◆') || cell.v.includes('�')) {
+            if (cell.r) {
+              const fixed = cell.r.replace(/&#x([0-9A-Fa-f]+);/g, (_, hex) =>
+                String.fromCodePoint(parseInt(hex, 16)));
+              if (!fixed.includes('◆') && !fixed.includes('�')) {
+                cell.v = fixed; cell.w = fixed;
+              }
+            }
+          }
+        }
+      });
+    });
+    parseImportWorkbook(wb, clubId, seasonId, file.name);
     } catch(err) { toast('Could not read file: '+err.message,'error'); }
   };
   reader.readAsArrayBuffer(file);
