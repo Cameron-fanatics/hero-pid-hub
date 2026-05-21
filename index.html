@@ -1187,8 +1187,8 @@ function processImportFile(file) {
   const reader = new FileReader();
   reader.onload = e => {
     try {
-      const wb = XLSX.read(e.target.result, {type:'array',cellText:false,cellDates:false,raw:false,codepage:65001});
-      parseImportWorkbook(wb, clubId, seasonId, file.name);
+      // Read shared strings directly from XML to avoid XLSX browser encoding bugs
+    readWorkbookDirect(e.target.result, clubId, seasonId, file.name);
     } catch(err) { toast('Could not read file: '+err.message,'error'); }
   };
   reader.readAsArrayBuffer(file);
