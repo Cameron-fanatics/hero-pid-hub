@@ -820,7 +820,7 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
         }
       }
     }
-    if (garmentCols.length === 0) {
+        {
       let garmentHits = 0;
       const potentialCols = [];
       for (let c = 0; c < row.length; c++) {
@@ -836,7 +836,9 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
       }
       const isGKRow = potentialCols.some(c => c.label.toLowerCase().includes('gk') || c.label.toLowerCase().includes('goalkeeper'));
       if (garmentHits >= 2 || (garmentHits === 1 && isGKRow)) {
-        garmentCols = potentialCols;
+        if (potentialCols.length > garmentCols.length) {
+          garmentCols = potentialCols;
+        }
       }
     }
   }
