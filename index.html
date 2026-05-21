@@ -737,6 +737,14 @@ function detectKitFromColA(val) {
 function titleCase(str) {
   return str.replace(/\b\w/g, c => c.toUpperCase());
 }
+const GARMENT_KEYWORDS = [
+    'pro shirt','mens ss','mens s/s','mens ls','mens l/s','dri fit adv mens',
+    'dri-fit adv mens','dri fit adv womens','dri-fit adv womens',
+    'womens pro shirt','womens ss','womens s/s','womens',
+    'pro kids','kids ss','kids s/s','little kids','infants','mini kit',
+    'gk','goalkeeper'
+  ];
+
 function parseImportWorkbook(wb, clubId, seasonId, filename) {
   const club = DB.clubs.find(c => c.id === clubId);
   const season = DB.seasons.find(s => s.id === seasonId);
@@ -809,13 +817,7 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
   let hpRowIdx = -1;
   let actorHeaderRowIdx = -1;
   let actorNameCol = -1;
-  const GARMENT_KEYWORDS = [
-    'pro shirt','mens ss','mens s/s','mens ls','mens l/s','dri fit adv mens',
-    'dri-fit adv mens','dri fit adv womens','dri-fit adv womens',
-    'womens pro shirt','womens ss','womens s/s','womens',
-    'pro kids','kids ss','kids s/s','little kids','infants','mini kit',
-    'gk','goalkeeper'
-  ];
+
   for (let i = startRow; i < Math.min(endRow, startRow + 25); i++) {
     const row = rows[i];
     const rowStr = row.map(c => (c === null || c === undefined ? '' : String(c)).toLowerCase()).join('|');
