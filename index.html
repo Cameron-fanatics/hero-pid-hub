@@ -1259,12 +1259,14 @@ function normaliseGarment(label) { const k=label.toLowerCase().trim(); return GA
 function showImportPreview(club, season, filename) {
   const d=importData;
   const newPlayers=d.players.filter(p=>!CACHE.players.find(e=>e.Name===p.name&&e.ClubID===p.clubId&&e.SeasonID===p.seasonId));
+  const existingPlayers=d.players.filter(p=>CACHE.players.find(e=>e.Name===p.name&&e.ClubID!==p.clubId));
   const newHeroes=d.heroes.filter(h=>!CACHE.heroes.find(e=>e.PID===h.pid));
   const newParents=d.parents.filter(p=>!CACHE.parents.find(e=>e.PID===p.pid));
   const dupHeroes=d.heroes.length-newHeroes.length;
   document.getElementById('import-preview-title').textContent=`Preview — ${filename}`;
   document.getElementById('import-preview').classList.remove('hidden');
   let html=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;"><div class="stat-pill"><span class="stat-label">New players</span><span class="stat-value" style="color:var(--green);">${newPlayers.length}</span></div><div class="stat-pill"><span class="stat-label">New hero PIDs</span><span class="stat-value" style="color:var(--green);">${newHeroes.length}</span></div><div class="stat-pill"><span class="stat-label">New parent PIDs</span><span class="stat-value" style="color:var(--amber);">${newParents.length}</span></div></div>`;
+  if (existingPlayers.length>0) html+=`<div style="background:rgba(99,179,237,0.08);border:1px solid rgba(99,179,237,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:#63b3ed;margin-bottom:10px;">ℹ ${existingPlayers.length} player${existingPlayers.length>1?'s':''} already in database from another club (${existingPlayers.map(p=>p.name).join(', ')}) — PIDs will still be imported</div>`;
   if (dupHeroes>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${dupHeroes} duplicate hero PIDs will be skipped</div>`;
   html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Sheets: ${d.sheets.join(', ')}</div>`;
   if (d.sectionsFound.length>0) html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Sections: ${d.sectionsFound.join(' · ')}</div>`;
@@ -1799,12 +1801,14 @@ function normaliseGarment(label) { const k=label.toLowerCase().trim(); return GA
 function showImportPreview(club, season, filename) {
   const d=importData;
   const newPlayers=d.players.filter(p=>!CACHE.players.find(e=>e.Name===p.name&&e.ClubID===p.clubId&&e.SeasonID===p.seasonId));
+  const existingPlayers=d.players.filter(p=>CACHE.players.find(e=>e.Name===p.name&&e.ClubID!==p.clubId));
   const newHeroes=d.heroes.filter(h=>!CACHE.heroes.find(e=>e.PID===h.pid));
   const newParents=d.parents.filter(p=>!CACHE.parents.find(e=>e.PID===p.pid));
   const dupHeroes=d.heroes.length-newHeroes.length;
   document.getElementById('import-preview-title').textContent=`Preview — ${filename}`;
   document.getElementById('import-preview').classList.remove('hidden');
   let html=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;"><div class="stat-pill"><span class="stat-label">New players</span><span class="stat-value" style="color:var(--green);">${newPlayers.length}</span></div><div class="stat-pill"><span class="stat-label">New hero PIDs</span><span class="stat-value" style="color:var(--green);">${newHeroes.length}</span></div><div class="stat-pill"><span class="stat-label">New parent PIDs</span><span class="stat-value" style="color:var(--amber);">${newParents.length}</span></div></div>`;
+  if (existingPlayers.length>0) html+=`<div style="background:rgba(99,179,237,0.08);border:1px solid rgba(99,179,237,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:#63b3ed;margin-bottom:10px;">ℹ ${existingPlayers.length} player${existingPlayers.length>1?'s':''} already in database from another club (${existingPlayers.map(p=>p.name).join(', ')}) — PIDs will still be imported</div>`;
   if (dupHeroes>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${dupHeroes} duplicate hero PIDs will be skipped</div>`;
   html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Sheets: ${d.sheets.join(', ')}</div>`;
   if (d.sectionsFound.length>0) html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Sections: ${d.sectionsFound.join(' · ')}</div>`;
