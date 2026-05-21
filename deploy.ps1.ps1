@@ -1,7 +1,7 @@
 # Hero PID Hub - GitHub Deploy Script
 # Run this whenever Claude has an update ready
  
-$token = "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"
+$token = "PASTE_YOUR_TOKEN_HERE"
 $owner = "Cameron-fanatics"
 $repo = "hero-pid-hub"
 $filePath = "index.html"
