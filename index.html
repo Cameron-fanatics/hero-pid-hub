@@ -579,7 +579,6 @@ async function saveSettings() {
 }
 
 async function initTables() {
-  // Use the metadata API to list tables
   const res = await fetch(`https://api.airtable.com/v0/meta/bases/${AT_BASE}/tables`, {
     headers: {'Authorization': `Bearer ${AT_TOKEN}`}
   });
@@ -592,6 +591,68 @@ async function initTables() {
   const missing = required.filter(n => !tableMap[n]);
   if (missing.length > 0) throw new Error(`Missing tables: ${missing.join(', ')}. Please create them in Airtable first.`);
   TABLES = {clubs:tableMap['Clubs'],seasons:tableMap['Seasons'],players:tableMap['Players'],parents:tableMap['Parent PIDs'],heroes:tableMap['Hero PIDs']};
+  // Create missing fields in each table
+  await ensureFields();
+}
+
+async function createField(tableId, field) {
+  try {
+    await fetch(`https://api.airtable.com/v0/meta/bases/${AT_BASE}/tables/${tableId}/fields`, {
+      method:'POST',
+      headers:{'Authorization':`Bearer ${AT_TOKEN}`,'Content-Type':'application/json'},
+      body: JSON.stringify(field)
+    });
+  } catch(e) {} // Ignore if field already exists
+}
+
+async function ensureFields() {
+  const fieldDefs = {
+    [TABLES.clubs]: [
+      {name:'Short',type:'singleLineText'},
+      {name:'League',type:'singleLineText'},
+      {name:'Sport',type:'singleLineText'},
+      {name:'Country',type:'singleLineText'}
+    ],
+    [TABLES.seasons]: [
+      {name:'Label',type:'singleLineText'},
+      {name:'StartYear',type:'number',options:{precision:0}},
+      {name:'EndYear',type:'number',options:{precision:0}},
+      {name:'Sport',type:'singleLineText'}
+    ],
+    [TABLES.players]: [
+      {name:'ShirtName',type:'singleLineText'},
+      {name:'SquadNumber',type:'number',options:{precision:0}},
+      {name:'Type',type:'singleLineText'},
+      {name:'ClubID',type:'singleLineText'},
+      {name:'SeasonID',type:'singleLineText'},
+      {name:'Status',type:'singleLineText'},
+      {name:'MDMActorID',type:'singleLineText'}
+    ],
+    [TABLES.parents]: [
+      {name:'PID',type:'singleLineText'},
+      {name:'ClubID',type:'singleLineText'},
+      {name:'SeasonID',type:'singleLineText'},
+      {name:'KitType',type:'singleLineText'},
+      {name:'GarmentType',type:'singleLineText'}
+    ],
+    [TABLES.heroes]: [
+      {name:'PID',type:'singleLineText'},
+      {name:'PlayerID',type:'singleLineText'},
+      {name:'ClubID',type:'singleLineText'},
+      {name:'SeasonID',type:'singleLineText'},
+      {name:'FontType',type:'singleLineText'},
+      {name:'GarmentType',type:'singleLineText'},
+      {name:'GarmentRaw',type:'singleLineText'},
+      {name:'KitType',type:'singleLineText'},
+      {name:'Status',type:'singleLineText'},
+      {name:'ParentPIDID',type:'singleLineText'}
+    ]
+  };
+  for (const [tableId, fields] of Object.entries(fieldDefs)) {
+    for (const field of fields) {
+      await createField(tableId, field);
+    }
+  }
 }
 
 async function loadCache() {
