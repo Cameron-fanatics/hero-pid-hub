@@ -843,6 +843,8 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
     }
   }
   if (actorHeaderRowIdx === -1 || garmentCols.length === 0 || actorNameCol === -1) return;
+  if (!importData._garmentDebug) importData._garmentDebug = [];
+  importData._garmentDebug.push(kitType + ': ' + garmentCols.map(g=>g.col+':'+g.label).join(', '));
   const idCol    = actorNameCol + 1;
   const shirtCol = actorNameCol + 2;
   const numCol   = actorNameCol + 3;
