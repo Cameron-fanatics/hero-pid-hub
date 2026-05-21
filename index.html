@@ -1187,7 +1187,7 @@ function processImportFile(file) {
   const reader = new FileReader();
   reader.onload = e => {
     try {
-      const wb = XLSX.read(e.target.result, {type:'array',cellText:false,cellDates:false});
+      const wb = XLSX.read(e.target.result, {type:'array',cellText:false,cellDates:false,raw:false,codepage:65001});
       parseImportWorkbook(wb, clubId, seasonId, file.name);
     } catch(err) { toast('Could not read file: '+err.message,'error'); }
   };
@@ -1342,16 +1342,15 @@ function parseSingleSection(rows,startRow,endRow,fontType,kitType,clubId,seasonI
 function fixEncoding(str) {
   if (!str) return str;
   try {
-    // Always attempt UTF-8 mojibake repair when non-ASCII chars present
-    if (/[\x80-\xFF]/.test(str) || /Ã|Å|Ä|Ç|Ñ|Ö|Ü/.test(str)) {
+    // UTF-8 mojibake repair (Latin-1 bytes misread as Unicode)
+    if (/[\x80-\xFF]/.test(str) || /\u00C3|\u00C4|\u00C5|\u00C7|\u00D1|\u00D6|\u00DC/.test(str)) {
       const bytes = new Uint8Array(str.length);
       for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xFF;
       const decoded = new TextDecoder('utf-8', {fatal: false}).decode(bytes);
       const replacements = (decoded.match(/\uFFFD/g) || []).length;
-      if (replacements === 0) return decoded.normalize('NFC');
       if (replacements < 3) return decoded.normalize('NFC');
     }
-    return str.replace(/\u25C6/g, '').normalize('NFC');
+    return str.normalize('NFC');
   } catch(e) { return str; }
 }
 
