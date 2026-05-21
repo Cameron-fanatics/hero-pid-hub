@@ -579,7 +579,12 @@ async function saveSettings() {
 }
 
 async function initTables() {
-  const data = await atFetch('');
+  // Use the metadata API to list tables
+  const res = await fetch(`https://api.airtable.com/v0/meta/bases/${AT_BASE}/tables`, {
+    headers: {'Authorization': `Bearer ${AT_TOKEN}`}
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
   const tables = data.tables || [];
   const tableMap = {};
   tables.forEach(t => tableMap[t.name] = t.id);
