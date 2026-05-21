@@ -1180,120 +1180,6 @@ let importData = null;
 
 function handleStorageFileSelect(e) { const f=e.target.files[0]; if(f) processImportFile(f); }
 
-async function extractSharedStrings(arrayBuffer) {
-  try {
-    const bytes = new Uint8Array(arrayBuffer);
-    let pos = 0;
-    while (pos < bytes.length - 4) {
-      if (bytes[pos]===0x50 && bytes[pos+1]===0x4B && bytes[pos+2]===0x03 && bytes[pos+3]===0x04) {
-        const compression = bytes[pos+8] | (bytes[pos+9]<<8);
-        const compSize = bytes[pos+18] | (bytes[pos+19]<<8) | (bytes[pos+20]<<16) | (bytes[pos+21]<<24);
-        const nameLen = bytes[pos+26] | (bytes[pos+27]<<8);
-        const extraLen = bytes[pos+28] | (bytes[pos+29]<<8);
-        const name = new TextDecoder().decode(bytes.slice(pos+30, pos+30+nameLen));
-        const dataStart = pos + 30 + nameLen + extraLen;
-        if (name === 'xl/sharedStrings.xml') {
-          let xmlBytes;
-          if (compression === 0) {
-            xmlBytes = bytes.slice(dataStart, dataStart+compSize);
-          } else if (compression === 8) {
-            // Deflate compressed - use DecompressionStream
-            const compressed = bytes.slice(dataStart, dataStart+compSize);
-            const ds = new DecompressionStream('deflate-raw');
-            const writer = ds.writable.getWriter();
-            const reader = ds.readable.getReader();
-            writer.write(compressed);
-            writer.close();
-            const chunks = [];
-            let done = false;
-            while (!done) {
-              const {value, done: d} = await reader.read();
-              if (value) chunks.push(value);
-              done = d;
-            }
-            const totalLen = chunks.reduce((a, c) => a + c.length, 0);
-            xmlBytes = new Uint8Array(totalLen);
-            let offset = 0;
-            chunks.forEach(c => { xmlBytes.set(c, offset); offset += c.length; });
-          }
-          if (xmlBytes) {
-            const xml = new TextDecoder('utf-8').decode(xmlBytes);
-            const strings = [];
-            const matches = xml.matchAll(/<t(?:[^>]*)>([^<]*)<\/t>/g);
-            for (const m of matches) {
-              const text = m[1]
-                .replace(/&amp;/g,'&').replace(/&lt;/g,'<')
-                .replace(/&gt;/g,'>').replace(/&quot;/g,'"')
-                .replace(/&#x([0-9A-Fa-f]+);/g,(_,h)=>String.fromCodePoint(parseInt(h,16)))
-                .replace(/&#([0-9]+);/g,(_,d)=>String.fromCodePoint(parseInt(d)));
-              strings.push(text);
-            }
-            return strings.length > 0 ? strings : null;
-          }
-        }
-        pos = dataStart + compSize;
-      } else {
-        pos++;
-      }
-    }
-    return null;
-  } catch(e) { return null; }
-}
-
-
-function processImportFile(file) {
-  const clubId = document.getElementById('import-club').value;
-  const seasonId = document.getElementById('import-season').value;
-  if (!clubId||!seasonId) { toast('Please select a club and season','error'); return; }
-  const reader = new FileReader();
-  reader.onload = async e => {
-    try {
-      // Read shared strings directly from XML to avoid XLSX browser encoding bugs
-    // Extract sharedStrings.xml directly from the xlsx zip to bypass XLSX.js encoding bugs
-    try {
-      const sharedStrings = await extractSharedStrings(e.target.result);
-      const wb = XLSX.read(e.target.result, {type:'array', cellText:false, cellDates:false});
-      if (sharedStrings && sharedStrings.length > 0) {
-        // Patch XLSX SST by index for reliable encoding fix
-        if (wb.SST) {
-          for (let i = 0; i < Math.min(sharedStrings.length, wb.SST.length); i++) {
-            const correct = sharedStrings[i];
-            const entry = wb.SST[i];
-            if (!entry || !correct) continue;
-            const current = typeof entry === 'object' ? (entry.t || '') : String(entry);
-            if (current !== correct) {
-              if (typeof entry === 'object') { entry.t = correct; entry.v = correct; }
-              else wb.SST[i] = correct;
-            }
-          }
-        }
-        // Also fix cells directly
-        wb.SheetNames.forEach(sheetName => {
-          const ws = wb.Sheets[sheetName];
-          Object.keys(ws).forEach(addr => {
-            if (addr.startsWith('!')) return;
-            const cell = ws[addr];
-            if (cell && cell.t === 's' && typeof cell.v === 'string' &&
-                (cell.v.includes('\u25C6') || cell.v.includes('\uFFFD'))) {
-              const stripped = cell.v.replace(/[\u25C6\uFFFD]/g, '');
-              const match = sharedStrings.find(s =>
-                s.replace(/[\u25C6\uFFFD]/g,'') === stripped && s !== stripped
-              );
-              if (match) { cell.v = match; cell.w = match; }
-            }
-          });
-        });
-      }
-      parseImportWorkbook(wb, clubId, seasonId, file.name);
-    } catch(err) {
-      toast('Could not read file: ' + err.message, 'error');
-    }
-    } catch(err) { toast('Could not read file: '+err.message,'error'); }
-  };
-  reader.readAsArrayBuffer(file);
-}
-
-const KIT_WORDS_DETECT = ['home','away','third','fourth','gk','goalkeeper','specials','special','night'];
 function detectKitFromColA(val) {
   const v = String(val||'').trim().toLowerCase();
   for (const k of KIT_WORDS_DETECT) { if(v===k||v.startsWith(k+' ')||v.endsWith(' '+k)) return v.replace(/\b\w/g,c=>c.toUpperCase()); }
@@ -1358,99 +1244,6 @@ function parseImportWorkbook(wb, clubId, seasonId, filename) {
   importData.players=importData.players.filter(p=>{const k=`${p.name}_${p.clubId}_${p.seasonId}`;if(seen.has(k))return false;seen.add(k);return true;});
   showImportPreview(club,season,filename);
 }
-
-function parseSingleSection(rows,startRow,endRow,fontType,kitType,clubId,seasonId,garmentHint) {
-  let garmentCols=(garmentHint&&garmentHint.length>0)?garmentHint.slice():[];
-  let hpRowIdx=-1;
-  // Collect ALL actor header rows (some files like FFF have multiple groups: GK + outfield)
-  const actorHeaderRows=[];
-  let actorNameCol=-1;
-
-  for (let i=startRow;i<Math.min(endRow,startRow+40);i++) {
-    const row=rows[i];
-    const rowStr=row.map(c=>(c===null||c===undefined?'':String(c)).toLowerCase()).join('|');
-    if (rowStr.includes('hp pid only')) hpRowIdx=i;
-    if (rowStr.includes('actor name')) {
-      let col=-1;
-      for (let c=0;c<row.length;c++) {
-        const v=String(row[c]||'').trim().toLowerCase().replace(/\s+/g,' ');
-        if (v==='actor name'||v.includes('actor name')){col=c;break;}
-      }
-      if (col===-1) { for(let c=0;c<Math.min(row.length,5);c++){if(String(row[c]||'').trim()){col=c;break;}} }
-      if (col!==-1) { actorHeaderRows.push({rowIdx:i,col}); if(actorNameCol===-1) actorNameCol=col; }
-    }
-    {
-      let hits=0;const pot=[];
-      for (let c=0;c<row.length;c++) {
-        const val=String(row[c]||'').trim();
-        if (!val) continue;
-        const vl=val.toLowerCase();
-        if (vl.includes('shorts')) continue;
-        if (vl.includes('assembl')||vl.includes('roster')) break;
-        if (GARMENT_KEYWORDS.some(k=>vl.includes(k))){hits++;pot.push({col:c,label:val});}
-      }
-      const isGK=pot.some(c=>c.label.toLowerCase().includes('gk')||c.label.toLowerCase().includes('goalkeeper'));
-      if (hits>=2||(hits===1&&isGK)) { if(pot.length>garmentCols.length) garmentCols=pot; }
-    }
-  }
-
-  if (actorHeaderRows.length===0||garmentCols.length===0||actorNameCol===-1) return;
-  if (!importData._garmentDebug) importData._garmentDebug=[];
-  importData._garmentDebug.push(kitType+': cols '+garmentCols.map(g=>g.col+':'+g.label).join(', '));
-
-  const colToParentPid={};
-  const parentRowIndices=[];
-  if (hpRowIdx!==-1) parentRowIndices.push({rowIdx:hpRowIdx,label:null});
-  for (let i=startRow;i<Math.min(endRow,actorHeaderRows[0].rowIdx+5);i++) {
-    const row=rows[i];
-    for (let c=0;c<3;c++) {
-      const val=String(row[c]||'').trim().toLowerCase();
-      if (val==='gk plain'||val.includes('gk plain')){parentRowIndices.push({rowIdx:i,label:'GK Plain'});break;}
-    }
-  }
-  parentRowIndices.forEach(({rowIdx,label}) => {
-    const pRow=rows[rowIdx];
-    garmentCols.forEach(gc => {
-      const pid=String(pRow[gc.col]===null||pRow[gc.col]===undefined?'':pRow[gc.col]).trim();
-      if (/^\d{6,12}$/.test(pid)) {
-        if (!importData.parents.find(p=>p.pid===pid)) importData.parents.push({pid,clubId,seasonId,kitType,garmentType:label?label+' · '+gc.label:gc.label});
-        if (!colToParentPid[gc.col]) colToParentPid[gc.col]=pid;
-      }
-    });
-  });
-
-  // Process each actor group (handles single-header files AND multi-header files like FFF)
-  actorHeaderRows.forEach((hdr, hdrIdx) => {
-    const groupEnd = hdrIdx+1 < actorHeaderRows.length ? actorHeaderRows[hdrIdx+1].rowIdx : endRow;
-    const nameCol = hdr.col;
-    for (let i=hdr.rowIdx+1;i<groupEnd;i++) {
-      const row=rows[i];
-      let actorName=fixEncoding(String(row[nameCol]===null||row[nameCol]===undefined?'':row[nameCol]).trim());
-      if (nameCol===0) {
-        const alt=fixEncoding(String(row[1]===null||row[1]===undefined?'':row[1]).trim());
-        if (actorName===actorName.toUpperCase()&&actorName.length>3&&alt&&alt!==actorName&&!/^\d+$/.test(alt)) actorName=alt;
-      }
-      if (!actorName) continue;
-      const al=actorName.toLowerCase();
-      if (['actor name','blank','gk plain','font type'].some(s=>al.includes(s))) continue;
-      const shirtName=fixEncoding(String(row[nameCol+2]===null||row[nameCol+2]===undefined?'':row[nameCol+2]).trim());
-      const number=parseInt(row[nameCol+3])||null;
-      if (!shirtName&&!number) continue;
-      const mdmId=/^\d{4,8}$/.test(String(row[nameCol+1]||'').trim())?String(row[nameCol+1]).trim():'';
-      importData.players.push({name:actorName,shirtName:(shirtName||actorName).toUpperCase(),number,mdmId,clubId,seasonId,type:isVariantName(actorName)?'variant':'player',status:'active',fontType,kitType});
-      garmentCols.forEach(gc => {
-        const rawVal=row[gc.col];
-        const pid=String(rawVal===null||rawVal===undefined?'':rawVal).trim();
-        if (/^\d{6,12}$/.test(pid)) {
-          if (!importData.heroes.find(h=>h.pid===pid)) {
-            importData.heroes.push({pid,playerName:actorName,clubId,seasonId,fontType,garmentRaw:gc.label,garmentType:normaliseGarment(gc.label),kitType,status:'active',parentPid:colToParentPid[gc.col]||null});
-          }
-        }
-      });
-    }
-  });
-}
-
 
 function detectFontType(sheetName) {
   const s=sheetName.toLowerCase().trim();
@@ -1801,6 +1594,304 @@ function togglePlayer(header){const pids=header.nextElementSibling;const chevron
 function toggleSection(titleEl){const content=titleEl.nextElementSibling;const isOpen=content.style.display!=='none';content.style.display=isOpen?'none':'block';}
 function copyPid(pid,btn){navigator.clipboard.writeText(pid).then(()=>{const orig=btn.textContent;btn.textContent='✓';btn.style.color='var(--green)';setTimeout(()=>{btn.textContent=orig;btn.style.color='';},1200);toast(`Copied ${pid}`);});}
 function copyAll(pidsStr,btn){const pids=pidsStr.split('|').filter(Boolean).join('\n');navigator.clipboard.writeText(pids).then(()=>{const orig=btn.textContent;btn.textContent='✓ Copied';btn.style.color='var(--green)';setTimeout(()=>{btn.textContent=orig;btn.style.color='';},1500);const count=pids.split('\n').length;toast(`Copied ${count} PID${count!==1?'s':''}`);});}
+function toast(msg,type='success'){const container=document.getElementById('toast-container');const t=document.createElement('div');t.className=`toast ${type}`;t.innerHTML=`<span class="toast-dot"></span>${msg}`;container.appendChild(t);setTimeout(()=>t.remove(),3000);}
+
+function fixEncoding(str) {
+  if (!str) return str;
+  try {
+    // codepage:1252 causes XLSX to output mojibake for UTF-8 chars (e.g. ö → Ã¶)
+    // Detect and repair by re-decoding the bytes as UTF-8
+    if (/Ã|Ä|Å|Ç|Ñ|Ö|Ü|Â/.test(str)) {
+      const bytes = new Uint8Array(str.length);
+      for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xFF;
+      const decoded = new TextDecoder('utf-8', {fatal:false}).decode(bytes);
+      const replacements = (decoded.match(/�/g) || []).length;
+      if (replacements < 3) return decoded.normalize('NFC');
+    }
+    return str.normalize('NFC');
+  } catch(e) { return str; }
+}
+
+function processImportFile(file) {
+  const clubId = document.getElementById('import-club').value;
+  const seasonId = document.getElementById('import-season').value;
+  if (!clubId||!seasonId) { toast('Please select a club and season','error'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array', cellText:false, cellDates:false, codepage:1252});
+      parseImportWorkbook(wb, clubId, seasonId, file.name);
+    } catch(err) {
+      toast('Could not read file: ' + err.message, 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+const KIT_WORDS_DETECT = ['home','away','third','fourth','gk','goalkeeper','specials','special','night'];
+function detectKitFromColA(val) {
+  const v = String(val||'').trim().toLowerCase();
+  for (const k of KIT_WORDS_DETECT) { if(v===k||v.startsWith(k+' ')||v.endsWith(' '+k)) return v.replace(/\b\w/g,c=>c.toUpperCase()); }
+  return null;
+}
+
+function parseImportWorkbook(wb, clubId, seasonId, filename) {
+  const club = CACHE.clubs.find(c=>c.id===clubId);
+  const season = CACHE.seasons.find(s=>s.id===seasonId);
+  importData = {clubId,seasonId,players:[],parents:[],heroes:[],sheets:[],sectionsFound:[]};
+  const skipSheets = ['sheet1','roster','data','ref'];
+  wb.SheetNames.forEach(sheetName => {
+    if (skipSheets.includes(sheetName.toLowerCase())) return;
+    const ws = wb.Sheets[sheetName];
+    const rows = [];
+    const range = XLSX.utils.decode_range(ws['!ref']||'A1');
+    for (let r=range.s.r;r<=range.e.r;r++) {
+      const row=[];
+      for (let c=0;c<=range.e.c;c++) { const cell=ws[XLSX.utils.encode_cell({r,c})]; row.push(cell?(cell.v!==undefined?cell.v:''):''); }
+      rows.push(row);
+    }
+    const fontType = detectFontType(sheetName);
+    const sectionStarts = [];
+    for (let i=0;i<rows.length;i++) {
+      const row=rows[i];
+      const rowStr=row.slice(0,8).map(c=>(c===null||c===undefined?'':String(c)).toLowerCase()).join('|');
+      if (!rowStr.includes('font type')) continue;
+      for (let c=0;c<5;c++) {
+        const kitName=detectKitFromColA(String(row[c]||'').trim());
+        if (kitName) {
+          const nearby=[row[c+1],row[c+2],row[c+3]].map(v=>(v===null||v===undefined?'':String(v)).toLowerCase());
+          if (nearby.some(v=>v.includes('font type'))) {
+            const garmentHint=[];
+            for (let gc=0;gc<row.length;gc++) {
+              const val=String(row[gc]||'').trim();
+              if (!val) continue;
+              const vl=val.toLowerCase();
+              if (vl.includes('shorts')) continue;
+              if (vl.includes('assembl')||vl.includes('roster')) break;
+              if (GARMENT_KEYWORDS.some(k=>vl.includes(k))) garmentHint.push({col:gc,label:val});
+            }
+            sectionStarts.push({rowIdx:i,kitType:kitName,garmentHint});
+            break;
+          }
+        }
+      }
+    }
+    if (sectionStarts.length===0) {
+      parseSingleSection(rows,0,rows.length,fontType,'Home',clubId,seasonId,[]);
+      importData.sheets.push(sheetName);
+      return;
+    }
+    sectionStarts.forEach((section,idx) => {
+      const endRow=idx+1<sectionStarts.length?sectionStarts[idx+1].rowIdx:rows.length;
+      parseSingleSection(rows,section.rowIdx,endRow,fontType,section.kitType,clubId,seasonId,section.garmentHint||[]);
+      importData.sectionsFound.push(`${sheetName} → ${section.kitType}`);
+    });
+    importData.sheets.push(sheetName);
+  });
+  importData._rawHeroCount = importData.heroes.length;
+  const seen=new Set();
+  importData.players=importData.players.filter(p=>{const k=`${p.name}_${p.clubId}_${p.seasonId}`;if(seen.has(k))return false;seen.add(k);return true;});
+  showImportPreview(club,season,filename);
+}
+
+function parseSingleSection(rows,startRow,endRow,fontType,kitType,clubId,seasonId,garmentHint) {
+  let garmentCols=(garmentHint&&garmentHint.length>0)?garmentHint.slice():[];
+  let hpRowIdx=-1;
+  // Collect ALL actor header rows (some files like FFF have multiple groups: GK + outfield)
+  const actorHeaderRows=[];
+  let actorNameCol=-1;
+
+  for (let i=startRow;i<Math.min(endRow,startRow+40);i++) {
+    const row=rows[i];
+    const rowStr=row.map(c=>(c===null||c===undefined?'':String(c)).toLowerCase()).join('|');
+    if (rowStr.includes('hp pid only')) hpRowIdx=i;
+    if (rowStr.includes('actor name')) {
+      let col=-1;
+      for (let c=0;c<row.length;c++) {
+        const v=String(row[c]||'').trim().toLowerCase().replace(/\s+/g,' ');
+        if (v==='actor name'||v.includes('actor name')){col=c;break;}
+      }
+      if (col===-1) { for(let c=0;c<Math.min(row.length,5);c++){if(String(row[c]||'').trim()){col=c;break;}} }
+      if (col!==-1) { actorHeaderRows.push({rowIdx:i,col}); if(actorNameCol===-1) actorNameCol=col; }
+    }
+    {
+      let hits=0;const pot=[];
+      for (let c=0;c<row.length;c++) {
+        const val=String(row[c]||'').trim();
+        if (!val) continue;
+        const vl=val.toLowerCase();
+        if (vl.includes('shorts')) continue;
+        if (vl.includes('assembl')||vl.includes('roster')) break;
+        if (GARMENT_KEYWORDS.some(k=>vl.includes(k))){hits++;pot.push({col:c,label:val});}
+      }
+      const isGK=pot.some(c=>c.label.toLowerCase().includes('gk')||c.label.toLowerCase().includes('goalkeeper'));
+      if (hits>=2||(hits===1&&isGK)) { if(pot.length>garmentCols.length) garmentCols=pot; }
+    }
+  }
+
+  if (actorHeaderRows.length===0||garmentCols.length===0||actorNameCol===-1) return;
+
+  const colToParentPid={};
+  const parentRowIndices=[];
+  if (hpRowIdx!==-1) parentRowIndices.push({rowIdx:hpRowIdx,label:null});
+  for (let i=startRow;i<Math.min(endRow,actorHeaderRows[0].rowIdx+5);i++) {
+    const row=rows[i];
+    for (let c=0;c<3;c++) {
+      const val=String(row[c]||'').trim().toLowerCase();
+      if (val==='gk plain'||val.includes('gk plain')){parentRowIndices.push({rowIdx:i,label:'GK Plain'});break;}
+    }
+  }
+  parentRowIndices.forEach(({rowIdx,label}) => {
+    const pRow=rows[rowIdx];
+    garmentCols.forEach(gc => {
+      const pid=String(pRow[gc.col]===null||pRow[gc.col]===undefined?'':pRow[gc.col]).trim();
+      if (/^\d{6,12}$/.test(pid)) {
+        if (!importData.parents.find(p=>p.pid===pid)) importData.parents.push({pid,clubId,seasonId,kitType,garmentType:label?label+' · '+gc.label:gc.label});
+        if (!colToParentPid[gc.col]) colToParentPid[gc.col]=pid;
+      }
+    });
+  });
+
+  // Process each actor group (handles single-header files AND multi-header files like FFF)
+  actorHeaderRows.forEach((hdr, hdrIdx) => {
+    const groupEnd = hdrIdx+1 < actorHeaderRows.length ? actorHeaderRows[hdrIdx+1].rowIdx : endRow;
+    const nameCol = hdr.col;
+    for (let i=hdr.rowIdx+1;i<groupEnd;i++) {
+      const row=rows[i];
+      let actorName=fixEncoding(String(row[nameCol]===null||row[nameCol]===undefined?'':row[nameCol]).trim());
+      if (nameCol===0) {
+        const alt=fixEncoding(String(row[1]===null||row[1]===undefined?'':row[1]).trim());
+        if (actorName===actorName.toUpperCase()&&actorName.length>3&&alt&&alt!==actorName&&!/^\d+$/.test(alt)) actorName=alt;
+      }
+      if (!actorName) continue;
+      const al=actorName.toLowerCase();
+      if (['actor name','blank','gk plain','font type'].some(s=>al.includes(s))) continue;
+      const shirtName=fixEncoding(String(row[nameCol+2]===null||row[nameCol+2]===undefined?'':row[nameCol+2]).trim());
+      const number=parseInt(row[nameCol+3])||null;
+      if (!shirtName&&!number) continue;
+      const mdmId=/^\d{4,8}$/.test(String(row[nameCol+1]||'').trim())?String(row[nameCol+1]).trim():'';
+      importData.players.push({name:actorName,shirtName:(shirtName||actorName).toUpperCase(),number,mdmId,clubId,seasonId,type:isVariantName(actorName)?'variant':'player',status:'active',fontType,kitType});
+      garmentCols.forEach(gc => {
+        const rawVal=row[gc.col];
+        const pid=String(rawVal===null||rawVal===undefined?'':rawVal).trim();
+        if (/^\d{6,12}$/.test(pid)) {
+          if (!importData.heroes.find(h=>h.pid===pid)) {
+            importData.heroes.push({pid,playerName:actorName,clubId,seasonId,fontType,garmentRaw:gc.label,garmentType:normaliseGarment(gc.label),kitType,status:'active',parentPid:colToParentPid[gc.col]||null});
+          }
+        }
+      });
+    }
+  });
+}
+
+
+function detectFontType(sheetName) {
+  const s=sheetName.toLowerCase().trim();
+  if (s.includes('womens cup')||s.includes("women's cup")||s==='wsl cup') return 'womens_cup';
+  if (s==='wsl'||s.startsWith('wsl ')||s.includes(' wsl')||s.includes('womens')||s.includes("women's")) return 'womens';
+  if (s.includes('cup')) return 'cup';
+  return 'league';
+}
+
+function isVariantName(name) { return ['champions','winners','blank','gk plain','plain gk'].some(v=>name.toLowerCase().includes(v)); }
+function normaliseGarment(label) { const k=label.toLowerCase().trim(); return GARMENT_ALIASES[k]||'other'; }
+
+function showImportPreview(club, season, filename) {
+  const d=importData;
+  const newPlayers=d.players.filter(p=>!CACHE.players.find(e=>e.Name===p.name&&e.ClubID===p.clubId&&e.SeasonID===p.seasonId));
+  const newHeroes=d.heroes.filter(h=>!CACHE.heroes.find(e=>e.PID===h.pid));
+  const newParents=d.parents.filter(p=>!CACHE.parents.find(e=>e.PID===p.pid));
+  const dupHeroes=d.heroes.length-newHeroes.length;
+  document.getElementById('import-preview-title').textContent=`Preview — ${filename}`;
+  document.getElementById('import-preview').classList.remove('hidden');
+  let html=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;"><div class="stat-pill"><span class="stat-label">New players</span><span class="stat-value" style="color:var(--green);">${newPlayers.length}</span></div><div class="stat-pill"><span class="stat-label">New hero PIDs</span><span class="stat-value" style="color:var(--green);">${newHeroes.length}</span></div><div class="stat-pill"><span class="stat-label">New parent PIDs</span><span class="stat-value" style="color:var(--amber);">${newParents.length}</span></div></div>`;
+  if (dupHeroes>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${dupHeroes} duplicate hero PIDs will be skipped</div>`;
+  html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Sheets: ${d.sheets.join(', ')}</div>`;
+  if (d.sectionsFound.length>0) html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Sections: ${d.sectionsFound.join(' · ')}</div>`;
+
+  html+=`<div style="max-height:200px;overflow-y:auto;margin-top:8px;"><table class="data-table" style="font-size:11px;"><thead><tr><th>Player</th><th>Font</th><th>PIDs</th><th>Status</th></tr></thead><tbody>${newPlayers.slice(0,50).map(p=>{const cnt=newHeroes.filter(h=>h.playerName===p.name&&h.fontType===p.fontType).length;return`<tr><td style="color:var(--text);">${p.name}</td><td>${FONT_LABELS[p.fontType]||p.fontType}</td><td class="mono">${cnt}</td><td><span class="badge badge-active">New</span></td></tr>`;}).join('')}${newPlayers.length>50?`<tr><td colspan="4" style="color:var(--text3);">...and ${newPlayers.length-50} more</td></tr>`:''}</tbody></table></div>`;
+  document.getElementById('import-preview-content').innerHTML=html;
+}
+
+async function confirmImport() {
+  if (!importData) return;
+  const btn = document.getElementById('import-confirm-btn');
+  btn.textContent = 'Importing...';
+  btn.disabled = true;
+  // Add progress bar below the stat pills, above sheets info
+  const progressWrap = document.createElement('div');
+  progressWrap.id = 'import-progress-wrap';
+  progressWrap.style.cssText = 'margin-bottom:12px;';
+  progressWrap.innerHTML = '<div style="font-size:11px;color:var(--text2);margin-bottom:6px;display:flex;justify-content:space-between;"><span id="import-progress-label">Preparing...</span><span id="import-progress-pct" style="color:var(--accent);">0%</span></div><div style="background:var(--bg3);border-radius:4px;height:6px;overflow:hidden;"><div id="import-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:4px;"></div></div>';
+  const previewContent = document.getElementById('import-preview-content');
+  previewContent.insertBefore(progressWrap, previewContent.firstChild);
+  const setProgress = (done, total, label) => {
+    const pct = total > 0 ? Math.round((done/total)*100) : 0;
+    const bar = document.getElementById('import-progress-bar');
+    const lbl = document.getElementById('import-progress-label');
+    const pctEl = document.getElementById('import-progress-pct');
+    if (bar) bar.style.width = pct + '%';
+    if (lbl) lbl.textContent = label || `${done} / ${total}`;
+    if (pctEl) pctEl.textContent = pct + '%';
+  };
+  const d=importData;
+  const newParents=d.parents.filter(p=>!CACHE.parents.find(e=>e.PID===p.pid));
+  const newHeroes=d.heroes.filter(h=>!CACHE.heroes.find(e=>e.PID===h.pid));
+  const newPlayers=d.players.filter(p=>!CACHE.players.find(e=>e.Name===p.name&&e.ClubID===p.clubId&&e.SeasonID===p.seasonId));
+  try {
+    const total = newParents.length + newPlayers.length + newHeroes.length;
+    let done = 0;
+    if (newParents.length>0) {
+      setProgress(done, total, `Writing ${newParents.length} parent PIDs...`);
+      const recs=await atCreateBatch(TABLES.parents, newParents.map(p=>({PID:p.pid,ClubID:p.clubId,SeasonID:p.seasonId,KitType:p.kitType,GarmentType:p.garmentType})));
+      recs.forEach(r=>CACHE.parents.push({id:r.id,...r.fields}));
+      done += newParents.length;
+    }
+    const playerMap={};
+    for (let pi=0; pi<newPlayers.length; pi++) {
+      const p = newPlayers[pi];
+      setProgress(done+pi, total, `Writing player ${pi+1} of ${newPlayers.length}...`);
+      const rec=await atCreate(TABLES.players,{Name:p.name,ShirtName:p.shirtName,SquadNumber:p.number,Type:p.type,ClubID:p.clubId,SeasonID:p.seasonId,Status:p.status,MDMActorID:p.mdmId||''});
+      CACHE.players.push({id:rec.id,...rec.fields});
+      playerMap[p.name+'_'+p.clubId+'_'+p.seasonId]=rec.id;
+    }
+    done += newPlayers.length;
+    CACHE.players.filter(p=>d.players.some(dp=>dp.name===p.Name&&dp.clubId===p.ClubID&&dp.seasonId===p.SeasonID)).forEach(p=>{ playerMap[p.Name+'_'+p.ClubID+'_'+p.SeasonID]=p.id; });
+    if (newHeroes.length>0) {
+      const heroFields=newHeroes.map(h=>{
+        const playerId=playerMap[h.playerName+'_'+h.clubId+'_'+h.seasonId];
+        const parent=CACHE.parents.find(p=>p.PID===h.parentPid);
+        return {PID:h.pid,PlayerID:playerId||'',ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.garmentRaw,KitType:h.kitType,Status:h.status,ParentPIDID:parent?parent.id:''};
+      }).filter(h=>h.PlayerID);
+      // Write in batches of 10 with progress
+      for (let i=0; i<heroFields.length; i+=10) {
+        setProgress(done+i, total, `Writing hero PIDs ${done+i+1}–${Math.min(done+i+10,total)} of ${total}...`);
+        const chunk = heroFields.slice(i, i+10);
+        const data = await atFetch(TABLES.heroes, {method:'POST', body:JSON.stringify({records:chunk.map(f=>({fields:f})),typecast:true})});
+        (data.records||[]).forEach(r=>CACHE.heroes.push({id:r.id,...r.fields}));
+      }
+      done += newHeroes.length;
+    }
+    setProgress(total, total, 'Complete!');
+    updateStats(); refreshFilterSelects(); clearImport();
+    toast(`Import complete — ${newHeroes.length} hero PIDs, ${newPlayers.length} players added`);
+  } catch(e) {
+    toast('Import error: '+e.message,'error');
+    btn.textContent='Import all';
+    btn.disabled=false;
+  }
+}
+
+function clearImport() {
+  importData=null;
+  document.getElementById('import-preview').classList.add('hidden');
+  document.getElementById('file-input-storage').value='';
+  const btn=document.getElementById('import-confirm-btn');
+  if(btn){btn.textContent='Import all';btn.disabled=false;}
+}
+
+// ─── CREATION CSV PARSER ──────────────────────────────────────────────────────
+
 function toast(msg,type='success'){const container=document.getElementById('toast-container');const t=document.createElement('div');t.className=`toast ${type}`;t.innerHTML=`<span class="toast-dot"></span>${msg}`;container.appendChild(t);setTimeout(()=>t.remove(),3000);}
 
 init();
