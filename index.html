@@ -1182,13 +1182,9 @@ function handleStorageFileSelect(e) { const f=e.target.files[0]; if(f) processIm
 
 async function extractSharedStrings(arrayBuffer) {
   try {
-    // xlsx files are zip archives - find and parse sharedStrings.xml
     const bytes = new Uint8Array(arrayBuffer);
-    // Search for the local file header signature (PK\x03\x04)
-    const strings = [];
     let pos = 0;
     while (pos < bytes.length - 4) {
-      // Find PK local file header
       if (bytes[pos]===0x50 && bytes[pos+1]===0x4B && bytes[pos+2]===0x03 && bytes[pos+3]===0x04) {
         const compression = bytes[pos+8] | (bytes[pos+9]<<8);
         const compSize = bytes[pos+18] | (bytes[pos+19]<<8) | (bytes[pos+20]<<16) | (bytes[pos+21]<<24);
@@ -1196,17 +1192,44 @@ async function extractSharedStrings(arrayBuffer) {
         const extraLen = bytes[pos+28] | (bytes[pos+29]<<8);
         const name = new TextDecoder().decode(bytes.slice(pos+30, pos+30+nameLen));
         const dataStart = pos + 30 + nameLen + extraLen;
-        if (name === 'xl/sharedStrings.xml' && compression === 0) {
-          // Uncompressed - read directly
-          const xml = new TextDecoder('utf-8').decode(bytes.slice(dataStart, dataStart+compSize));
-          // Parse <t> elements
-          const matches = xml.matchAll(/<t(?:[^>]*)>([^<]*)<\/t>/g);
-          for (const m of matches) {
-            // Decode XML entities
-            const text = m[1].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#x([0-9A-Fa-f]+);/g,(_,h)=>String.fromCodePoint(parseInt(h,16))).replace(/&#([0-9]+);/g,(_,d)=>String.fromCodePoint(parseInt(d)));
-            strings.push(text);
+        if (name === 'xl/sharedStrings.xml') {
+          let xmlBytes;
+          if (compression === 0) {
+            xmlBytes = bytes.slice(dataStart, dataStart+compSize);
+          } else if (compression === 8) {
+            // Deflate compressed - use DecompressionStream
+            const compressed = bytes.slice(dataStart, dataStart+compSize);
+            const ds = new DecompressionStream('deflate-raw');
+            const writer = ds.writable.getWriter();
+            const reader = ds.readable.getReader();
+            writer.write(compressed);
+            writer.close();
+            const chunks = [];
+            let done = false;
+            while (!done) {
+              const {value, done: d} = await reader.read();
+              if (value) chunks.push(value);
+              done = d;
+            }
+            const totalLen = chunks.reduce((a, c) => a + c.length, 0);
+            xmlBytes = new Uint8Array(totalLen);
+            let offset = 0;
+            chunks.forEach(c => { xmlBytes.set(c, offset); offset += c.length; });
           }
-          return strings.length > 0 ? strings : null;
+          if (xmlBytes) {
+            const xml = new TextDecoder('utf-8').decode(xmlBytes);
+            const strings = [];
+            const matches = xml.matchAll(/<t(?:[^>]*)>([^<]*)<\/t>/g);
+            for (const m of matches) {
+              const text = m[1]
+                .replace(/&amp;/g,'&').replace(/&lt;/g,'<')
+                .replace(/&gt;/g,'>').replace(/&quot;/g,'"')
+                .replace(/&#x([0-9A-Fa-f]+);/g,(_,h)=>String.fromCodePoint(parseInt(h,16)))
+                .replace(/&#([0-9]+);/g,(_,d)=>String.fromCodePoint(parseInt(d)));
+              strings.push(text);
+            }
+            return strings.length > 0 ? strings : null;
+          }
         }
         pos = dataStart + compSize;
       } else {
