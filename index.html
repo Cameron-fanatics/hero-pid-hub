@@ -1361,18 +1361,23 @@ function parseImportWorkbook(wb, clubId, seasonId, filename) {
 
 function parseSingleSection(rows,startRow,endRow,fontType,kitType,clubId,seasonId,garmentHint) {
   let garmentCols=(garmentHint&&garmentHint.length>0)?garmentHint.slice():[];
-  let hpRowIdx=-1,actorHeaderRowIdx=-1,actorNameCol=-1;
+  let hpRowIdx=-1;
+  // Collect ALL actor header rows (some files like FFF have multiple groups: GK + outfield)
+  const actorHeaderRows=[];
+  let actorNameCol=-1;
+
   for (let i=startRow;i<Math.min(endRow,startRow+40);i++) {
     const row=rows[i];
     const rowStr=row.map(c=>(c===null||c===undefined?'':String(c)).toLowerCase()).join('|');
     if (rowStr.includes('hp pid only')) hpRowIdx=i;
-    if (rowStr.includes('actor name')&&actorHeaderRowIdx===-1) {
-      actorHeaderRowIdx=i;
+    if (rowStr.includes('actor name')) {
+      let col=-1;
       for (let c=0;c<row.length;c++) {
-        const v=(c===null||c===undefined?'':String(row[c]||'')).trim().toLowerCase().replace(/\s+/g,' ');
-        if (v==='actor name'||v.includes('actor name')){actorNameCol=c;break;}
+        const v=String(row[c]||'').trim().toLowerCase().replace(/\s+/g,' ');
+        if (v==='actor name'||v.includes('actor name')){col=c;break;}
       }
-      if (actorNameCol===-1) { for(let c=0;c<Math.min(row.length,5);c++){if(String(row[c]||'').trim()){actorNameCol=c;break;}} }
+      if (col===-1) { for(let c=0;c<Math.min(row.length,5);c++){if(String(row[c]||'').trim()){col=c;break;}} }
+      if (col!==-1) { actorHeaderRows.push({rowIdx:i,col}); if(actorNameCol===-1) actorNameCol=col; }
     }
     {
       let hits=0;const pot=[];
@@ -1388,13 +1393,15 @@ function parseSingleSection(rows,startRow,endRow,fontType,kitType,clubId,seasonI
       if (hits>=2||(hits===1&&isGK)) { if(pot.length>garmentCols.length) garmentCols=pot; }
     }
   }
-  if (actorHeaderRowIdx===-1||garmentCols.length===0||actorNameCol===-1) return;
+
+  if (actorHeaderRows.length===0||garmentCols.length===0||actorNameCol===-1) return;
   if (!importData._garmentDebug) importData._garmentDebug=[];
   importData._garmentDebug.push(kitType+': cols '+garmentCols.map(g=>g.col+':'+g.label).join(', '));
+
   const colToParentPid={};
   const parentRowIndices=[];
   if (hpRowIdx!==-1) parentRowIndices.push({rowIdx:hpRowIdx,label:null});
-  for (let i=startRow;i<Math.min(endRow,actorHeaderRowIdx+5);i++) {
+  for (let i=startRow;i<Math.min(endRow,actorHeaderRows[0].rowIdx+5);i++) {
     const row=rows[i];
     for (let c=0;c<3;c++) {
       const val=String(row[c]||'').trim().toLowerCase();
@@ -1411,49 +1418,39 @@ function parseSingleSection(rows,startRow,endRow,fontType,kitType,clubId,seasonI
       }
     });
   });
-  for (let i=actorHeaderRowIdx+1;i<endRow;i++) {
-    const row=rows[i];
-    let actorName=fixEncoding(String(row[actorNameCol]===null||row[actorNameCol]===undefined?'':row[actorNameCol]).trim());
-    if (actorNameCol===0) {
-      const alt=fixEncoding(String(row[1]===null||row[1]===undefined?'':row[1]).trim());
-      if (actorName===actorName.toUpperCase()&&actorName.length>3&&alt&&alt!==actorName&&!/^\d+$/.test(alt)) actorName=alt;
-    }
-    if (!actorName) continue;
-    const al=actorName.toLowerCase();
-    if (['actor name','blank','gk plain','font type'].some(s=>al.includes(s))) continue;
-    const shirtName=fixEncoding(String(row[actorNameCol+2]===null||row[actorNameCol+2]===undefined?'':row[actorNameCol+2]).trim());
-    const number=parseInt(row[actorNameCol+3])||null;
-    if (!shirtName&&!number) continue;
-    const mdmId=/^\d{4,8}$/.test(String(row[actorNameCol+1]||'').trim())?String(row[actorNameCol+1]).trim():'';
-    importData.players.push({name:actorName,shirtName:(shirtName||actorName).toUpperCase(),number,mdmId,clubId,seasonId,type:isVariantName(actorName)?'variant':'player',status:'active',fontType,kitType});
-    garmentCols.forEach(gc => {
-      const rawVal=row[gc.col];
-      const pid=String(rawVal===null||rawVal===undefined?'':rawVal).trim();
-      if (/^\d{6,12}$/.test(pid)) {
-        if (!importData.heroes.find(h=>h.pid===pid)) {
-          importData.heroes.push({pid,playerName:actorName,clubId,seasonId,fontType,garmentRaw:gc.label,garmentType:normaliseGarment(gc.label),kitType,status:'active',parentPid:colToParentPid[gc.col]||null});
-        }
+
+  // Process each actor group (handles single-header files AND multi-header files like FFF)
+  actorHeaderRows.forEach((hdr, hdrIdx) => {
+    const groupEnd = hdrIdx+1 < actorHeaderRows.length ? actorHeaderRows[hdrIdx+1].rowIdx : endRow;
+    const nameCol = hdr.col;
+    for (let i=hdr.rowIdx+1;i<groupEnd;i++) {
+      const row=rows[i];
+      let actorName=fixEncoding(String(row[nameCol]===null||row[nameCol]===undefined?'':row[nameCol]).trim());
+      if (nameCol===0) {
+        const alt=fixEncoding(String(row[1]===null||row[1]===undefined?'':row[1]).trim());
+        if (actorName===actorName.toUpperCase()&&actorName.length>3&&alt&&alt!==actorName&&!/^\d+$/.test(alt)) actorName=alt;
       }
-    });
-  }
+      if (!actorName) continue;
+      const al=actorName.toLowerCase();
+      if (['actor name','blank','gk plain','font type'].some(s=>al.includes(s))) continue;
+      const shirtName=fixEncoding(String(row[nameCol+2]===null||row[nameCol+2]===undefined?'':row[nameCol+2]).trim());
+      const number=parseInt(row[nameCol+3])||null;
+      if (!shirtName&&!number) continue;
+      const mdmId=/^\d{4,8}$/.test(String(row[nameCol+1]||'').trim())?String(row[nameCol+1]).trim():'';
+      importData.players.push({name:actorName,shirtName:(shirtName||actorName).toUpperCase(),number,mdmId,clubId,seasonId,type:isVariantName(actorName)?'variant':'player',status:'active',fontType,kitType});
+      garmentCols.forEach(gc => {
+        const rawVal=row[gc.col];
+        const pid=String(rawVal===null||rawVal===undefined?'':rawVal).trim();
+        if (/^\d{6,12}$/.test(pid)) {
+          if (!importData.heroes.find(h=>h.pid===pid)) {
+            importData.heroes.push({pid,playerName:actorName,clubId,seasonId,fontType,garmentRaw:gc.label,garmentType:normaliseGarment(gc.label),kitType,status:'active',parentPid:colToParentPid[gc.col]||null});
+          }
+        }
+      });
+    }
+  });
 }
 
-function fixEncoding(str) {
-  if (!str) return str;
-  try {
-    // codepage:1252 read causes XLSX to output mojibake for UTF-8 multi-byte chars
-    // e.g. ö (U+00F6) stored as UTF-8 bytes C3 B6 gets read as Ã¶
-    // Detect this pattern and repair by re-decoding as UTF-8
-    if (/Ã|Ä|Å|Ç|Ñ|Ö|Ü|Â|Ã/.test(str)) {
-      const bytes = new Uint8Array(str.length);
-      for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xFF;
-      const decoded = new TextDecoder('utf-8', {fatal: false}).decode(bytes);
-      const replacements = (decoded.match(/�/g) || []).length;
-      if (replacements < 3) return decoded.normalize('NFC');
-    }
-    return str.normalize('NFC');
-  } catch(e) { return str; }
-}
 
 function detectFontType(sheetName) {
   const s=sheetName.toLowerCase().trim();
