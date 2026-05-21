@@ -1180,36 +1180,79 @@ let importData = null;
 
 function handleStorageFileSelect(e) { const f=e.target.files[0]; if(f) processImportFile(f); }
 
+async function extractSharedStrings(arrayBuffer) {
+  try {
+    // xlsx files are zip archives - find and parse sharedStrings.xml
+    const bytes = new Uint8Array(arrayBuffer);
+    // Search for the local file header signature (PK\x03\x04)
+    const strings = [];
+    let pos = 0;
+    while (pos < bytes.length - 4) {
+      // Find PK local file header
+      if (bytes[pos]===0x50 && bytes[pos+1]===0x4B && bytes[pos+2]===0x03 && bytes[pos+3]===0x04) {
+        const compression = bytes[pos+8] | (bytes[pos+9]<<8);
+        const compSize = bytes[pos+18] | (bytes[pos+19]<<8) | (bytes[pos+20]<<16) | (bytes[pos+21]<<24);
+        const nameLen = bytes[pos+26] | (bytes[pos+27]<<8);
+        const extraLen = bytes[pos+28] | (bytes[pos+29]<<8);
+        const name = new TextDecoder().decode(bytes.slice(pos+30, pos+30+nameLen));
+        const dataStart = pos + 30 + nameLen + extraLen;
+        if (name === 'xl/sharedStrings.xml' && compression === 0) {
+          // Uncompressed - read directly
+          const xml = new TextDecoder('utf-8').decode(bytes.slice(dataStart, dataStart+compSize));
+          // Parse <t> elements
+          const matches = xml.matchAll(/<t(?:[^>]*)>([^<]*)<\/t>/g);
+          for (const m of matches) {
+            // Decode XML entities
+            const text = m[1].replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#x([0-9A-Fa-f]+);/g,(_,h)=>String.fromCodePoint(parseInt(h,16))).replace(/&#([0-9]+);/g,(_,d)=>String.fromCodePoint(parseInt(d)));
+            strings.push(text);
+          }
+          return strings.length > 0 ? strings : null;
+        }
+        pos = dataStart + compSize;
+      } else {
+        pos++;
+      }
+    }
+    return null;
+  } catch(e) { return null; }
+}
+
+
 function processImportFile(file) {
   const clubId = document.getElementById('import-club').value;
   const seasonId = document.getElementById('import-season').value;
   if (!clubId||!seasonId) { toast('Please select a club and season','error'); return; }
   const reader = new FileReader();
-  reader.onload = e => {
+  reader.onload = async e => {
     try {
       // Read shared strings directly from XML to avoid XLSX browser encoding bugs
-    // Read and fix encoding issues from XLSX.js browser bugs
-    const wb = XLSX.read(e.target.result, {type:'array', cellText:false, cellDates:false});
-    // Fix U+25C6 diamond replacement chars by using raw XML cell values
-    wb.SheetNames.forEach(sheetName => {
-      const ws = wb.Sheets[sheetName];
-      Object.keys(ws).forEach(addr => {
-        if (addr.startsWith('!')) return;
-        const cell = ws[addr];
-        if (cell && cell.t === 's' && cell.v && typeof cell.v === 'string') {
-          if (cell.v.includes('◆') || cell.v.includes('�')) {
-            if (cell.r) {
-              const fixed = cell.r.replace(/&#x([0-9A-Fa-f]+);/g, (_, hex) =>
-                String.fromCodePoint(parseInt(hex, 16)));
-              if (!fixed.includes('◆') && !fixed.includes('�')) {
-                cell.v = fixed; cell.w = fixed;
+    // Extract sharedStrings.xml directly from the xlsx zip to bypass XLSX.js encoding bugs
+    try {
+      const sharedStrings = await extractSharedStrings(e.target.result);
+      const wb = XLSX.read(e.target.result, {type:'array', cellText:false, cellDates:false});
+      if (sharedStrings) {
+        // Patch corrupted shared strings with correctly decoded ones
+        wb.SheetNames.forEach(sheetName => {
+          const ws = wb.Sheets[sheetName];
+          Object.keys(ws).forEach(addr => {
+            if (addr.startsWith('!')) return;
+            const cell = ws[addr];
+            if (cell && cell.t === 's' && typeof cell.v === 'string') {
+              if (cell.v.includes('◆') || cell.v.includes('�')) {
+                // Find the correct string from our direct XML parse
+                const fixed = sharedStrings.find(s => 
+                  s.replace(/[◆�]/g,'') === cell.v.replace(/[◆�]/g,'')
+                );
+                if (fixed) { cell.v = fixed; cell.w = fixed; }
               }
             }
-          }
-        }
-      });
-    });
-    parseImportWorkbook(wb, clubId, seasonId, file.name);
+          });
+        });
+      }
+      parseImportWorkbook(wb, clubId, seasonId, file.name);
+    } catch(err) {
+      toast('Could not read file: ' + err.message, 'error');
+    }
     } catch(err) { toast('Could not read file: '+err.message,'error'); }
   };
   reader.readAsArrayBuffer(file);
