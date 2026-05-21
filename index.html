@@ -767,7 +767,17 @@ function parseImportWorkbook(wb, clubId, seasonId, filename) {
         if (kitName) {
           const nearby = [row[c+1], row[c+2], row[c+3]].map(v => String(v || '').toLowerCase());
           if (nearby.some(v => v.includes('font type'))) {
-            sectionStarts.push({ rowIdx: i, kitType: kitName });
+            // Capture garment cols from THIS row — the FONT TYPE row always has the correct garment headers
+            const garmentHint = [];
+            for (let gc = 0; gc < row.length; gc++) {
+              const val = String(row[gc] || '').trim();
+              if (!val) continue;
+              const vl = val.toLowerCase();
+              if (vl.includes('shorts')) continue;
+              if (vl.includes('assembl') || vl.includes('roster')) break;
+              if (GARMENT_KEYWORDS.some(k => vl.includes(k))) garmentHint.push({ col: gc, label: val });
+            }
+            sectionStarts.push({ rowIdx: i, kitType: kitName, garmentHint });
             break;
           }
         }
@@ -780,7 +790,7 @@ function parseImportWorkbook(wb, clubId, seasonId, filename) {
     }
     sectionStarts.forEach((section, idx) => {
       const endRow = idx + 1 < sectionStarts.length ? sectionStarts[idx + 1].rowIdx : rows.length;
-      parseSingleSection(rows, section.rowIdx, endRow, fontType, section.kitType, clubId, seasonId);
+      parseSingleSection(rows, section.rowIdx, endRow, fontType, section.kitType, clubId, seasonId, section.garmentHint || []);
       importData.sectionsFound.push(`${sheetName} → ${section.kitType}`);
     });
     importData.sheets.push(sheetName);
@@ -793,8 +803,9 @@ function parseImportWorkbook(wb, clubId, seasonId, filename) {
   });
   showImportPreview(club, season, filename);
 }
-function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, seasonId) {
-  let garmentCols = [];
+function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, seasonId, garmentHint) {
+  // If garmentHint provided from FONT TYPE row, use it directly — bypasses GK sub-header confusion
+  let garmentCols = (garmentHint && garmentHint.length > 0) ? garmentHint.slice() : [];
   let hpRowIdx = -1;
   let actorHeaderRowIdx = -1;
   let actorNameCol = -1;
