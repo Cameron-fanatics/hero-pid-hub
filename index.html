@@ -571,6 +571,7 @@ function disconnectAirtable() {
   localStorage.removeItem('at_token');
   localStorage.removeItem('at_base');
   localStorage.removeItem('at_tables');
+  localStorage.removeItem('at_fields_init');
   AT_TOKEN = ''; AT_BASE = ''; TABLES = {};
   CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[]};
   updateStats();
@@ -628,8 +629,11 @@ async function initTables() {
   const missing = required.filter(n => !tableMap[n]);
   if (missing.length > 0) throw new Error(`Missing tables: ${missing.join(', ')}. Please create them in Airtable first.`);
   TABLES = {clubs:tableMap['Clubs'],seasons:tableMap['Seasons'],players:tableMap['Players'],parents:tableMap['Parent PIDs'],heroes:tableMap['Hero PIDs']};
-  // Create missing fields in each table
-  await ensureFields();
+  // Only run ensureFields once — skip if already done
+  if (!localStorage.getItem('at_fields_init')) {
+    await ensureFields();
+    localStorage.setItem('at_fields_init', '1');
+  }
 }
 
 async function createField(tableId, field) {
@@ -1336,15 +1340,19 @@ function parseSingleSection(rows,startRow,endRow,fontType,kitType,clubId,seasonI
 function fixEncoding(str) {
   if (!str) return str;
   try {
-    if (/Ã|Ä|Å|Ç|Ñ|Ö|Ü|ÿ/.test(str)) {
-      const bytes=new Uint8Array(str.length);
-      for(let i=0;i<str.length;i++) bytes[i]=str.charCodeAt(i)&0xff;
-      const decoded=new TextDecoder('utf-8',{fatal:false}).decode(bytes);
-      if ((decoded.match(/�/g)||[]).length<3) return decoded.normalize('NFC');
+    // Always attempt UTF-8 mojibake repair when non-ASCII chars present
+    if (/[\x80-\xFF]/.test(str) || /Ã|Å|Ä|Ç|Ñ|Ö|Ü/.test(str)) {
+      const bytes = new Uint8Array(str.length);
+      for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xFF;
+      const decoded = new TextDecoder('utf-8', {fatal: false}).decode(bytes);
+      const replacements = (decoded.match(/\uFFFD/g) || []).length;
+      if (replacements === 0) return decoded.normalize('NFC');
+      if (replacements < 3) return decoded.normalize('NFC');
     }
-    return str.replace(/◆/g,'').normalize('NFC');
+    return str.replace(/\u25C6/g, '').normalize('NFC');
   } catch(e) { return str; }
 }
+
 function detectFontType(sheetName) {
   const s=sheetName.toLowerCase().trim();
   if (s.includes('womens cup')||s.includes("women's cup")||s==='wsl cup') return 'womens_cup';
@@ -1378,18 +1386,21 @@ async function confirmImport() {
   const btn = document.getElementById('import-confirm-btn');
   btn.textContent = 'Importing...';
   btn.disabled = true;
-  // Add progress bar
+  // Add progress bar below the stat pills, above sheets info
   const progressWrap = document.createElement('div');
   progressWrap.id = 'import-progress-wrap';
-  progressWrap.style.cssText = 'margin-top:12px;';
-  progressWrap.innerHTML = '<div style="font-size:11px;color:var(--text3);margin-bottom:6px;" id="import-progress-label">Preparing...</div><div style="background:var(--bg3);border-radius:4px;height:6px;overflow:hidden;"><div id="import-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:4px;"></div></div>';
-  document.getElementById('import-preview-content').appendChild(progressWrap);
+  progressWrap.style.cssText = 'margin-bottom:12px;';
+  progressWrap.innerHTML = '<div style="font-size:11px;color:var(--text2);margin-bottom:6px;display:flex;justify-content:space-between;"><span id="import-progress-label">Preparing...</span><span id="import-progress-pct" style="color:var(--accent);">0%</span></div><div style="background:var(--bg3);border-radius:4px;height:6px;overflow:hidden;"><div id="import-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:4px;"></div></div>';
+  const previewContent = document.getElementById('import-preview-content');
+  previewContent.insertBefore(progressWrap, previewContent.firstChild);
   const setProgress = (done, total, label) => {
     const pct = total > 0 ? Math.round((done/total)*100) : 0;
     const bar = document.getElementById('import-progress-bar');
     const lbl = document.getElementById('import-progress-label');
+    const pctEl = document.getElementById('import-progress-pct');
     if (bar) bar.style.width = pct + '%';
     if (lbl) lbl.textContent = label || `${done} / ${total}`;
+    if (pctEl) pctEl.textContent = pct + '%';
   };
   const d=importData;
   const newParents=d.parents.filter(p=>!CACHE.parents.find(e=>e.PID===p.pid));
