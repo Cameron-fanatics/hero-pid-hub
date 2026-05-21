@@ -519,7 +519,7 @@ async function atGetAll(table, filterFormula='') {
 }
 
 async function atCreate(table, fields) {
-  const data = await atFetch(table, {method:'POST', body:JSON.stringify({records:[{fields}]})});
+  const data = await atFetch(table, {method:'POST', body:JSON.stringify({records:[{fields}], typecast:true})});
   return data.records[0];
 }
 
@@ -527,7 +527,7 @@ async function atCreateBatch(table, fieldsList) {
   const results = [];
   for (let i = 0; i < fieldsList.length; i += 10) {
     const chunk = fieldsList.slice(i, i+10);
-    const data = await atFetch(table, {method:'POST', body:JSON.stringify({records:chunk.map(f=>({fields:f}))})});
+    const data = await atFetch(table, {method:'POST', body:JSON.stringify({records:chunk.map(f=>({fields:f})), typecast:true})});
     results.push(...(data.records||[]));
   }
   return results;
