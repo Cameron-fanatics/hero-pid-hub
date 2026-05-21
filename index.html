@@ -1253,21 +1253,33 @@ function processImportFile(file) {
     try {
       const sharedStrings = await extractSharedStrings(e.target.result);
       const wb = XLSX.read(e.target.result, {type:'array', cellText:false, cellDates:false});
-      if (sharedStrings) {
-        // Patch corrupted shared strings with correctly decoded ones
+      if (sharedStrings && sharedStrings.length > 0) {
+        // Patch XLSX SST by index for reliable encoding fix
+        if (wb.SST) {
+          for (let i = 0; i < Math.min(sharedStrings.length, wb.SST.length); i++) {
+            const correct = sharedStrings[i];
+            const entry = wb.SST[i];
+            if (!entry || !correct) continue;
+            const current = typeof entry === 'object' ? (entry.t || '') : String(entry);
+            if (current !== correct) {
+              if (typeof entry === 'object') { entry.t = correct; entry.v = correct; }
+              else wb.SST[i] = correct;
+            }
+          }
+        }
+        // Also fix cells directly
         wb.SheetNames.forEach(sheetName => {
           const ws = wb.Sheets[sheetName];
           Object.keys(ws).forEach(addr => {
             if (addr.startsWith('!')) return;
             const cell = ws[addr];
-            if (cell && cell.t === 's' && typeof cell.v === 'string') {
-              if (cell.v.includes('◆') || cell.v.includes('�')) {
-                // Find the correct string from our direct XML parse
-                const fixed = sharedStrings.find(s => 
-                  s.replace(/[◆�]/g,'') === cell.v.replace(/[◆�]/g,'')
-                );
-                if (fixed) { cell.v = fixed; cell.w = fixed; }
-              }
+            if (cell && cell.t === 's' && typeof cell.v === 'string' &&
+                (cell.v.includes('\u25C6') || cell.v.includes('\uFFFD'))) {
+              const stripped = cell.v.replace(/[\u25C6\uFFFD]/g, '');
+              const match = sharedStrings.find(s =>
+                s.replace(/[\u25C6\uFFFD]/g,'') === stripped && s !== stripped
+              );
+              if (match) { cell.v = match; cell.w = match; }
             }
           });
         });
@@ -1429,12 +1441,14 @@ function parseSingleSection(rows,startRow,endRow,fontType,kitType,clubId,seasonI
 function fixEncoding(str) {
   if (!str) return str;
   try {
-    // UTF-8 mojibake repair (Latin-1 bytes misread as Unicode)
-    if (/[\x80-\xFF]/.test(str) || /\u00C3|\u00C4|\u00C5|\u00C7|\u00D1|\u00D6|\u00DC/.test(str)) {
+    // codepage:1252 read causes XLSX to output mojibake for UTF-8 multi-byte chars
+    // e.g. ö (U+00F6) stored as UTF-8 bytes C3 B6 gets read as Ã¶
+    // Detect this pattern and repair by re-decoding as UTF-8
+    if (/Ã|Ä|Å|Ç|Ñ|Ö|Ü|Â|Ã/.test(str)) {
       const bytes = new Uint8Array(str.length);
       for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xFF;
       const decoded = new TextDecoder('utf-8', {fatal: false}).decode(bytes);
-      const replacements = (decoded.match(/\uFFFD/g) || []).length;
+      const replacements = (decoded.match(/�/g) || []).length;
       if (replacements < 3) return decoded.normalize('NFC');
     }
     return str.normalize('NFC');
