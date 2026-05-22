@@ -576,6 +576,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
 <script>
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const AT_API = 'https://api.airtable.com/v0';
@@ -1072,8 +1073,14 @@ function runSearch() {
     document.getElementById('result-count').textContent = '';
     return;
   }
-  if (raw && raw.trim().split(/\s+/).length > 1 && !raw.match(/^\d{6,12}$/)) {
-    interpretAndSearch(raw, filterClub, filterSeason, filterFont, filterStatus, filterKit);
+  if (raw && !raw.match(/^\d{6,12}$/)) {
+    // All text queries go through localParseAndSearch for club/kit detection
+    // Multi-word queries also try AI interpretation
+    if (raw.trim().split(/\s+/).length > 1) {
+      interpretAndSearch(raw, filterClub, filterSeason, filterFont, filterStatus, filterKit);
+    } else {
+      localParseAndSearch(raw, filterClub, filterSeason, filterFont, filterStatus, filterKit);
+    }
     return;
   }
   executeSearch(raw, null, null, filterKit||null, filterClub, filterSeason, filterFont, filterStatus);
@@ -1819,1232 +1826,127 @@ const FOOTBALL_SHEET_NAMES = {
 };
 
 function exportFootballContent(playerIds) {
-  if (!window.XLSX) { toast('XLSX library not loaded', 'error'); return; }
+  if (typeof ExcelJS === 'undefined') { toast('ExcelJS not loaded yet, try again in a moment', 'error'); return; }
   const selected = playerIds || [...(window._selectedPids||new Set())];
   if (!selected.length) { toast('No PIDs selected', 'error'); return; }
 
-  // Group heroes by fontType+kitType sheet
-  const sheets = {};
   const heroList = typeof selected[0] === 'string'
     ? selected.map(pid => CACHE.heroes.find(h => h.PID === pid)).filter(Boolean)
     : selected;
 
+  // Group by fontType+kitType sheet
+  const sheets = {};
   heroList.forEach(hero => {
     const key = ((hero.FontType||'').toLowerCase() + '_' + (hero.KitType||'').toLowerCase()).replace(/ /g,'');
     if (!sheets[key]) sheets[key] = [];
     sheets[key].push(hero);
   });
-
   if (!Object.keys(sheets).length) { toast('No hero PIDs to export', 'error'); return; }
 
-  // Detect club from first hero
   const firstHero = heroList[0];
-  const club = firstHero ? (CACHE.clubs.find(c => c.id === firstHero.ClubID)?.Name || '') : '';
-  const season = firstHero ? (CACHE.seasons.find(s => s.id === firstHero.SeasonID)?.Label || '') : '';
+  const club = firstHero ? (CACHE.clubs.find(c=>c.id===firstHero.ClubID)?.Name||'') : '';
+  const wb = new ExcelJS.Workbook();
 
-  const wb = window.XLSX.utils.book_new();
-  const NUM_COLS = 18; // A-R
+  const thinBorder = {style:'thin',color:{argb:'FFCCCCCC'}};
+  const allBorders = {top:thinBorder,left:thinBorder,bottom:thinBorder,right:thinBorder};
+  const boldFont = {bold:true, size:11};
+  const titleFont = {bold:true, size:14};
+  const amberFont = {bold:true, color:{argb:'FFFFAA00'}};
 
   Object.entries(sheets).forEach(([key, heroes]) => {
     const sheetName = FOOTBALL_SHEET_NAMES[key] || key;
-    const kitType = (heroes[0]?.KitType || '').toLowerCase();
-    const fontType = (heroes[0]?.FontType || '').toLowerCase();
+    const kitType = (heroes[0]?.KitType||'').toLowerCase();
+    const fontType = (heroes[0]?.FontType||'').toLowerCase();
 
-    // Group by player, then build rows sorted by squad number
+    // Group by player, sort by squad number
     const playerMap = {};
     heroes.forEach(hero => {
       const pid = hero.PlayerID;
       if (!playerMap[pid]) {
-        const pl = CACHE.players.find(p => p.id === pid);
-        playerMap[pid] = {
-          player: pl,
-          shirtName: (pl?.ShirtName || '').toUpperCase(),
-          number: pl?.SquadNumber || 9999,
-          heroes: [],
-          parentPids: {},
-        };
+        const pl = CACHE.players.find(p=>p.id===pid);
+        playerMap[pid] = {player:pl, shirtName:(pl?.ShirtName||'').toUpperCase(), number:pl?.SquadNumber||9999, heroes:[]};
       }
       playerMap[pid].heroes.push(hero);
     });
+    const players = Object.values(playerMap).sort((a,b)=>a.number-b.number);
 
-    // Sort players by squad number
-    const players = Object.values(playerMap).sort((a, b) => a.number - b.number);
-
-    // Build parent PID row (row 7, index 6) — one parent per garment column
-    const parentRow = new Array(NUM_COLS).fill(null);
-    // Collect parent PIDs by garment type
+    // Parent PID row
+    const parentRow = new Array(18).fill(null);
     heroes.forEach(hero => {
       if (!hero.ParentPIDID) return;
-      const parent = CACHE.parents.find(p => p.id === hero.ParentPIDID);
+      const parent = CACHE.parents.find(p=>p.id===hero.ParentPIDID);
       if (!parent) return;
-      const gt = hero.GarmentType;
-      const colIdx = FOOTBALL_COL_MAP[gt];
-      if (colIdx !== undefined && !parentRow[colIdx]) {
-        parentRow[colIdx] = parent.PID ? Number(parent.PID) : null;
-      }
-      // Baby (infants) also fills col M
-      if (gt === 'infants' && !parentRow[BABY_COL]) {
-        parentRow[BABY_COL] = parent.PID ? Number(parent.PID) : null;
-      }
+      const colIdx = FOOTBALL_COL_MAP[hero.GarmentType];
+      if (colIdx!==undefined && !parentRow[colIdx]) parentRow[colIdx] = parent.PID ? Number(parent.PID) : null;
+      if (hero.GarmentType==='infants' && !parentRow[BABY_COL]) parentRow[BABY_COL] = parent.PID ? Number(parent.PID) : null;
     });
 
-    // Build sheet data array
-    const fontLabel = FONT_LABELS[fontType] || fontType;
-    const kitLabel = kitType.charAt(0).toUpperCase() + kitType.slice(1);
+    const fontLabel = FONT_LABELS[fontType]||fontType;
+    const kitLabel = kitType.charAt(0).toUpperCase()+kitType.slice(1);
 
-    const rows = [];
-    // Row 1: Team Name
-    rows.push([club, ...new Array(NUM_COLS-1).fill(null)]);
-    // Rows 2-4: blank
-    rows.push(new Array(NUM_COLS).fill(null));
-    rows.push(new Array(NUM_COLS).fill(null));
-    rows.push(new Array(NUM_COLS).fill(null));
-    // Row 5: headers (font in A, kit in B, garment names C-R)
-    const hdr5 = new Array(NUM_COLS).fill(null);
-    hdr5[0] = fontLabel; hdr5[1] = kitLabel;
-    hdr5[2]='Authentic Mens SS'; hdr5[3]='Authentic Mens LS'; hdr5[4]='Authentic Womens SS';
-    hdr5[5]='Rep Mens SS'; hdr5[6]='Rep Mens LS'; hdr5[7]='Rep Kids SS'; hdr5[8]='Rep Kids LS';
-    hdr5[9]='Rep Womens SS'; hdr5[10]='Little Kids'; hdr5[11]='Infants'; hdr5[12]='Baby';
-    hdr5[13]='Authentic Kids SS'; hdr5[14]='Authentic Womens LS'; hdr5[15]='Rep Womens LS';
-    hdr5[16]='Authentic Kids LS'; hdr5[17]='Womens Cropped';
-    rows.push(hdr5);
-    // Row 6: sub-headers
-    const hdr6 = new Array(NUM_COLS).fill(null);
-    hdr6[2]='Vapor Mens SS'; hdr6[3]='Vapor Mens LS'; hdr6[4]='Vapor Womens SS';
-    hdr6[5]='Stadium Mens SS'; hdr6[6]='Stadium Mens LS'; hdr6[10]='Mini Kit';
-    rows.push(hdr6);
-    // Row 7: parent PID row (Blank label in B)
-    const pr = new Array(NUM_COLS).fill(null);
-    pr[1] = 'Blank';
-    for (let i = 0; i < NUM_COLS; i++) if (parentRow[i]) pr[i] = parentRow[i];
-    rows.push(pr);
-    // Row 8: blank
-    rows.push(new Array(NUM_COLS).fill(null));
-    // Row 9: player headers
-    const ph = new Array(NUM_COLS).fill(null);
-    ph[0] = 'Name Plate'; ph[1] = 'Number';
-    rows.push(ph);
-    // Row 10+: one row per player sorted by number
-    players.forEach(({shirtName, number, heroes: pHeroes}) => {
-      const prow = new Array(NUM_COLS).fill(null);
+    const rows = [
+      // Row 1: team name
+      [club,...new Array(17).fill(null)],
+      // Rows 2-4: blank
+      new Array(18).fill(null), new Array(18).fill(null), new Array(18).fill(null),
+      // Row 5: headers
+      [fontLabel,kitLabel,'Authentic Mens SS','Authentic Mens LS','Authentic Womens SS','Rep Mens SS','Rep Mens LS','Rep Kids SS','Rep Kids LS','Rep Womens SS','Little Kids','Infants','Baby','Authentic Kids SS','Authentic Womens LS','Rep Womens LS','Authentic Kids LS','Womens Cropped'],
+      // Row 6: sub-headers
+      [null,null,'Vapor Mens SS','Vapor Mens LS','Vapor Womens SS','Stadium Mens SS','Stadium Mens LS',null,null,null,'Mini Kit',null,null,null,null,null,null,null],
+      // Row 7: parent PIDs
+      [null,'Blank',...parentRow.slice(2)],
+      // Row 8: blank
+      new Array(18).fill(null),
+      // Row 9: player headers
+      ['Name Plate','Number',...new Array(16).fill(null)],
+    ];
+
+    // Player rows
+    players.forEach(({shirtName, number, heroes:pHeroes}) => {
+      const prow = new Array(18).fill(null);
       prow[0] = shirtName;
-      prow[1] = number === 9999 ? null : number;
+      prow[1] = number===9999 ? null : number;
       pHeroes.forEach(hero => {
-        const gt = hero.GarmentType;
-        const colIdx = FOOTBALL_COL_MAP[gt];
-        if (colIdx !== undefined) prow[colIdx] = hero.PID ? Number(hero.PID) : null;
-        if (gt === 'infants') prow[BABY_COL] = hero.PID ? Number(hero.PID) : null;
+        const colIdx = FOOTBALL_COL_MAP[hero.GarmentType];
+        if (colIdx!==undefined) prow[colIdx] = hero.PID ? Number(hero.PID) : null;
+        if (hero.GarmentType==='infants') prow[BABY_COL] = hero.PID ? Number(hero.PID) : null;
       });
       rows.push(prow);
     });
 
-    const ws = window.XLSX.utils.aoa_to_sheet(rows);
-    // Add borders to all populated cells
-    const borderStyle = {style:'thin',color:{rgb:'CCCCCC'}};
-    const border = {top:borderStyle,bottom:borderStyle,left:borderStyle,right:borderStyle};
-    const range = window.XLSX.utils.decode_range(ws['!ref']||'A1');
-    for (let R=range.s.r;R<=range.e.r;R++) {
-      for (let C=range.s.c;C<=range.e.c;C++) {
-        const addr=window.XLSX.utils.encode_cell({r:R,c:C});
-        if (!ws[addr]) ws[addr]={t:'z',v:undefined};
-        ws[addr].s = ws[addr].s||{};
-        ws[addr].s.border = border;
-        // Bold header rows (rows 0,4,5,8 = rows 1,5,6,9 in 1-indexed)
-        if ([0,4,5,8].includes(R)) { ws[addr].s.font = {bold:true}; }
-        // Team name row - larger font
-        if (R===0 && C===0) { ws[addr].s.font = {bold:true,sz:14}; }
-      }
-    }
-    // Column widths
-    ws['!cols'] = [
-      {wch:18},{wch:8},
-      ...new Array(16).fill({wch:14})
-    ];
-    window.XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    const ws = wb.addWorksheet(sheetName);
+    ws.columns = [{width:22},{width:9},...new Array(16).fill({width:14})];
+
+    rows.forEach((rowData, rowIdx) => {
+      const row = ws.addRow(rowData);
+      row.eachCell({includeEmpty:true}, (cell, colNum) => {
+        if (colNum > 18) return;
+        cell.border = allBorders;
+        // Styling by row
+        if (rowIdx===0) { if(colNum===1) cell.font=titleFont; }
+        else if (rowIdx===4||rowIdx===5||rowIdx===8) { cell.font=boldFont; cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF1A1A2E'}}; }
+        else if (rowIdx===6) { if(colNum===2) cell.font=boldFont; if(cell.value&&colNum>2) cell.font={...amberFont}; }
+      });
+    });
   });
 
-  // Filename: YY.MM.DD_ClubName_PlayerAdd_NPlayers.xlsx
+  // Filename
   const today = new Date();
-  const yy = String(today.getFullYear()).slice(2);
-  const mm = String(today.getMonth()+1).padStart(2,'0');
-  const dd = String(today.getDate()).padStart(2,'0');
-  const playerCount = Object.keys(
-    heroList.reduce((acc,h) => { if(h.PlayerID) acc[h.PlayerID]=1; return acc; }, {})
-  ).length;
-  const clubSlug = club.replace(/[^a-zA-Z0-9]/g,'_').replace(/_+/g,'_');
-  const playerSuffix = playerCount === 1
-    ? (heroList.find(h=>h.PlayerID) ? (CACHE.players.find(p=>p.id===heroList.find(h=>h.PlayerID).PlayerID)?.ShirtName||playerCount+'Players') : playerCount+'Players')
-    : playerCount + 'Players';
-  const filename = `${yy}.${mm}.${dd}_${clubSlug}_PlayerAdd_${playerSuffix}.xlsx`;
-  window.XLSX.writeFile(wb, filename);
-  toast(`Exported ${heroList.length} PIDs across ${Object.keys(sheets).length} sheet${Object.keys(sheets).length!==1?'s':''}`);
-}
+  const yy=String(today.getFullYear()).slice(2),mm=String(today.getMonth()+1).padStart(2,'0'),dd=String(today.getDate()).padStart(2,'0');
+  const playerCount=Object.keys(heroList.reduce((a,h)=>{if(h.PlayerID)a[h.PlayerID]=1;return a;},{})).length;
+  const clubSlug=club.replace(/[^a-zA-Z0-9]/g,'_').replace(/_+/g,'_');
+  const playerSuffix=playerCount===1?(CACHE.players.find(p=>p.id===heroList.find(h=>h.PlayerID)?.PlayerID)?.ShirtName||playerCount+'Players'):playerCount+'Players';
+  const filename=`${yy}.${mm}.${dd}_${clubSlug}_PlayerAdd_${playerSuffix}.xlsx`;
 
-// ─── SEARCH CHIPS ────────────────────────────────────────────────────────────
-function updateSearchChips() {
-  const container = document.getElementById('search-chips');
-  if (!container) return;
-  const chips = [];
-  const q = document.getElementById('search-q')?.value.trim();
-  const club = document.getElementById('filter-club')?.value;
-  const season = document.getElementById('filter-season')?.value;
-  const font = document.getElementById('filter-font')?.value;
-  const kit = document.getElementById('filter-kit')?.value;
-  const status = document.getElementById('filter-status')?.value;
-
-  if (q) chips.push({label: q, type:'query'});
-  if (club) {
-    const clubName = CACHE.clubs.find(c=>c.id===club)?.Name || club;
-    chips.push({label: clubName, type:'club', value: club});
-  }
-  if (season) {
-    const seasonLabel = CACHE.seasons.find(s=>s.id===season)?.Label || season;
-    chips.push({label: seasonLabel, type:'season', value: season});
-  }
-  if (font) chips.push({label: (FONT_LABELS[font]||font), type:'font', value: font});
-  if (kit) chips.push({label: kit, type:'kit', value: kit});
-  if (status && status !== '') chips.push({label: status==='active'?'Active only':'Archived only', type:'status', value: status});
-
-  if (chips.length === 0) {
-    container.style.display = 'none';
-    container.innerHTML = '';
-    return;
-  }
-  container.style.display = 'flex';
-  container.innerHTML = chips.map(chip => `
-    <span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--accent);border-radius:20px;padding:3px 10px 3px 12px;font-size:11px;color:var(--accent);font-weight:500;">
-      ${chip.label}
-      <button onclick="removeChip('${chip.type}')" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:13px;line-height:1;padding:0;opacity:0.7;" title="Remove">×</button>
-    </span>
-  `).join('');
-}
-
-function removeChip(type) {
-  if (type === 'query') {
-    const inp = document.getElementById('search-q');
-    if (inp) inp.value = '';
-  } else if (type === 'club') {
-    const sel = document.getElementById('filter-club');
-    if (sel) { sel.value = ''; onClubFilterChange(); return; }
-  } else if (type === 'season') {
-    const sel = document.getElementById('filter-season');
-    if (sel) sel.value = '';
-  } else if (type === 'font') {
-    const sel = document.getElementById('filter-font');
-    if (sel) sel.value = '';
-  } else if (type === 'kit') {
-    const sel = document.getElementById('filter-kit');
-    if (sel) sel.value = '';
-  } else if (type === 'status') {
-    const sel = document.getElementById('filter-status');
-    if (sel) sel.value = '';
-  }
-  runSearch();
-}
-function refreshClubs() {
-  const tbody=document.getElementById('clubs-tbody');if(!tbody||!cacheLoaded)return;
-  const s=manageState.clubs,all=CACHE.clubs,total=all.length;
-  const pg=all.slice(s.page*s.perPage,(s.page+1)*s.perPage);
-  const pgIds=pg.map(c=>c.id),allSel=pgIds.length>0&&pgIds.every(id=>s.selected.has(id)),multi=s.selected.size>1;
-  renderSelBar('clubs','Delete Selected');renderPager('clubs',total);renderPerPage('clubs');
-  const thc=document.getElementById('clubs-th-chk');
-  if(thc)thc.innerHTML=`<input type="checkbox" ${allSel?'checked':''} onchange="manageToggleAll('clubs',this.checked,${JSON.stringify(pgIds)})" style="cursor:pointer;accent-color:var(--accent);">`;
-  tbody.innerHTML=total===0?`<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:32px;">No clubs yet</td></tr>`:
-    pg.map(c=>{const sel=s.selected.has(c.id);const acts=multi?'':`<button class="btn btn-ghost btn-sm" onclick="openEditClub('${c.id}')">Edit</button>`;
-      return `<tr style="${sel?'background:rgba(79,124,255,0.06);':''}"><td style="padding:8px 4px;"><input type="checkbox" ${sel?'checked':''} onchange="manageToggleOne('clubs','${c.id}',this.checked)" style="cursor:pointer;accent-color:var(--accent);"></td><td style="font-weight:500;color:var(--text);">${c.Name||''}</td><td>${c.League||'—'}</td><td>${c.Sport||'—'}</td><td>${c.Country||'—'}</td><td style="display:flex;gap:6px;">${acts}<button class="btn btn-danger btn-sm" onclick="deleteClub('${c.id}')">Delete</button></td></tr>`;
-    }).join('');
-}
-
-function refreshSeasons() {
-  const tbody=document.getElementById('seasons-tbody');if(!tbody||!cacheLoaded)return;
-  const s=manageState.seasons,all=CACHE.seasons,total=all.length;
-  const pg=all.slice(s.page*s.perPage,(s.page+1)*s.perPage);
-  const pgIds=pg.map(x=>x.id),allSel=pgIds.length>0&&pgIds.every(id=>s.selected.has(id));
-  renderSelBar('seasons','Delete Selected');renderPager('seasons',total);renderPerPage('seasons');
-  const thc=document.getElementById('seasons-th-chk');
-  if(thc)thc.innerHTML=`<input type="checkbox" ${allSel?'checked':''} onchange="manageToggleAll('seasons',this.checked,${JSON.stringify(pgIds)})" style="cursor:pointer;accent-color:var(--accent);">`;
-  tbody.innerHTML=total===0?`<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:32px;">No seasons yet</td></tr>`:
-    pg.map(se=>{const sel=s.selected.has(se.id);
-      return `<tr style="${sel?'background:rgba(79,124,255,0.06);':''}"><td style="padding:8px 4px;"><input type="checkbox" ${sel?'checked':''} onchange="manageToggleOne('seasons','${se.id}',this.checked)" style="cursor:pointer;accent-color:var(--accent);"></td><td style="font-weight:500;color:var(--text);">${se.Label||''}</td><td>${se.Sport||'—'}</td><td class="mono">${se.StartYear||'—'}</td><td class="mono">${se.EndYear||'—'}</td><td><button class="btn btn-danger btn-sm" onclick="deleteSeason('${se.id}')">Delete</button></td></tr>`;
-    }).join('');
-}
-
-function refreshManage() {
-  // Players
-  const ptbody=document.getElementById('players-tbody');
-  if(ptbody&&cacheLoaded){
-    const s=manageState.players,all=CACHE.players,total=all.length;
-    const pg=all.slice(s.page*s.perPage,(s.page+1)*s.perPage);
-    const pgIds=pg.map(p=>p.id),allSel=pgIds.length>0&&pgIds.every(id=>s.selected.has(id)),multi=s.selected.size>1;
-    renderSelBar('players','Delete Selected','Archive/Activate');renderPager('players',total);renderPerPage('players');
-    const thc=document.getElementById('players-th-chk');
-    if(thc)thc.innerHTML=`<input type="checkbox" ${allSel?'checked':''} onchange="manageToggleAll('players',this.checked,${JSON.stringify(pgIds)})" style="cursor:pointer;accent-color:var(--accent);">`;
-    ptbody.innerHTML=total===0?`<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px;">No players yet</td></tr>`:
-      pg.map(p=>{const cl=CACHE.clubs.find(c=>c.id===p.ClubID),se=CACHE.seasons.find(s=>s.id===p.SeasonID),sel=s.selected.has(p.id);
-        const acts=multi?`<button class="btn btn-ghost btn-sm" onclick="deactivatePlayer('${p.id}').then(()=>refreshManage())">${p.Status==='archived'?'Activate':'Archive'}</button>`:`<button class="btn btn-ghost btn-sm" onclick="openEditPlayer('${p.id}')">Edit</button><button class="btn btn-ghost btn-sm" onclick="deactivatePlayer('${p.id}').then(()=>refreshManage())">${p.Status==='archived'?'Activate':'Archive'}</button>`;
-        return `<tr style="${sel?'background:rgba(79,124,255,0.06);':''}"><td style="padding:8px 4px;"><input type="checkbox" ${sel?'checked':''} onchange="manageToggleOne('players','${p.id}',this.checked)" style="cursor:pointer;accent-color:var(--accent);"></td><td style="color:var(--text);font-weight:500;">${p.Name||''}</td><td class="mono">${p.ShirtName||''}</td><td class="mono">${p.SquadNumber||'—'}</td><td>${cl?.Name||'—'}</td><td>${se?.Label||'—'}</td><td>${p.Status==='archived'?'<span class="badge badge-archived">Archived</span>':'<span class="badge badge-active">Active</span>'}</td><td style="display:flex;gap:4px;">${acts}<button class="btn btn-danger btn-sm" onclick="deletePlayer('${p.id}')">Delete</button></td></tr>`;
-      }).join('');
-  }
-  // Parents
-  const parbody=document.getElementById('parents-tbody');
-  if(parbody&&cacheLoaded){
-    const s=manageState.parents,all=CACHE.parents,total=all.length;
-    const pg=all.slice(s.page*s.perPage,(s.page+1)*s.perPage);
-    const pgIds=pg.map(p=>p.id),allSel=pgIds.length>0&&pgIds.every(id=>s.selected.has(id));
-    renderSelBar('parents','Delete Selected');renderPager('parents',total);renderPerPage('parents');
-    const thc=document.getElementById('parents-th-chk');
-    if(thc)thc.innerHTML=`<input type="checkbox" ${allSel?'checked':''} onchange="manageToggleAll('parents',this.checked,${JSON.stringify(pgIds)})" style="cursor:pointer;accent-color:var(--accent);">`;
-    parbody.innerHTML=total===0?`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px;">No parent PIDs yet</td></tr>`:
-      pg.map(p=>{const cl=CACHE.clubs.find(c=>c.id===p.ClubID),se=CACHE.seasons.find(s=>s.id===p.SeasonID),sel=s.selected.has(p.id);
-        return `<tr style="${sel?'background:rgba(79,124,255,0.06);':''}"><td style="padding:8px 4px;"><input type="checkbox" ${sel?'checked':''} onchange="manageToggleOne('parents','${p.id}',this.checked)" style="cursor:pointer;accent-color:var(--accent);"></td><td class="mono" style="color:var(--amber);">${p.PID||''}</td><td>${cl?.Name||'—'}</td><td>${se?.Label||'Multi-season'}</td><td>${p.KitType||'—'}</td><td>${p.GarmentType||'—'}</td><td><button class="btn btn-danger btn-sm" onclick="deleteParent('${p.id}')">Delete</button></td></tr>`;
-      }).join('');
-  }
-  // Heroes
-  const hbody=document.getElementById('heroes-tbody');
-  if(hbody&&cacheLoaded){
-    const s=manageState.heroes,all=CACHE.heroes.slice().reverse(),total=all.length;
-    const pg=all.slice(s.page*s.perPage,(s.page+1)*s.perPage);
-    const pgIds=pg.map(h=>h.id),allSel=pgIds.length>0&&pgIds.every(id=>s.selected.has(id));
-    renderSelBar('heroes','Delete Selected','Archive/Activate');renderPager('heroes',total);renderPerPage('heroes');
-    const thc=document.getElementById('heroes-th-chk');
-    if(thc)thc.innerHTML=`<input type="checkbox" ${allSel?'checked':''} onchange="manageToggleAll('heroes',this.checked,${JSON.stringify(pgIds)})" style="cursor:pointer;accent-color:var(--accent);">`;
-    hbody.innerHTML=total===0?`<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:32px;">No hero PIDs yet</td></tr>`:
-      pg.map(h=>{const pl=CACHE.players.find(p=>p.id===h.PlayerID),cl=CACHE.clubs.find(c=>c.id===h.ClubID),se=CACHE.seasons.find(s=>s.id===h.SeasonID),sel=s.selected.has(h.id);
-        return `<tr style="${sel?'background:rgba(79,124,255,0.06);':''}"><td style="padding:8px 4px;"><input type="checkbox" ${sel?'checked':''} onchange="manageToggleOne('heroes','${h.id}',this.checked)" style="cursor:pointer;accent-color:var(--accent);"></td><td class="mono" style="color:var(--text);">${h.PID||''}</td><td>${pl?.Name||'—'}</td><td>${cl?.Name||'—'}</td><td>${se?.Label||'—'}</td><td>${FONT_LABELS[h.FontType]||h.FontType||'—'}</td><td>${GARMENT_LABELS[h.GarmentType]||h.GarmentType||'—'}</td><td>${h.Status==='archived'?'<span class="badge badge-archived">Archived</span>':'<span class="badge badge-active">Active</span>'}</td><td><button class="btn btn-danger btn-sm" onclick="deleteHero('${h.id}')">Delete</button></td></tr>`;
-      }).join('');
-  }
-}
-
-function refreshFilterSelects() {
-  const clubSel = document.getElementById('filter-club');
-  const seasonSel = document.getElementById('filter-season');
-  if (!clubSel||!seasonSel) return;
-  const cv=clubSel.value, sv=seasonSel.value;
-  const sortedClubs = [...CACHE.clubs].sort((a,b)=>(a.Name||'').localeCompare(b.Name||''));
-  const sortedSeasons = [...CACHE.seasons].sort((a,b)=>(a.Label||'').localeCompare(b.Label||''));
-  clubSel.innerHTML = '<option value="">All clubs</option>'+sortedClubs.map(c=>`<option value="${c.id}"${c.id===cv?' selected':''}>${c.Name||''}</option>`).join('');
-  seasonSel.innerHTML = '<option value="">All seasons</option>'+sortedSeasons.map(s=>`<option value="${s.id}"${s.id===sv?' selected':''}>${s.Label||''}</option>`).join('');
-  // Show/hide extra filters based on whether a club is selected
-  const extra = document.getElementById('filter-extra');
-  if (extra) extra.style.display = cv ? 'flex' : 'none';
-}
-
-function refreshImportSelects() {
-  fillSelect('import-club', CACHE.clubs, c=>({v:c.id,l:c.Name||''}));
-  fillSelect('import-season', CACHE.seasons, s=>({v:s.id,l:s.Label||''}));
-  fillSelect('creation-season', CACHE.seasons, s=>({v:s.id,l:s.Label||''}));
-}
-
-function updateStats() {
-  document.getElementById('stat-hero').textContent = CACHE.heroes.length.toLocaleString();
-  document.getElementById('stat-players').textContent = CACHE.players.length.toLocaleString();
-  document.getElementById('stat-clubs').textContent = CACHE.clubs.length.toLocaleString();
-}
-
-// ─── IMPORT ───────────────────────────────────────────────────────────────────
-let dropZonesInitialised = false;
-function initDropZones() {
-  if (dropZonesInitialised) return;
-  dropZonesInitialised = true;
-  [
-    {id:'drop-zone-storage',handler:f=>processImportFile(f),multi:false},
-    {id:'drop-zone-creation',handler:files=>processCreationFiles(files),multi:true},
-    {id:'drop-zone-homeplate',handler:f=>processHomeplateFile(f),multi:false},
-  ].forEach(({id,handler,multi}) => {
-    const zone = document.getElementById(id);
-    if (!zone) return;
-    zone.addEventListener('dragover', e=>{e.preventDefault();zone.classList.add('drag-over');});
-    zone.addEventListener('dragleave', ()=>zone.classList.remove('drag-over'));
-    zone.addEventListener('drop', e=>{
-      e.preventDefault();zone.classList.remove('drag-over');
-      const files=Array.from(e.dataTransfer.files);
-      if (!files.length) return;
-      multi?handler(files):handler(files[0]);
-    });
-  });
-}
-
-let importData = null;
-
-function handleStorageFileSelect(e) { const f=e.target.files[0]; if(f) processImportFile(f); }
-
-function detectKitFromColA(val) {
-  const v = String(val||'').trim().toLowerCase();
-  for (const k of KIT_WORDS_DETECT) { if(v===k||v.startsWith(k+' ')||v.endsWith(' '+k)) return v.replace(/\b\w/g,c=>c.toUpperCase()); }
-  return null;
-}
-
-function parseImportWorkbook(wb, clubId, seasonId, filename) {
-  const club = CACHE.clubs.find(c=>c.id===clubId);
-  const season = CACHE.seasons.find(s=>s.id===seasonId);
-  importData = {clubId,seasonId,players:[],parents:[],heroes:[],sheets:[],sectionsFound:[]};
-  const skipSheets = ['sheet1','roster','data','ref'];
-  wb.SheetNames.forEach(sheetName => {
-    if (skipSheets.includes(sheetName.toLowerCase())) return;
-    const ws = wb.Sheets[sheetName];
-    const rows = [];
-    const range = XLSX.utils.decode_range(ws['!ref']||'A1');
-    for (let r=range.s.r;r<=range.e.r;r++) {
-      const row=[];
-      for (let c=0;c<=range.e.c;c++) { const cell=ws[XLSX.utils.encode_cell({r,c})]; row.push(cell?(cell.v!==undefined?cell.v:''):''); }
-      rows.push(row);
-    }
-    const fontType = detectFontType(sheetName);
-    const sectionStarts = [];
-    for (let i=0;i<rows.length;i++) {
-      const row=rows[i];
-      const rowStr=row.slice(0,8).map(c=>(c===null||c===undefined?'':String(c)).toLowerCase()).join('|');
-      if (!rowStr.includes('font type')) continue;
-      for (let c=0;c<5;c++) {
-        const kitName=detectKitFromColA(String(row[c]||'').trim());
-        if (kitName) {
-          const nearby=[row[c+1],row[c+2],row[c+3]].map(v=>(v===null||v===undefined?'':String(v)).toLowerCase());
-          if (nearby.some(v=>v.includes('font type'))) {
-            const garmentHint=[];
-            for (let gc=0;gc<row.length;gc++) {
-              const val=String(row[gc]||'').trim();
-              if (!val) continue;
-              const vl=val.toLowerCase();
-              if (vl.includes('shorts')) continue;
-              if (vl.includes('assembl')||vl.includes('roster')) break;
-              if (GARMENT_KEYWORDS.some(k=>vl.includes(k))) garmentHint.push({col:gc,label:val});
-            }
-            sectionStarts.push({rowIdx:i,kitType:kitName,garmentHint});
-            break;
-          }
-        }
-      }
-    }
-    if (sectionStarts.length===0) {
-      parseSingleSection(rows,0,rows.length,fontType,'Home',clubId,seasonId,[]);
-      importData.sheets.push(sheetName);
-      return;
-    }
-    sectionStarts.forEach((section,idx) => {
-      const endRow=idx+1<sectionStarts.length?sectionStarts[idx+1].rowIdx:rows.length;
-      parseSingleSection(rows,section.rowIdx,endRow,fontType,section.kitType,clubId,seasonId,section.garmentHint||[]);
-      importData.sectionsFound.push(`${sheetName} → ${section.kitType}`);
-    });
-    importData.sheets.push(sheetName);
-  });
-  importData._rawHeroCount = importData.heroes.length;
-  const seen=new Set();
-  importData.players=importData.players.filter(p=>{const k=`${p.name}_${p.clubId}_${p.seasonId}`;if(seen.has(k))return false;seen.add(k);return true;});
-  showImportPreview(club,season,filename);
-}
-
-function detectFontType(sheetName) {
-  const s=sheetName.toLowerCase().trim();
-  if (s.includes('womens cup')||s.includes("women's cup")||s==='wsl cup') return 'womens_cup';
-  if (s==='wsl'||s.startsWith('wsl ')||s.includes(' wsl')||s.includes('womens')||s.includes("women's")) return 'womens';
-  if (s.includes('cup')) return 'cup';
-  return 'league';
-}
-
-function isVariantName(name) { return ['champions','winners','blank','gk plain','plain gk'].some(v=>name.toLowerCase().includes(v)); }
-function normaliseGarment(label) { const k=label.toLowerCase().trim(); return GARMENT_ALIASES[k]||'other'; }
-
-function showImportPreview(club, season, filename) {
-  const d=importData;
-  const newPlayers=d.players.filter(p=>!CACHE.players.find(e=>e.Name===p.name&&e.ClubID===p.clubId&&e.SeasonID===p.seasonId));
-  const existingPlayers=d.players.filter(p=>CACHE.players.find(e=>e.Name===p.name&&e.ClubID!==p.clubId));
-  const newHeroes=d.heroes.filter(h=>!CACHE.heroes.find(e=>e.PID===h.pid));
-  const newParents=d.parents.filter(p=>!CACHE.parents.find(e=>e.PID===p.pid));
-  const dupHeroes=d.heroes.length-newHeroes.length;
-  document.getElementById('import-preview-title').textContent=`Preview — ${filename}`;
-  document.getElementById('import-preview').classList.remove('hidden');
-  let html=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;"><div class="stat-pill"><span class="stat-label">New players</span><span class="stat-value" style="color:var(--green);">${newPlayers.length}</span></div><div class="stat-pill"><span class="stat-label">New hero PIDs</span><span class="stat-value" style="color:var(--green);">${newHeroes.length}</span></div><div class="stat-pill"><span class="stat-label">New parent PIDs</span><span class="stat-value" style="color:var(--amber);">${newParents.length}</span></div></div>`;
-  if (existingPlayers.length>0) html+=`<div style="background:rgba(99,179,237,0.08);border:1px solid rgba(99,179,237,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:#63b3ed;margin-bottom:10px;">ℹ ${existingPlayers.length} player${existingPlayers.length>1?'s':''} already in database from another club (${existingPlayers.map(p=>p.name).join(', ')}) — PIDs will still be imported</div>`;
-  if (dupHeroes>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${dupHeroes} duplicate hero PIDs will be skipped</div>`;
-  html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Sheets: ${d.sheets.join(', ')}</div>`;
-  if (d.sectionsFound.length>0) html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Sections: ${d.sectionsFound.join(' · ')}</div>`;
-
-  html+=`<div style="max-height:200px;overflow-y:auto;margin-top:8px;"><table class="data-table" style="font-size:11px;"><thead><tr><th>Player</th><th>Font</th><th>PIDs</th><th>Status</th></tr></thead><tbody>${newPlayers.slice(0,50).map(p=>{const cnt=newHeroes.filter(h=>h.playerName===p.name&&h.fontType===p.fontType).length;return`<tr><td style="color:var(--text);">${p.name}</td><td>${FONT_LABELS[p.fontType]||p.fontType}</td><td class="mono">${cnt}</td><td><span class="badge badge-active">New</span></td></tr>`;}).join('')}${newPlayers.length>50?`<tr><td colspan="4" style="color:var(--text3);">...and ${newPlayers.length-50} more</td></tr>`:''}</tbody></table></div>`;
-  document.getElementById('import-preview-content').innerHTML=html;
-}
-
-async function confirmImport() {
-  if (!importData) return;
-  const btn = document.getElementById('import-confirm-btn');
-  btn.textContent = 'Importing...';
-  btn.disabled = true;
-  // Add progress bar below the stat pills, above sheets info
-  const progressWrap = document.createElement('div');
-  progressWrap.id = 'import-progress-wrap';
-  progressWrap.style.cssText = 'margin-bottom:12px;';
-  progressWrap.innerHTML = '<div style="font-size:11px;color:var(--text2);margin-bottom:6px;display:flex;justify-content:space-between;"><span id="import-progress-label">Preparing...</span><span id="import-progress-pct" style="color:var(--accent);">0%</span></div><div style="background:var(--bg3);border-radius:4px;height:6px;overflow:hidden;"><div id="import-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:4px;"></div></div>';
-  const previewContent = document.getElementById('import-preview-content');
-  previewContent.insertBefore(progressWrap, previewContent.firstChild);
-  const setProgress = (done, total, label) => {
-    const pct = total > 0 ? Math.round((done/total)*100) : 0;
-    const bar = document.getElementById('import-progress-bar');
-    const lbl = document.getElementById('import-progress-label');
-    const pctEl = document.getElementById('import-progress-pct');
-    if (bar) bar.style.width = pct + '%';
-    if (lbl) lbl.textContent = label || `${done} / ${total}`;
-    if (pctEl) pctEl.textContent = pct + '%';
-  };
-  const d=importData;
-  const newParents=d.parents.filter(p=>!CACHE.parents.find(e=>e.PID===p.pid));
-  const newHeroes=d.heroes.filter(h=>!CACHE.heroes.find(e=>e.PID===h.pid));
-  const newPlayers=d.players.filter(p=>!CACHE.players.find(e=>e.Name===p.name&&e.ClubID===p.clubId&&e.SeasonID===p.seasonId));
-  try {
-    const total = newParents.length + newPlayers.length + newHeroes.length;
-    let done = 0;
-    if (newParents.length>0) {
-      setProgress(done, total, `Writing ${newParents.length} parent PIDs...`);
-      const recs=await atCreateBatch(TABLES.parents, newParents.map(p=>({PID:p.pid,ClubID:p.clubId,SeasonID:p.seasonId,KitType:p.kitType,GarmentType:p.garmentType})));
-      recs.forEach(r=>CACHE.parents.push({id:r.id,...r.fields}));
-      done += newParents.length;
-    }
-    const playerMap={};
-    for (let pi=0; pi<newPlayers.length; pi++) {
-      const p = newPlayers[pi];
-      setProgress(done+pi, total, `Writing player ${pi+1} of ${newPlayers.length}...`);
-      const rec=await atCreate(TABLES.players,{Name:toProperName(p.name),ShirtName:toShirtName(p.shirtName),SquadNumber:p.number,Type:p.type,ClubID:p.clubId,SeasonID:p.seasonId,Status:p.status,MDMActorID:p.mdmId||''});
-      CACHE.players.push({id:rec.id,...rec.fields});
-      playerMap[p.name+'_'+p.clubId+'_'+p.seasonId]=rec.id;
-    }
-    done += newPlayers.length;
-    CACHE.players.filter(p=>d.players.some(dp=>dp.name===p.Name&&dp.clubId===p.ClubID&&dp.seasonId===p.SeasonID)).forEach(p=>{ playerMap[p.Name+'_'+p.ClubID+'_'+p.SeasonID]=p.id; });
-    if (newHeroes.length>0) {
-      const heroFields=newHeroes.map(h=>{
-        const playerId=playerMap[h.playerName+'_'+h.clubId+'_'+h.seasonId];
-        const parent=CACHE.parents.find(p=>p.PID===h.parentPid);
-        return {PID:h.pid,PlayerID:playerId||'',ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.garmentRaw,KitType:h.kitType,Status:h.status,ParentPIDID:parent?parent.id:''};
-      }).filter(h=>h.PlayerID);
-      // Write in batches of 10 with progress
-      for (let i=0; i<heroFields.length; i+=10) {
-        setProgress(done+i, total, `Writing hero PIDs ${done+i+1}–${Math.min(done+i+10,total)} of ${total}...`);
-        const chunk = heroFields.slice(i, i+10);
-        const data = await atFetch(TABLES.heroes, {method:'POST', body:JSON.stringify({records:chunk.map(f=>({fields:f})),typecast:true})});
-        (data.records||[]).forEach(r=>CACHE.heroes.push({id:r.id,...r.fields}));
-      }
-      done += newHeroes.length;
-    }
-    setProgress(total, total, 'Complete!');
-    invalidateCache();
-    updateStats(); refreshFilterSelects();
-    const _importedPlayerList = d.players.map(p=>({name:p.name,clubId:p.clubId,seasonId:p.seasonId}));
-    clearImport();
-    toast(`Import complete — ${newHeroes.length} hero PIDs, ${newPlayers.length} players added`);
-    // For Club Hero PID Uploads numbers come from file — just show modal to let user verify
-    // Only show if any players are missing numbers
-    const _missingNums = _importedPlayerList.filter(p => {
-      const rec = CACHE.players.find(e => e.Name === p.name && e.ClubID === p.clubId && e.SeasonID === p.seasonId);
-      return rec && !rec.SquadNumber;
-    });
-    if (_missingNums.length > 0) showSquadNumberModal(_missingNums);
-  } catch(e) {
-    toast('Import error: '+e.message,'error');
-    btn.textContent='Import all';
-    btn.disabled=false;
-  }
-}
-
-function clearImport() {
-  importData=null;
-  document.getElementById('import-preview').classList.add('hidden');
-  document.getElementById('file-input-storage').value='';
-  const btn=document.getElementById('import-confirm-btn');
-  if(btn){btn.textContent='Import all';btn.disabled=false;}
-}
-
-// ─── CREATION CSV PARSER ──────────────────────────────────────────────────────
-let creationImportData=null;
-
-function handleCreationFilesSelect(e) { const files=Array.from(e.target.files); if(files.length) processCreationFiles(files); }
-
-async function processCreationFiles(files) {
-  const seasonId=document.getElementById('creation-season').value;
-  const fontType=document.getElementById('creation-font').value;
-  if (!seasonId){toast('Please select a season','error');return;}
-  document.getElementById('creation-preview').classList.add('hidden');
-  const allRows=[];
-  for (const file of files) {
-    const text=await file.text();
-    const lines=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').trim().split('\n');
-    if (lines.length<2) continue;
-    const headers=parseCSVLine(lines[0]);
-    for (let i=1;i<lines.length;i++) {
-      const vals=parseCSVLine(lines[i]);
-      if (vals.length<2) continue;
-      const row={};
-      headers.forEach((h,idx)=>row[h.trim()]=(vals[idx]||'').trim());
-      allRows.push(row);
-    }
-  }
-  parseCreationRows(allRows, seasonId, fontType, files.map(f=>f.name));
-}
-
-function parseCSVLine(line) {
-  const result=[];let current='';let inQuotes=false;
-  for (let i=0;i<line.length;i++){const ch=line[i];if(ch==='"'){inQuotes=!inQuotes;continue;}if(ch===','&&!inQuotes){result.push(current);current='';continue;}current+=ch;}
-  result.push(current);return result;
-}
-
-function parseCreationGarmentType(nameStr) {
-  const n=nameStr.toUpperCase();
-  const suffix=n.includes(' - ')?n.split(' - ').slice(1).join(' - '):'';
-  if (suffix.includes('WOMENS CROPPED')) return 'womens_cropped';
-  if (suffix.includes('WOMENS')&&(n.includes('DRI-FIT ADV')||n.includes('AUTHENTIC'))) return 'womens_pro';
-  if (suffix.includes('WOMENS')) return 'womens';
-  if (suffix.includes('LONG SLEEVE')&&(n.includes('DRI-FIT ADV')||n.includes('AUTHENTIC'))) return 'pro_shirt';
-  if (suffix.includes('LONG SLEEVE')) return 'mens_ls';
-  if (suffix.includes('LITTLE KIDS')||n.includes('MINIKIT')||n.includes('MINI KIT')) return 'little_kids';
-  if (suffix.includes('INFANTS')||n.includes('BABYKIT')||n.includes('BABY KIT')) return 'infants';
-  if (suffix.includes('KIDS')&&(n.includes('DRI-FIT ADV')||n.includes('AUTHENTIC'))) return 'pro_kids';
-  if (suffix.includes('KIDS')) return 'kids_ss';
-  if (n.includes('GOALKEEPER')&&(n.includes('AUTHENTIC')||n.includes('DRI-FIT ADV'))) return 'pro_shirt';
-  if (n.includes('GOALKEEPER')) return 'mens_ss';
-  if (n.includes('DRI-FIT ADV')||n.includes('AUTHENTIC SHIRT')) return 'pro_shirt';
-  return 'mens_ss';
-}
-
-function parseCreationKitType(nameStr) {
-  const n=nameStr.toUpperCase();
-  if (n.includes(' GK ')||n.includes('GOALKEEPER')) return 'GK';
-  if (n.includes(' HOME ')) return 'Home';
-  if (n.includes(' AWAY ')) return 'Away';
-  if (n.includes(' THIRD ')) return 'Third';
-  if (n.includes(' FOURTH ')) return 'Fourth';
-  return 'Home';
-}
-
-function parseCreationPlayerName(nameStr) {
-  const upper=nameStr.toUpperCase();
-  let anchorIdx=-1;
-  for (const anchor of BRAND_ANCHORS){const idx=upper.indexOf(anchor);if(idx!==-1){anchorIdx=idx;break;}}
-  if (anchorIdx===-1) return '';
-  const before=nameStr.substring(0,anchorIdx).trim();
-  const tokens=before.split(/\s+/);
-  if (tokens.length<=3) return '';
-  return fixEncoding(tokens.slice(3).join(' ').trim());
-}
-
-function parseCreationFedCode(nameStr) {
-  const tokens=nameStr.toUpperCase().split(/\s+/);
-  const code=tokens[1]||'';
-  return FED_MAP[code]||code;
-}
-
-function parseCreationRows(rows,seasonId,fontType,fileNames) {
-  creationImportData={seasonId,fontType,fileNames,heroes:[],players:[],parents:[],provisional:[],allParsedPlayers:[],stats:{matched:0,unmatched:0,duplicate:0,provisional:0}};
-  const seen=new Set();
-  rows.forEach(row=>{
-    const pid=(row['productId']||'').trim();
-    const name=(row['name']||'').trim();
-    const basePid=(row['baseProductId']||'').trim();
-    if (!pid||!name) return;
-    if (seen.has(pid)||CACHE.heroes.find(h=>h.PID===pid)){creationImportData.stats.duplicate++;return;}
-    seen.add(pid);
-    const clubName=parseCreationFedCode(name);
-    const club=CACHE.clubs.find(c=>(c.Name||'').toLowerCase()===clubName.toLowerCase());
-    const clubId=club?club.id:null;
-    const kitType=parseCreationKitType(name);
-    const garmentType=parseCreationGarmentType(name);
-    const playerName=parseCreationPlayerName(name);
-    const knownParent=CACHE.parents.find(p=>p.PID===basePid);
-    if (knownParent) creationImportData.stats.matched++;
-    else { creationImportData.stats.unmatched++; if(basePid&&!creationImportData.parents.find(p=>p.pid===basePid)) creationImportData.parents.push({pid:basePid,clubId,seasonId,kitType,garmentType}); }
-    if (!playerName) { creationImportData.stats.provisional++; creationImportData.provisional.push({pid,basePid,clubId,seasonId,kitType,garmentType,fontType,name}); }
-    else { creationImportData.players.push({name:toProperName(playerName),clubId,seasonId,fontType,kitType}); creationImportData.heroes.push({pid,playerName:toProperName(playerName),basePid,clubId,seasonId,fontType,kitType,garmentType,garmentRaw:name,status:'active'}); }
-    if (playerName && clubId) { const _pk=playerName+'_'+clubId+'_'+seasonId; if(!creationImportData.allParsedPlayers.find(p=>p._key===_pk)) creationImportData.allParsedPlayers.push({name:toProperName(playerName),clubId,seasonId,_key:_pk}); }
-  });
-  showCreationPreview(fileNames);
-}
-
-function showCreationPreview(fileNames) {
-  const d=creationImportData;
-  document.getElementById('creation-preview-title').textContent=`Preview — ${fileNames.length} file${fileNames.length!==1?'s':''}`;
-  document.getElementById('creation-preview').classList.remove('hidden');
-  let html=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;"><div class="stat-pill"><span class="stat-label">Hero PIDs</span><span class="stat-value" style="color:var(--green);">${d.heroes.length}</span></div><div class="stat-pill"><span class="stat-label">Provisional</span><span class="stat-value" style="color:var(--amber);">${d.provisional.length}</span></div><div class="stat-pill"><span class="stat-label">Duplicates</span><span class="stat-value" style="color:var(--text3);">${d.stats.duplicate}</span></div><div class="stat-pill"><span class="stat-label">New Parents</span><span class="stat-value" style="color:var(--accent);">${d.parents.length}</span></div></div>`;
-  if (d.stats.matched>0) html+=`<div style="background:var(--green-bg);border:1px solid rgba(61,214,140,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--green);margin-bottom:10px;">✓ ${d.stats.matched} PIDs matched to existing parent PIDs</div>`;
-  if (d.provisional.length>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${d.provisional.length} PIDs have no player name — stored as provisional.<button class="btn btn-ghost btn-sm" style="margin-left:8px;" onclick="exportProvisionalList()">⎘ Export for Homeplate</button></div>`;
-  document.getElementById('creation-preview-content').innerHTML=html;
-}
-
-function exportProvisionalList() {
-  if (!creationImportData||!creationImportData.provisional.length) return;
-  const csv='productId\n'+creationImportData.provisional.map(p=>p.pid).join('\n');
-  const blob=new Blob([csv],{type:'text/csv'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');
-  a.href=url;a.download='provisional_pids_for_homeplate.csv';a.click();URL.revokeObjectURL(url);
-  toast(`Exported ${creationImportData.provisional.length} provisional PIDs`);
-}
-
-async function confirmCreationImport() {
-  if (!creationImportData) return;
-  const btn=document.getElementById('creation-confirm-btn');
-  btn.textContent='Importing...';btn.disabled=true;
-  const d=creationImportData;
-  try {
-    if (d.parents.length>0) {
-      const recs=await atCreateBatch(TABLES.parents,d.parents.map(p=>({PID:p.pid,ClubID:p.clubId,SeasonID:p.seasonId,KitType:p.kitType,GarmentType:p.garmentType})));
-      recs.forEach(r=>CACHE.parents.push({id:r.id,...r.fields}));
-    }
-    const playerMap={};
-    // Find existing players first
-    d.heroes.forEach(h => {
-      const key=h.playerName+'_'+h.clubId+'_'+h.seasonId;
-      if (!playerMap[key]) {
-        const existing=CACHE.players.find(p=>(p.Name||'').toLowerCase()===h.playerName.toLowerCase()&&p.ClubID===h.clubId&&p.SeasonID===h.seasonId);
-        if (existing) playerMap[key]=existing.id;
-      }
-    });
-    // Batch create new players
-    const newPlayerFields=[];
-    const newPlayerKeys=[];
-    d.heroes.forEach(h => {
-      const key=h.playerName+'_'+h.clubId+'_'+h.seasonId;
-      if (!playerMap[key]&&!newPlayerKeys.includes(key)) {
-        newPlayerKeys.push(key);
-        newPlayerFields.push({Name:toProperName(h.playerName),ShirtName:toShirtName(h.playerName),Type:'player',ClubID:h.clubId,SeasonID:h.seasonId,Status:'active'});
-      }
-    });
-    if (newPlayerFields.length>0) {
-      const recs=await atCreateBatch(TABLES.players,newPlayerFields);
-      recs.forEach((r,i)=>{ CACHE.players.push({id:r.id,...r.fields}); playerMap[newPlayerKeys[i]]=r.id; });
-    }
-    if (d.heroes.length>0) {
-      const heroFields=d.heroes.map(h=>({PID:h.pid,PlayerID:playerMap[h.playerName+'_'+h.clubId+'_'+h.seasonId]||'',ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.garmentRaw,KitType:h.kitType,Status:'active'})).filter(h=>h.PlayerID);
-      const recs=await atCreateBatch(TABLES.heroes,heroFields);
-      recs.forEach(r=>CACHE.heroes.push({id:r.id,...r.fields}));
-    }
-    if (d.provisional.length > 0) {
-      // Ensure one __provisional__ player per club+season (batch create missing ones)
-      const provPlayerMap = {};
-      const provKeys = [...new Set(d.provisional.map(h => h.clubId+'_'+h.seasonId))];
-      // Find existing provisional players
-      provKeys.forEach(k => {
-        const [cId, sId] = k.split('_');
-        const existing = CACHE.players.find(p => p.Name==='__provisional__' && p.ClubID===cId && p.SeasonID===sId);
-        if (existing) provPlayerMap[k] = existing.id;
-      });
-      // Batch create missing provisional players
-      const missingProvKeys = provKeys.filter(k => !provPlayerMap[k]);
-      if (missingProvKeys.length > 0) {
-        const newProvRecs = await atCreateBatch(TABLES.players, missingProvKeys.map(k => {
-          const [cId, sId] = k.split('_');
-          return {Name:'__provisional__',ShirtName:'UNKNOWN',Type:'player',ClubID:cId,SeasonID:sId,Status:'provisional'};
-        }));
-        newProvRecs.forEach((r, i) => { CACHE.players.push({id:r.id,...r.fields}); provPlayerMap[missingProvKeys[i]] = r.id; });
-      }
-      // Batch create all provisional hero PIDs
-      const provHeroFields = d.provisional.map(h => ({
-        PID:h.pid, PlayerID:provPlayerMap[h.clubId+'_'+h.seasonId]||'',
-        ClubID:h.clubId, SeasonID:h.seasonId, FontType:h.fontType,
-        GarmentType:h.garmentType, GarmentRaw:h.name, KitType:h.kitType, Status:'provisional'
-      })).filter(h => h.PlayerID);
-      if (provHeroFields.length > 0) {
-        const recs = await atCreateBatch(TABLES.heroes, provHeroFields);
-        recs.forEach(r => CACHE.heroes.push({id:r.id,...r.fields}));
-      }
-    }
-    invalidateCache();
-    updateStats();refreshFilterSelects();
-    const _csvPlayerList = (d.allParsedPlayers||[]);
-    const _heroCount = d.heroes.length, _provCount = d.provisional.length;
-    clearCreationImport();
-    toast(`Imported: ${_heroCount} hero PIDs · ${_provCount} provisional`);
-    if (_csvPlayerList.length > 0) showSquadNumberModal(_csvPlayerList, true);
-  } catch(e) { toast('Import error: '+e.message,'error'); btn.textContent='Import all';btn.disabled=false; }
-}
-
-function clearCreationImport(){creationImportData=null;document.getElementById('creation-preview').classList.add('hidden');document.getElementById('file-input-creation').value='';}
-
-// ─── HOMEPLATE RESOLVER ───────────────────────────────────────────────────────
-let homeplateData=null;
-
-function handleHomeplateFileSelect(e){const f=e.target.files[0];if(f)processHomeplateFile(f);}
-
-function processHomeplateFile(file) {
-  const reader=new FileReader();
-  reader.onload=e=>{
-    try{const wb=XLSX.read(e.target.result,{type:'array',codepage:65001});parseHomeplateWorkbook(wb,file.name);}
-    catch(err){toast('Could not read file: '+err.message,'error');}
-  };
-  reader.readAsArrayBuffer(file);
-}
-
-function parseHomeplateWorkbook(wb,filename) {
-  const ws=wb.Sheets[wb.SheetNames[0]];
-  const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
-  homeplateData={filename,resolutions:[],notFound:[],alreadyActive:[]};
-  rows.forEach(row=>{
-    const pid=String(row['Product ID']||row['productId']||'').trim();
-    const name=fixEncoding(String(row['Name']||row['name']||'').trim());
-    if (!pid||!name) return;
-    let playerName=null,squadNumber=null;
-    const withMatch=name.match(/with (.+?)\s+(\d+)\s+printing$/i);
-    const dashMatch=name.match(/[-—]\s+([A-ZÀ-ÿa-z][A-ZÀ-ÿa-z\s'-]+?)\s+(\d+)\s*$/i);
-    if (withMatch){playerName=withMatch[1].trim();squadNumber=parseInt(withMatch[2]);}
-    else if (dashMatch){playerName=dashMatch[1].trim();squadNumber=parseInt(dashMatch[2]);}
-    if (!playerName) return;
-    const hero=CACHE.heroes.find(h=>h.PID===pid&&h.Status==='provisional');
-    if (!hero){const active=CACHE.heroes.find(h=>h.PID===pid);if(active)homeplateData.alreadyActive.push({pid,playerName});else homeplateData.notFound.push({pid,playerName});return;}
-    homeplateData.resolutions.push({pid,playerName,squadNumber,heroId:hero.id,clubId:hero.ClubID,seasonId:hero.SeasonID});
-  });
-  showHomeplatePreview(filename);
-}
-
-function showHomeplatePreview(filename) {
-  const d=homeplateData;
-  document.getElementById('homeplate-preview').classList.remove('hidden');
-  let html=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;"><div class="stat-pill"><span class="stat-label">Resolved</span><span class="stat-value" style="color:var(--green);">${d.resolutions.length}</span></div><div class="stat-pill"><span class="stat-label">Not found</span><span class="stat-value" style="color:var(--red);">${d.notFound.length}</span></div><div class="stat-pill"><span class="stat-label">Already active</span><span class="stat-value" style="color:var(--text3);">${d.alreadyActive.length}</span></div></div>`;
-  if (d.resolutions.length>0) html+=`<div style="max-height:260px;overflow-y:auto;"><table class="data-table" style="font-size:11px;"><thead><tr><th>PID</th><th>Player</th><th>No.</th><th>Club</th></tr></thead><tbody>${d.resolutions.map(r=>`<tr><td class="mono">${r.pid}</td><td style="color:var(--text);">${r.playerName}</td><td class="mono">${r.squadNumber||'—'}</td><td>${CACHE.clubs.find(c=>c.id===r.clubId)?.Name||'—'}</td></tr>`).join('')}</tbody></table></div>`;
-  document.getElementById('homeplate-preview-content').innerHTML=html;
-}
-
-async function confirmHomeplateResolve() {
-  if (!homeplateData) return;
-  let resolved=0;
-  for (const r of homeplateData.resolutions) {
-    const hero=CACHE.heroes.find(h=>h.id===r.heroId);
-    if (!hero) continue;
-    let player=CACHE.players.find(p=>normaliseAccents((p.Name||'').toLowerCase())===normaliseAccents(r.playerName.toLowerCase())&&p.ClubID===r.clubId&&p.SeasonID===r.seasonId&&p.Status!=='provisional');
-    if (!player) {
-      const rec=await atCreate(TABLES.players,{Name:toProperName(r.playerName),ShirtName:toShirtName(r.playerName),SquadNumber:r.squadNumber||null,Type:'player',ClubID:r.clubId,SeasonID:r.seasonId,Status:'active'});
-      CACHE.players.push({id:rec.id,...rec.fields}); player={id:rec.id,...rec.fields};
-    }
-    await atUpdate(TABLES.heroes,r.heroId,{PlayerID:player.id,Status:'active'});
-    hero.PlayerID=player.id; hero.Status='active';
-    resolved++;
-  }
-  CACHE.players=CACHE.players.filter(p=>{if(p.Status!=='provisional')return true;return CACHE.heroes.some(h=>h.PlayerID===p.id&&h.Status==='provisional');});
-  updateStats(); clearHomeplateImport();
-  toast(`Resolved ${resolved} provisional PIDs`);
-}
-
-function clearHomeplateImport(){homeplateData=null;document.getElementById('homeplate-preview').classList.add('hidden');document.getElementById('file-input-homeplate').value='';}
-
-// ─── UI HELPERS ───────────────────────────────────────────────────────────────
-function togglePlayer(header){const pids=header.nextElementSibling;const chevron=header.querySelector('.chevron');pids.classList.toggle('open');chevron.classList.toggle('open');}
-function toggleSection(titleEl){const content=titleEl.nextElementSibling;const isOpen=content.style.display!=='none';content.style.display=isOpen?'none':'block';}
-function copyPid(pid,btn){navigator.clipboard.writeText(pid).then(()=>{const orig=btn.textContent;btn.textContent='✓';btn.style.color='var(--green)';setTimeout(()=>{btn.textContent=orig;btn.style.color='';},1200);toast(`Copied ${pid}`);});}
-function copyAll(pidsStr,btn){const pids=pidsStr.split('|').filter(Boolean).join('\n');navigator.clipboard.writeText(pids).then(()=>{const orig=btn.textContent;btn.textContent='✓ Copied';btn.style.color='var(--green)';setTimeout(()=>{btn.textContent=orig;btn.style.color='';},1500);const count=pids.split('\n').length;toast(`Copied ${count} PID${count!==1?'s':''}`);});}
-
-// ─── MANAGE STATE + MULTI-SELECT ─────────────────────────────────────────────
-const manageState={
-  players:{page:0,perPage:25,selected:new Set()},
-  parents:{page:0,perPage:25,selected:new Set()},
-  heroes:{page:0,perPage:25,selected:new Set()},
-  clubs:{page:0,perPage:25,selected:new Set()},
-  seasons:{page:0,perPage:25,selected:new Set()},
-};
-function renderPerPage(key){
-  const el=document.getElementById(key+'-perpage');if(!el)return;
-  const s=manageState[key];
-  el.innerHTML=`<select class="filter-select" style="padding:3px 8px;font-size:11px;height:auto;" onchange="manageState['${key}'].perPage=parseInt(this.value);manageState['${key}'].page=0;refreshAll();">${[25,100,250,1000].map(n=>`<option value="${n}"${s.perPage===n?' selected':''}>${n} per page</option>`).join('')}</select>`;
-}
-function renderPager(key,total){
-  const el=document.getElementById(key+'-pager');if(!el)return;
-  const s=manageState[key],pages=Math.ceil(total/s.perPage);
-  if(pages<=1){el.innerHTML='';return;}
-  el.innerHTML=`<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text3);"><button class="btn btn-ghost btn-sm" onclick="manageState['${key}'].page=Math.max(0,manageState['${key}'].page-1);refreshAll();" ${s.page===0?'disabled':''}>‹</button><span>Page ${s.page+1} of ${pages}</span><button class="btn btn-ghost btn-sm" onclick="manageState['${key}'].page=Math.min(${pages-1},manageState['${key}'].page+1);refreshAll();" ${s.page>=pages-1?'disabled':''}>›</button></div>`;
-}
-function renderSelBar(key,deleteLabel,archiveLabel){
-  const el=document.getElementById(key+'-selection-bar');if(!el)return;
-  const count=manageState[key].selected.size;
-  if(!count){el.innerHTML='';return;}
-  el.innerHTML=`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(79,124,255,0.08);border:1px solid var(--accent);border-radius:var(--radius);margin-bottom:10px;font-size:12px;"><span style="color:var(--accent);font-weight:500;">${count} selected</span>${archiveLabel?`<button class="btn btn-ghost btn-sm" onclick="manageArchiveSelected('${key}')">${archiveLabel}</button>`:''}<button class="btn btn-danger btn-sm" onclick="manageDeleteSelected('${key}')">${deleteLabel}</button><button class="btn btn-ghost btn-sm" onclick="manageState['${key}'].selected.clear();refreshAll();">Clear</button></div>`;
-}
-function refreshAll(){refreshManage();refreshClubs();refreshSeasons();}
-function manageToggleAll(key,checked,ids){
-  ids.forEach(id=>{if(checked)manageState[key].selected.add(id);else manageState[key].selected.delete(id);});
-  refreshAll();
-}
-function manageToggleOne(key,id,checked){
-  if(checked)manageState[key].selected.add(id);else manageState[key].selected.delete(id);
-  refreshAll();
-}
-async function manageDeleteSelected(key){
-  const sel=manageState[key].selected;if(!sel.size)return;
-  if(!confirm('Delete '+sel.size+' '+key+'? This cannot be undone.'))return;
-  const tbls={players:TABLES.players,parents:TABLES.parents,heroes:TABLES.heroes,clubs:TABLES.clubs,seasons:TABLES.seasons};
-  const caches={players:CACHE.players,parents:CACHE.parents,heroes:CACHE.heroes,clubs:CACHE.clubs,seasons:CACHE.seasons};
-  toast('Deleting '+sel.size+'...');
-  const delIds=[...sel];
-  for(let i=0;i<delIds.length;i+=5){
-    await Promise.all(delIds.slice(i,i+5).map(id=>atDelete(tbls[key],id)));
-    if(i+5<delIds.length) await new Promise(r=>setTimeout(r,200));
-  }
-  const arr=caches[key];
-  [...sel].forEach(id=>{const i=arr.findIndex(r=>r.id===id);if(i>-1)arr.splice(i,1);});
-  sel.clear();invalidateCache();refreshAll();updateStats();refreshFilterSelects();toast('Deleted');
-}
-async function manageArchiveSelected(key){
-  const sel=manageState[key].selected;if(!sel.size)return;
-  const arr=key==='players'?CACHE.players:CACHE.heroes;
-  const anyActive=[...sel].some(id=>(arr.find(r=>r.id===id)?.Status||'active')==='active');
-  const ns=anyActive?'archived':'active';
-  toast((anyActive?'Archiving':'Activating')+' '+sel.size+'...');
-  await Promise.all([...sel].map(id=>atUpdate(TABLES[key],id,{Status:ns})));
-  [...sel].forEach(id=>{const r=arr.find(x=>x.id===id);if(r)r.Status=ns;});
-  sel.clear();refreshManage();toast('Done');
-}
-let _wipeTarget=null;
-function openWipeModal(target,label){
-  _wipeTarget=target;
-  document.getElementById('wipe-modal-title').textContent='Clear All — '+label;
-  document.getElementById('wipe-modal-desc').innerHTML='Permanently delete <strong>'+label+'</strong> from Airtable.<br>This cannot be undone.';
-  document.getElementById('wipe-confirm-input').value='';
-  document.getElementById('wipe-confirm-btn').disabled=true;
-  openModal('modal-wipe');
-}
-async function executeWipe(){
-  const target=_wipeTarget;if(!target)return;
-  closeModal('modal-wipe');
-  // Batch deletes in chunks of 5 to avoid rate limits
-  const wipeBatched=async(tbl,arr,lbl)=>{
-    const ids=[...arr.map(r=>r.id)];
-    const total=ids.length;
-    if(!total){return;}
-    const CHUNK=5;
-    for(let i=0;i<ids.length;i+=CHUNK){
-      const batch=ids.slice(i,i+CHUNK);
-      toast(`Deleting ${lbl}: ${Math.min(i+CHUNK,total)} of ${total}...`);
-      await Promise.all(batch.map(id=>atDelete(tbl,id)));
-      if(i+CHUNK<ids.length) await new Promise(r=>setTimeout(r,250));
-    }
-    arr.splice(0,arr.length);
-  };
-  try{
-    if(target==='heroes'||target==='full')await wipeBatched(TABLES.heroes,CACHE.heroes,'hero PIDs');
-    if(target==='players'||target==='full')await wipeBatched(TABLES.players,CACHE.players,'players');
-    if(target==='parents'||target==='full')await wipeBatched(TABLES.parents,CACHE.parents,'parent PIDs');
-    if(target==='clubs')await wipeBatched(TABLES.clubs,CACHE.clubs,'clubs');
-    if(target==='seasons')await wipeBatched(TABLES.seasons,CACHE.seasons,'seasons');
-    invalidateCache();refreshAll();updateStats();refreshFilterSelects();
-    toast(target==='full'?'Full wipe complete':'Cleared');
-  }catch(e){toast('Error: '+e.message,'error');}
-}
-function toast(msg,type='success'){const container=document.getElementById('toast-container');if(!container){console.log('[toast]',msg);return;}const t=document.createElement('div');t.className=`toast ${type}`;t.innerHTML=`<span class="toast-dot"></span>${msg}`;container.appendChild(t);setTimeout(()=>t.remove(),3000);}
-
-function fixEncoding(str) {
-  if (!str) return str;
-  try {
-    // codepage:1252 causes XLSX to output mojibake for UTF-8 chars (e.g. ö → Ã¶)
-    // Detect and repair by re-decoding the bytes as UTF-8
-    if (/Ã|Ä|Å|Ç|Ñ|Ö|Ü|Â/.test(str)) {
-      const bytes = new Uint8Array(str.length);
-      for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xFF;
-      const decoded = new TextDecoder('utf-8', {fatal:false}).decode(bytes);
-      const replacements = (decoded.match(/�/g) || []).length;
-      if (replacements < 3) return decoded.normalize('NFC');
-    }
-    return str.normalize('NFC');
-  } catch(e) { return str; }
-}
-
-function processImportFile(file) {
-  const clubId = document.getElementById('import-club').value;
-  const seasonId = document.getElementById('import-season').value;
-  if (!clubId||!seasonId) { toast('Please select a club and season','error'); return; }
-  const reader = new FileReader();
-  reader.onload = e => {
-    try {
-      const wb = XLSX.read(e.target.result, {type:'array', cellText:false, cellDates:false, codepage:1252});
-      parseImportWorkbook(wb, clubId, seasonId, file.name);
-    } catch(err) {
-      toast('Could not read file: ' + err.message, 'error');
-    }
-  };
-  reader.readAsArrayBuffer(file);
-}
-
-const KIT_WORDS_DETECT = ['home','away','third','fourth','gk','goalkeeper','specials','special','night'];
-function detectKitFromColA(val) {
-  const v = String(val||'').trim().toLowerCase();
-  for (const k of KIT_WORDS_DETECT) { if(v===k||v.startsWith(k+' ')||v.endsWith(' '+k)) return v.replace(/\b\w/g,c=>c.toUpperCase()); }
-  return null;
-}
-
-function parseImportWorkbook(wb, clubId, seasonId, filename) {
-  const club = CACHE.clubs.find(c=>c.id===clubId);
-  const season = CACHE.seasons.find(s=>s.id===seasonId);
-  importData = {clubId,seasonId,players:[],parents:[],heroes:[],sheets:[],sectionsFound:[]};
-  const skipSheets = ['sheet1','roster','data','ref'];
-  wb.SheetNames.forEach(sheetName => {
-    if (skipSheets.includes(sheetName.toLowerCase())) return;
-    const ws = wb.Sheets[sheetName];
-    const rows = [];
-    const range = XLSX.utils.decode_range(ws['!ref']||'A1');
-    for (let r=range.s.r;r<=range.e.r;r++) {
-      const row=[];
-      for (let c=0;c<=range.e.c;c++) { const cell=ws[XLSX.utils.encode_cell({r,c})]; row.push(cell?(cell.v!==undefined?cell.v:''):''); }
-      rows.push(row);
-    }
-    const fontType = detectFontType(sheetName);
-    const sectionStarts = [];
-    for (let i=0;i<rows.length;i++) {
-      const row=rows[i];
-      const rowStr=row.slice(0,8).map(c=>(c===null||c===undefined?'':String(c)).toLowerCase()).join('|');
-      if (!rowStr.includes('font type')) continue;
-      for (let c=0;c<5;c++) {
-        const kitName=detectKitFromColA(String(row[c]||'').trim());
-        if (kitName) {
-          const nearby=[row[c+1],row[c+2],row[c+3]].map(v=>(v===null||v===undefined?'':String(v)).toLowerCase());
-          if (nearby.some(v=>v.includes('font type'))) {
-            const garmentHint=[];
-            for (let gc=0;gc<row.length;gc++) {
-              const val=String(row[gc]||'').trim();
-              if (!val) continue;
-              const vl=val.toLowerCase();
-              if (vl.includes('shorts')) continue;
-              if (vl.includes('assembl')||vl.includes('roster')) break;
-              if (GARMENT_KEYWORDS.some(k=>vl.includes(k))) garmentHint.push({col:gc,label:val});
-            }
-            sectionStarts.push({rowIdx:i,kitType:kitName,garmentHint});
-            break;
-          }
-        }
-      }
-    }
-    if (sectionStarts.length===0) {
-      parseSingleSection(rows,0,rows.length,fontType,'Home',clubId,seasonId,[]);
-      importData.sheets.push(sheetName);
-      return;
-    }
-    sectionStarts.forEach((section,idx) => {
-      const endRow=idx+1<sectionStarts.length?sectionStarts[idx+1].rowIdx:rows.length;
-      parseSingleSection(rows,section.rowIdx,endRow,fontType,section.kitType,clubId,seasonId,section.garmentHint||[]);
-      importData.sectionsFound.push(`${sheetName} → ${section.kitType}`);
-    });
-    importData.sheets.push(sheetName);
-  });
-  importData._rawHeroCount = importData.heroes.length;
-  const seen=new Set();
-  importData.players=importData.players.filter(p=>{const k=`${p.name}_${p.clubId}_${p.seasonId}`;if(seen.has(k))return false;seen.add(k);return true;});
-  showImportPreview(club,season,filename);
-}
-
-function parseSingleSection(rows,startRow,endRow,fontType,kitType,clubId,seasonId,garmentHint) {
-  let garmentCols=(garmentHint&&garmentHint.length>0)?garmentHint.slice():[];
-  let hpRowIdx=-1;
-  // Collect ALL actor header rows (some files like FFF have multiple groups: GK + outfield)
-  const actorHeaderRows=[];
-  let actorNameCol=-1;
-
-  for (let i=startRow;i<Math.min(endRow,startRow+40);i++) {
-    const row=rows[i];
-    const rowStr=row.map(c=>(c===null||c===undefined?'':String(c)).toLowerCase()).join('|');
-    if (rowStr.includes('hp pid only')) hpRowIdx=i;
-    if (rowStr.includes('actor name')) {
-      let col=-1;
-      for (let c=0;c<row.length;c++) {
-        const v=String(row[c]||'').trim().toLowerCase().replace(/\s+/g,' ');
-        if (v==='actor name'||v.includes('actor name')){col=c;break;}
-      }
-      if (col===-1) { for(let c=0;c<Math.min(row.length,5);c++){if(String(row[c]||'').trim()){col=c;break;}} }
-      if (col!==-1) { actorHeaderRows.push({rowIdx:i,col}); if(actorNameCol===-1) actorNameCol=col; }
-    }
-    {
-      let hits=0;const pot=[];
-      for (let c=0;c<row.length;c++) {
-        const val=String(row[c]||'').trim();
-        if (!val) continue;
-        const vl=val.toLowerCase();
-        if (vl.includes('shorts')) continue;
-        if (vl.includes('assembl')||vl.includes('roster')) break;
-        if (GARMENT_KEYWORDS.some(k=>vl.includes(k))){hits++;pot.push({col:c,label:val});}
-      }
-      const isGK=pot.some(c=>c.label.toLowerCase().includes('gk')||c.label.toLowerCase().includes('goalkeeper'));
-      if (hits>=2||(hits===1&&isGK)) { if(pot.length>garmentCols.length) garmentCols=pot; }
-    }
-  }
-
-  if (actorHeaderRows.length===0||garmentCols.length===0||actorNameCol===-1) return;
-
-  const colToParentPid={};
-  const parentRowIndices=[];
-  if (hpRowIdx!==-1) parentRowIndices.push({rowIdx:hpRowIdx,label:null});
-  for (let i=startRow;i<Math.min(endRow,actorHeaderRows[0].rowIdx+5);i++) {
-    const row=rows[i];
-    for (let c=0;c<3;c++) {
-      const val=String(row[c]||'').trim().toLowerCase();
-      if (val==='gk plain'||val.includes('gk plain')){parentRowIndices.push({rowIdx:i,label:'GK Plain'});break;}
-    }
-  }
-  parentRowIndices.forEach(({rowIdx,label}) => {
-    const pRow=rows[rowIdx];
-    garmentCols.forEach(gc => {
-      const pid=String(pRow[gc.col]===null||pRow[gc.col]===undefined?'':pRow[gc.col]).trim();
-      if (/^\d{6,12}$/.test(pid)) {
-        const _pgcLow=(gc.label||'').toLowerCase();
-        const _isGKParent=_pgcLow.includes('gk')||_pgcLow.includes('goalkeeper');
-        const _parentKitType=_isGKParent?('GK '+kitType):(label==='GK Plain'?('GK '+kitType):kitType);
-        if (!importData.parents.find(p=>p.pid===pid)) importData.parents.push({pid,clubId,seasonId,kitType:_parentKitType,garmentType:label?label+' · '+gc.label:gc.label});
-        if (!colToParentPid[gc.col]) colToParentPid[gc.col]=pid;
-      }
-    });
-  });
-
-  // Process each actor group (handles single-header files AND multi-header files like FFF)
-  actorHeaderRows.forEach((hdr, hdrIdx) => {
-    const groupEnd = hdrIdx+1 < actorHeaderRows.length ? actorHeaderRows[hdrIdx+1].rowIdx : endRow;
-    const nameCol = hdr.col;
-    for (let i=hdr.rowIdx+1;i<groupEnd;i++) {
-      const row=rows[i];
-      let actorName=fixEncoding(String(row[nameCol]===null||row[nameCol]===undefined?'':row[nameCol]).trim());
-      if (nameCol===0) {
-        const alt=fixEncoding(String(row[1]===null||row[1]===undefined?'':row[1]).trim());
-        if (actorName===actorName.toUpperCase()&&actorName.length>3&&alt&&alt!==actorName&&!/^\d+$/.test(alt)) actorName=alt;
-      }
-      if (!actorName) continue;
-      const al=actorName.toLowerCase();
-      if (['actor name','blank','gk plain','font type'].some(s=>al.includes(s))) continue;
-      const shirtName=fixEncoding(String(row[nameCol+2]===null||row[nameCol+2]===undefined?'':row[nameCol+2]).trim());
-      const number=parseInt(row[nameCol+3])||null;
-      if (!shirtName&&!number) continue;
-      const mdmId=/^\d{4,8}$/.test(String(row[nameCol+1]||'').trim())?String(row[nameCol+1]).trim():'';
-      importData.players.push({name:toProperName(actorName),shirtName:toShirtName(shirtName||actorName),number,mdmId,clubId,seasonId,type:isVariantName(actorName)?'variant':'player',status:'active',fontType,kitType});
-      garmentCols.forEach(gc => {
-        const rawVal=row[gc.col];
-        const pid=String(rawVal===null||rawVal===undefined?'':rawVal).trim();
-        if (/^\d{6,12}$/.test(pid)) {
-          if (!importData.heroes.find(h=>h.pid===pid)) {
-            // GK garments inherit the section kit type prefixed with 'GK '
-          const _gcLow=(gc.label||'').toLowerCase();
-          const _isGKGarment=_gcLow.includes('gk')||_gcLow.includes('goalkeeper');
-          const _heroKitType=_isGKGarment?('GK '+kitType):kitType;
-          importData.heroes.push({pid,playerName:actorName,clubId,seasonId,fontType,garmentRaw:gc.label,garmentType:normaliseGarment(gc.label),kitType:_heroKitType,status:'active',parentPid:colToParentPid[gc.col]||null});
-          }
-        }
-      });
-    }
+  wb.xlsx.writeBuffer().then(buffer => {
+    const blob = new Blob([buffer], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url);
+    toast(`Exported ${heroList.length} PIDs across ${Object.keys(sheets).length} sheet${Object.keys(sheets).length!==1?'s':''}`);
   });
 }
 
 
-function detectFontType(sheetName) {
-  const s=sheetName.toLowerCase().trim();
-  if (s.includes('womens cup')||s.includes("women's cup")||s==='wsl cup') return 'womens_cup';
-  if (s==='wsl'||s.startsWith('wsl ')||s.includes(' wsl')||s.includes('womens')||s.includes("women's")) return 'womens';
-  if (s.includes('cup')) return 'cup';
-  return 'league';
-}
-
-function isVariantName(name) { return ['champions','winners','blank','gk plain','plain gk'].some(v=>name.toLowerCase().includes(v)); }
-function normaliseGarment(label) { const k=label.toLowerCase().trim(); return GARMENT_ALIASES[k]||'other'; }
-
-function showImportPreview(club, season, filename) {
-  const d=importData;
-  const newPlayers=d.players.filter(p=>!CACHE.players.find(e=>e.Name===p.name&&e.ClubID===p.clubId&&e.SeasonID===p.seasonId));
-  const existingPlayers=d.players.filter(p=>CACHE.players.find(e=>e.Name===p.name&&e.ClubID!==p.clubId));
-  const newHeroes=d.heroes.filter(h=>!CACHE.heroes.find(e=>e.PID===h.pid));
-  const newParents=d.parents.filter(p=>!CACHE.parents.find(e=>e.PID===p.pid));
-  const dupHeroes=d.heroes.length-newHeroes.length;
-  document.getElementById('import-preview-title').textContent=`Preview — ${filename}`;
-  document.getElementById('import-preview').classList.remove('hidden');
-  let html=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;"><div class="stat-pill"><span class="stat-label">New players</span><span class="stat-value" style="color:var(--green);">${newPlayers.length}</span></div><div class="stat-pill"><span class="stat-label">New hero PIDs</span><span class="stat-value" style="color:var(--green);">${newHeroes.length}</span></div><div class="stat-pill"><span class="stat-label">New parent PIDs</span><span class="stat-value" style="color:var(--amber);">${newParents.length}</span></div></div>`;
-  if (existingPlayers.length>0) html+=`<div style="background:rgba(99,179,237,0.08);border:1px solid rgba(99,179,237,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:#63b3ed;margin-bottom:10px;">ℹ ${existingPlayers.length} player${existingPlayers.length>1?'s':''} already in database from another club (${existingPlayers.map(p=>p.name).join(', ')}) — PIDs will still be imported</div>`;
-  if (dupHeroes>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${dupHeroes} duplicate hero PIDs will be skipped</div>`;
-  html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Sheets: ${d.sheets.join(', ')}</div>`;
-  if (d.sectionsFound.length>0) html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Sections: ${d.sectionsFound.join(' · ')}</div>`;
-
-  html+=`<div style="max-height:200px;overflow-y:auto;margin-top:8px;"><table class="data-table" style="font-size:11px;"><thead><tr><th>Player</th><th>Font</th><th>PIDs</th><th>Status</th></tr></thead><tbody>${newPlayers.slice(0,50).map(p=>{const cnt=newHeroes.filter(h=>h.playerName===p.name&&h.fontType===p.fontType).length;return`<tr><td style="color:var(--text);">${p.name}</td><td>${FONT_LABELS[p.fontType]||p.fontType}</td><td class="mono">${cnt}</td><td><span class="badge badge-active">New</span></td></tr>`;}).join('')}${newPlayers.length>50?`<tr><td colspan="4" style="color:var(--text3);">...and ${newPlayers.length-50} more</td></tr>`:''}</tbody></table></div>`;
-  document.getElementById('import-preview-content').innerHTML=html;
-}
-
-async function confirmImport() {
-  if (!importData) return;
-  const btn = document.getElementById('import-confirm-btn');
-  btn.textContent = 'Importing...';
-  btn.disabled = true;
-  // Add progress bar below the stat pills, above sheets info
-  const progressWrap = document.createElement('div');
-  progressWrap.id = 'import-progress-wrap';
-  progressWrap.style.cssText = 'margin-bottom:12px;';
-  progressWrap.innerHTML = '<div style="font-size:11px;color:var(--text2);margin-bottom:6px;display:flex;justify-content:space-between;"><span id="import-progress-label">Preparing...</span><span id="import-progress-pct" style="color:var(--accent);">0%</span></div><div style="background:var(--bg3);border-radius:4px;height:6px;overflow:hidden;"><div id="import-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:4px;"></div></div>';
-  const previewContent = document.getElementById('import-preview-content');
-  previewContent.insertBefore(progressWrap, previewContent.firstChild);
-  const setProgress = (done, total, label) => {
-    const pct = total > 0 ? Math.round((done/total)*100) : 0;
-    const bar = document.getElementById('import-progress-bar');
-    const lbl = document.getElementById('import-progress-label');
-    const pctEl = document.getElementById('import-progress-pct');
-    if (bar) bar.style.width = pct + '%';
-    if (lbl) lbl.textContent = label || `${done} / ${total}`;
-    if (pctEl) pctEl.textContent = pct + '%';
-  };
-  const d=importData;
-  const newParents=d.parents.filter(p=>!CACHE.parents.find(e=>e.PID===p.pid));
-  const newHeroes=d.heroes.filter(h=>!CACHE.heroes.find(e=>e.PID===h.pid));
-  const newPlayers=d.players.filter(p=>!CACHE.players.find(e=>e.Name===p.name&&e.ClubID===p.clubId&&e.SeasonID===p.seasonId));
-  try {
-    const total = newParents.length + newPlayers.length + newHeroes.length;
-    let done = 0;
-    if (newParents.length>0) {
-      setProgress(done, total, `Writing ${newParents.length} parent PIDs...`);
-      const recs=await atCreateBatch(TABLES.parents, newParents.map(p=>({PID:p.pid,ClubID:p.clubId,SeasonID:p.seasonId,KitType:p.kitType,GarmentType:p.garmentType})));
-      recs.forEach(r=>CACHE.parents.push({id:r.id,...r.fields}));
-      done += newParents.length;
-    }
-    const playerMap={};
-    for (let pi=0; pi<newPlayers.length; pi++) {
-      const p = newPlayers[pi];
-      setProgress(done+pi, total, `Writing player ${pi+1} of ${newPlayers.length}...`);
-      const rec=await atCreate(TABLES.players,{Name:toProperName(p.name),ShirtName:toShirtName(p.shirtName),SquadNumber:p.number,Type:p.type,ClubID:p.clubId,SeasonID:p.seasonId,Status:p.status,MDMActorID:p.mdmId||''});
-      CACHE.players.push({id:rec.id,...rec.fields});
-      playerMap[p.name+'_'+p.clubId+'_'+p.seasonId]=rec.id;
-    }
-    done += newPlayers.length;
-    CACHE.players.filter(p=>d.players.some(dp=>dp.name===p.Name&&dp.clubId===p.ClubID&&dp.seasonId===p.SeasonID)).forEach(p=>{ playerMap[p.Name+'_'+p.ClubID+'_'+p.SeasonID]=p.id; });
-    if (newHeroes.length>0) {
-      const heroFields=newHeroes.map(h=>{
-        const playerId=playerMap[h.playerName+'_'+h.clubId+'_'+h.seasonId];
-        const parent=CACHE.parents.find(p=>p.PID===h.parentPid);
-        return {PID:h.pid,PlayerID:playerId||'',ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.garmentRaw,KitType:h.kitType,Status:h.status,ParentPIDID:parent?parent.id:''};
-      }).filter(h=>h.PlayerID);
-      // Write in batches of 10 with progress
-      for (let i=0; i<heroFields.length; i+=10) {
-        setProgress(done+i, total, `Writing hero PIDs ${done+i+1}–${Math.min(done+i+10,total)} of ${total}...`);
-        const chunk = heroFields.slice(i, i+10);
-        const data = await atFetch(TABLES.heroes, {method:'POST', body:JSON.stringify({records:chunk.map(f=>({fields:f})),typecast:true})});
-        (data.records||[]).forEach(r=>CACHE.heroes.push({id:r.id,...r.fields}));
-      }
-      done += newHeroes.length;
-    }
-    setProgress(total, total, 'Complete!');
-    updateStats(); refreshFilterSelects();
-    const _importedPlayerList = d.players.map(p=>({name:p.name,clubId:p.clubId,seasonId:p.seasonId}));
-    clearImport();
-    toast(`Import complete — ${newHeroes.length} hero PIDs, ${newPlayers.length} players added`);
-    // For Club Hero PID Uploads numbers come from file — just show modal to let user verify
-    // Only show if any players are missing numbers
-    const _missingNums = _importedPlayerList.filter(p => {
-      const rec = CACHE.players.find(e => e.Name === p.name && e.ClubID === p.clubId && e.SeasonID === p.seasonId);
-      return rec && !rec.SquadNumber;
-    });
-    if (_missingNums.length > 0) showSquadNumberModal(_missingNums);
-  } catch(e) {
-    toast('Import error: '+e.message,'error');
-    btn.textContent='Import all';
-    btn.disabled=false;
-  }
-}
-
-function clearImport() {
-  importData=null;
-  document.getElementById('import-preview').classList.add('hidden');
-  document.getElementById('file-input-storage').value='';
-  const btn=document.getElementById('import-confirm-btn');
-  if(btn){btn.textContent='Import all';btn.disabled=false;}
-}
-
-// ─── CREATION CSV PARSER ──────────────────────────────────────────────────────
-
-function toast(msg,type='success'){const container=document.getElementById('toast-container');const t=document.createElement('div');t.className=`toast ${type}`;t.innerHTML=`<span class="toast-dot"></span>${msg}`;container.appendChild(t);setTimeout(()=>t.remove(),3000);}
-
-init();
-
-// ─── CREATION CSV PARSER ──────────────────────────────────────────────────────
-
-function toast(msg,type='success'){const container=document.getElementById('toast-container');const t=document.createElement('div');t.className=`toast ${type}`;t.innerHTML=`<span class="toast-dot"></span>${msg}`;container.appendChild(t);setTimeout(()=>t.remove(),3000);}
-
-init();
 </script>
 
 <!-- SQUAD NUMBER CONFIRMATION MODAL -->
@@ -3085,19 +1987,5 @@ init();
     <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-edit-player')">Cancel</button><button class="btn btn-primary" onclick="saveEditPlayer()">Save Changes</button></div>
   </div>
 </div>
-
-<!-- WIPE MODAL -->
-<div id="modal-wipe" class="modal-overlay" onclick="if(event.target===this)closeModal('modal-wipe')">
-  <div class="modal" style="max-width:420px;">
-    <div class="modal-header"><span class="modal-title" id="wipe-modal-title">Confirm Delete</span><button class="modal-close" onclick="closeModal('modal-wipe')">✕</button></div>
-    <div class="modal-body">
-      <div id="wipe-modal-desc" style="font-size:13px;color:var(--text2);margin-bottom:16px;"></div>
-      <label class="form-label">Type <strong>DELETE</strong> to confirm</label>
-      <input class="form-input" id="wipe-confirm-input" placeholder="DELETE" oninput="document.getElementById('wipe-confirm-btn').disabled=this.value.toUpperCase()!=='DELETE'"/>
-    </div>
-    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-wipe')">Cancel</button><button class="btn btn-danger" id="wipe-confirm-btn" disabled onclick="executeWipe()">Delete All</button></div>
-  </div>
-</div>
-<div id="toast-container" style="position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px;"></div>
 </body>
 </html>
