@@ -993,6 +993,7 @@ function runSearch() {
   const filterSeason = document.getElementById('filter-season').value;
   const filterFont = document.getElementById('filter-font').value;
   const filterStatus = document.getElementById('filter-status').value;
+  const filterKit = (document.getElementById('filter-kit')?.value) || '';
   if (!raw && !filterClub && !filterSeason && !filterFont && !filterStatus && !filterKit) {
     document.getElementById('search-results').innerHTML = `<div class="empty-state"><div class="empty-icon">⌕</div><div class="empty-title">Search for a player or PID</div><div class="empty-sub">Try "Palmer", "Palmer home mens", "203072419", or "Dembele cup"</div></div>`;
     document.getElementById('result-count').textContent = '';
@@ -1438,12 +1439,32 @@ async function deactivatePlayer(id) {
   toast(`${p.Name} ${newStatus === 'archived' ? 'archived' : 'reactivated'}`);
 }
 // ─── CORRUPTED PLAYER REPORT ─────────────────────────────────────────────────
-function isCorrupted(s){if(!s)return false;return /[◆�]/.test(s)||/Ã[-¿]/.test(s)||/[-]/.test(s);}
+function isCorrupted(s){
+  if(!s)return false;
+  // Diamond/replacement chars — always bad
+  if(/[◆�]/.test(s))return true;
+  // Classic UTF-8 mojibake: Ã followed by a char in the continuation range (0x80-0xBF)
+  // This catches Ã© (é), Ã¼ (ü), Ã± (ñ) etc — but NOT standalone Ã which is valid (Ã as in Ãland)
+  if(/Ã[-¿]/.test(s))return true;
+  // Â followed by continuation — another common mojibake pattern
+  if(/Â[-¿]/.test(s))return true;
+  // C1 control chars (0x80-0x9F) — never valid in names
+  if(/[-]/.test(s))return true;
+  // Diamond with question mark variant
+  if(/ï¿½/.test(s))return true;
+  return false;
+}
 function exportCorruptedPlayers(){
   const bad=CACHE.players.filter(p=>isCorrupted(p.Name)||isCorrupted(p.ShirtName));
   if(bad.length===0){toast('No corrupted players found ✓');return;}
-  const hdrs=['PlayerID','Current Name','Current Shirt Name','Corrected Name','Corrected Shirt Name','Club','Season','Squad Number'];
-  const rows=bad.map(p=>{const cl=CACHE.clubs.find(c=>c.id===p.ClubID);const se=CACHE.seasons.find(s=>s.id===p.SeasonID);return[p.id,p.Name||'',p.ShirtName||'','','',cl?.Name||'',se?.Label||'',p.SquadNumber||''];});
+  // Simple format: just the columns the user needs to fill in
+  const hdrs=['PlayerID','Name','Shirt Name','Club','Season'];
+  const rows=bad.map(p=>{
+    const cl=CACHE.clubs.find(c=>c.id===p.ClubID);
+    const se=CACHE.seasons.find(s=>s.id===p.SeasonID);
+    // Pre-fill Name/Shirt with current values so user can edit in place
+    return[p.id, p.Name||'', p.ShirtName||'', cl?.Name||'', se?.Label||''];
+  });
   const BOM='﻿';const esc=v=>`"${String(v).replace(/"/g,'""')}"`;
   const csv=BOM+[hdrs,...rows].map(r=>r.map(esc).join(',')).join('\n');
   const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
@@ -1453,27 +1474,35 @@ function exportCorruptedPlayers(){
 }
 function importCorrectedPlayers(file){
   if(!file)return;
+  toast('Reading file...','success');
   const reader=new FileReader();
   reader.onload=async e=>{
     try{
       let text=e.target.result.replace(/^﻿/,'');
       const lines=text.split('\n').filter(l=>l.trim());
       const hdrs=lines[0].split(',').map(h=>h.replace(/^"|"$/g,'').trim());
-      const idIdx=hdrs.indexOf('PlayerID'),nameIdx=hdrs.indexOf('Corrected Name'),shirtIdx=hdrs.indexOf('Corrected Shirt Name');
-      if(idIdx===-1||nameIdx===-1){toast('Unrecognised file format','error');return;}
+      const idIdx=hdrs.indexOf('PlayerID');
+      const nameIdx=hdrs.indexOf('Name');
+      const shirtIdx=hdrs.indexOf('Shirt Name');
+      if(idIdx===-1||(nameIdx===-1&&shirtIdx===-1)){toast('Unrecognised file format — needs PlayerID and Name/Shirt Name columns','error');return;}
       let updated=0,skipped=0;
       for(let i=1;i<lines.length;i++){
         const cols=parseCSVLine(lines[i]);
-        const id=(cols[idIdx]||'').trim(),newName=(cols[nameIdx]||'').trim(),newShirt=shirtIdx!==-1?(cols[shirtIdx]||'').trim():'';
-        if(!id||(!newName&&!newShirt)){skipped++;continue;}
-        const fields={};if(newName)fields.Name=toProperName(newName);if(newShirt)fields.ShirtName=toShirtName(newShirt);
+        const id=(cols[idIdx]||'').trim();
+        if(!id){skipped++;continue;}
+        const newName=nameIdx!==-1?(cols[nameIdx]||'').trim():'';
+        const newShirt=shirtIdx!==-1?(cols[shirtIdx]||'').trim():'';
+        if(!newName&&!newShirt){skipped++;continue;}
+        const fields={};
+        if(newName)fields.Name=toProperName(newName);
+        if(newShirt)fields.ShirtName=toShirtName(newShirt);
         await atUpdate(TABLES.players,id,fields);
         const cached=CACHE.players.find(p=>p.id===id);
         if(cached){if(fields.Name)cached.Name=fields.Name;if(fields.ShirtName)cached.ShirtName=fields.ShirtName;}
         updated++;
       }
       invalidateCache();refreshManage();
-      toast(`${updated} updated${skipped?', '+skipped+' skipped':''}`);
+      toast(`${updated} player${updated!==1?'s':''} updated${skipped?' ('+skipped+' skipped)':''}`);
     }catch(err){toast('Error: '+err.message,'error');}
   };
   reader.readAsText(file,'utf-8');
