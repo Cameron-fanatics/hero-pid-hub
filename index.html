@@ -251,7 +251,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         </label>
         <div id="export-actions" style="display:none;align-items:center;gap:6px;">
           <span style="font-size:11px;color:var(--accent);" id="selected-count-label"></span>
-          <button class="btn btn-primary btn-sm" onclick="exportSelectedPids()">⬇ Export PIDs</button>
+          <button class="btn btn-primary btn-sm" onclick="exportSelectedPids()">⬇ Export PIDs</button><button class="btn btn-ghost btn-sm" onclick="exportExclusionsFromSelection()" style="margin-left:4px;">⬇ Exclusions</button>
         </div>
       </div>
     </div>
@@ -277,7 +277,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <div id="tabcontent-players">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
         <span style="font-family:'Syne',sans-serif;font-size:14px;font-weight:600;">All Players</span>
-        <button class="btn btn-ghost btn-sm" onclick="exportCorruptedPlayers()" style="margin-right:6px;" title="Export corrupted player names">⚠ Corrupted</button><label class="btn btn-ghost btn-sm" style="margin-right:6px;cursor:pointer;" title="Upload corrected names CSV">↑ Fix Upload<input type="file" accept=".csv" style="display:none" onchange="importCorrectedPlayers(this.files[0])"></label><span id="fix-upload-status" style="display:none;font-size:11px;margin-right:6px;"></span><button class="btn btn-primary btn-sm" onclick="openModal('modal-add-player')">+ Add Player</button>
+        <button class="btn btn-primary btn-sm" onclick="openModal('modal-add-player')">+ Add Player</button>
       </div>
       <div class="card"><table class="data-table"><thead><tr><th>Name</th><th>Shirt</th><th>No.</th><th>Club</th><th>Season</th><th>Status</th><th></th></tr></thead><tbody id="players-tbody"><tr><td colspan="7" class="loading"><div class="loading-spinner"></div><br>Loading...</td></tr></tbody></table></div>
     </div>
@@ -533,21 +533,17 @@ async function atFetch(path, options={}) {
 }
 
 async function atGetAll(table, filterFormula='') {
-  const fetchPage = async (offset) => {
+  const records = [];
+  let offset = null;
+  do {
     const params = new URLSearchParams();
     if (filterFormula) params.set('filterByFormula', filterFormula);
     if (offset) params.set('offset', offset);
     params.set('pageSize', '100');
-    return atFetch(`${table}?${params}`);
-  };
-  const first = await fetchPage(null);
-  const records = [...(first.records||[])];
-  let offset = first.offset;
-  while (offset) {
-    const page = await fetchPage(offset);
-    records.push(...(page.records||[]));
-    offset = page.offset;
-  }
+    const data = await atFetch(`${table}?${params}`);
+    records.push(...(data.records||[]));
+    offset = data.offset;
+  } while (offset);
   return records;
 }
 
@@ -730,24 +726,16 @@ async function ensureFields() {
   }
 }
 
-const CACHE_TTL = 5 * 60 * 1000;
-const CACHE_KEYS = {heroes:'hph_heroes',parents:'hph_parents',players:'hph_players'};
-function getCachedTable(key) {
-  try { const raw=localStorage.getItem(key); if(!raw)return null; const {data,ts}=JSON.parse(raw); if(Date.now()-ts>CACHE_TTL){localStorage.removeItem(key);return null;} return data; } catch(e){return null;}
-}
-function setCachedTable(key,data) {
-  try{localStorage.setItem(key,JSON.stringify({data,ts:Date.now()}));}catch(e){}
-}
-function invalidateCache() { Object.values(CACHE_KEYS).forEach(k=>localStorage.removeItem(k)); }
-async function loadCachedOrFetch(key,tableId) {
-  const cached=getCachedTable(key); if(cached)return cached;
-  const records=await atGetAll(tableId); const mapped=records.map(r=>({id:r.id,...r.fields}));
-  setCachedTable(key,mapped); return mapped;
-}
-async function loadCache(forceRefresh) {
-  if(forceRefresh)invalidateCache();
-  try {
-    const [clubs,seasons,players,parents,heroes]=await Promise.all([
+const CACHE_TTL=5*60*1000;
+const CACHE_KEYS={heroes:'hph_heroes',parents:'hph_parents',players:'hph_players'};
+function getCachedTable(k){try{const r=localStorage.getItem(k);if(!r)return null;const{data,ts}=JSON.parse(r);if(Date.now()-ts>CACHE_TTL){localStorage.removeItem(k);return null;}return data;}catch(e){return null;}}
+function setCachedTable(k,d){try{localStorage.setItem(k,JSON.stringify({data:d,ts:Date.now()}));}catch(e){}}
+function invalidateCache(){Object.values(CACHE_KEYS).forEach(k=>localStorage.removeItem(k));}
+async function loadCachedOrFetch(key,tid){const c=getCachedTable(key);if(c)return c;const r=await atGetAll(tid);const m=r.map(x=>({id:x.id,...x.fields}));setCachedTable(key,m);return m;}
+async function loadCache(force){
+  if(force)invalidateCache();
+  try{
+    const[clubs,seasons,players,parents,heroes]=await Promise.all([
       atGetAll(TABLES.clubs).then(r=>r.map(x=>({id:x.id,...x.fields}))),
       atGetAll(TABLES.seasons).then(r=>r.map(x=>({id:x.id,...x.fields}))),
       loadCachedOrFetch(CACHE_KEYS.players,TABLES.players),
@@ -755,8 +743,8 @@ async function loadCache(forceRefresh) {
       loadCachedOrFetch(CACHE_KEYS.heroes,TABLES.heroes),
     ]);
     CACHE.clubs=clubs;CACHE.seasons=seasons;CACHE.players=players;CACHE.parents=parents;CACHE.heroes=heroes;
-    cacheLoaded=true; updateStats(); refreshFilterSelects(); refreshClubs(); refreshSeasons();
-  } catch(e){toast('Failed to load data: '+e.message,'error');}
+    cacheLoaded=true;updateStats();refreshFilterSelects();refreshClubs();refreshSeasons();
+  }catch(e){toast('Failed to load data: '+e.message,'error');}
 }
 
 // ─── PAGES ────────────────────────────────────────────────────────────────────
@@ -993,7 +981,7 @@ function runSearch() {
   const filterSeason = document.getElementById('filter-season').value;
   const filterFont = document.getElementById('filter-font').value;
   const filterStatus = document.getElementById('filter-status').value;
-  const filterKit = (document.getElementById('filter-kit')?.value) || '';
+  const filterKit=(document.getElementById('filter-kit')?.value)||'';
   if (!raw && !filterClub && !filterSeason && !filterFont && !filterStatus && !filterKit) {
     document.getElementById('search-results').innerHTML = `<div class="empty-state"><div class="empty-icon">⌕</div><div class="empty-title">Search for a player or PID</div><div class="empty-sub">Try "Palmer", "Palmer home mens", "203072419", or "Dembele cup"</div></div>`;
     document.getElementById('result-count').textContent = '';
@@ -1120,7 +1108,7 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
   if (keys.length===0) {
     document.getElementById('search-results').innerHTML = `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:48px 20px;text-align:center;color:var(--text3);"><div style="font-size:24px;margin-bottom:8px;">○</div><div style="font-family:'Syne',sans-serif;font-size:14px;color:var(--text2);margin-bottom:4px;">No results found</div><div style="font-size:12px;">Try just a player name first</div></div>`;
     const sw = document.getElementById('select-all-wrap'); if(sw) sw.style.display='none';
-    window._selectedPids = new Set();
+    window._searchResultKeys = []; window._selectedPidKeys = new Set();
     return;
   }
   let html = '<div class="results-wrap">';
@@ -1193,7 +1181,14 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
     }
   }
   // Track selected state
+  window._searchResultKeys = keys;
   window._selectedPids = new Set();
+  window._pidMeta = {};
+  // Build pidMeta for all visible heroes
+  keys.forEach(key => {
+    const [playerId,,] = key.split('_');
+    (grouped[key]?.heroes||[]).forEach(h => { if(h.PID) window._pidMeta[h.PID] = {playerId, key}; });
+  });
 }
 
 
@@ -1438,91 +1433,6 @@ async function deactivatePlayer(id) {
   refreshManage();
   toast(`${p.Name} ${newStatus === 'archived' ? 'archived' : 'reactivated'}`);
 }
-// ─── CORRUPTED PLAYER REPORT ─────────────────────────────────────────────────
-function isCorrupted(s){
-  if(!s)return false;
-  // Diamond/replacement chars — always bad
-  if(/[◆�]/.test(s))return true;
-  // Classic UTF-8 mojibake: Ã followed by a char in the continuation range (0x80-0xBF)
-  // This catches Ã© (é), Ã¼ (ü), Ã± (ñ) etc — but NOT standalone Ã which is valid (Ã as in Ãland)
-  if(/Ã[-¿]/.test(s))return true;
-  // Â followed by continuation — another common mojibake pattern
-  if(/Â[-¿]/.test(s))return true;
-  // C1 control chars (0x80-0x9F) — never valid in names
-  if(/[-]/.test(s))return true;
-  // Diamond with question mark variant
-  if(/ï¿½/.test(s))return true;
-  return false;
-}
-function exportCorruptedPlayers(){
-  const bad=CACHE.players.filter(p=>isCorrupted(p.Name)||isCorrupted(p.ShirtName));
-  if(bad.length===0){toast('No corrupted players found ✓');return;}
-  // Simple format: just the columns the user needs to fill in
-  const hdrs=['PlayerID','Name','Shirt Name','Club','Season'];
-  const rows=bad.map(p=>{
-    const cl=CACHE.clubs.find(c=>c.id===p.ClubID);
-    const se=CACHE.seasons.find(s=>s.id===p.SeasonID);
-    // Pre-fill Name/Shirt with current values so user can edit in place
-    return[p.id, p.Name||'', p.ShirtName||'', cl?.Name||'', se?.Label||''];
-  });
-  const BOM='﻿';const esc=v=>`"${String(v).replace(/"/g,'""')}"`;
-  const csv=BOM+[hdrs,...rows].map(r=>r.map(esc).join(',')).join('\n');
-  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
-  const url=URL.createObjectURL(blob);const a=document.createElement('a');
-  a.href=url;a.download='corrupted_players.csv';a.click();URL.revokeObjectURL(url);
-  toast(`Exported ${bad.length} corrupted player${bad.length!==1?'s':''}`);
-}
-function importCorrectedPlayers(file){
-  if(!file)return;
-  // Show a persistent status message in the manage header area
-  const statusEl = document.getElementById('fix-upload-status');
-  const setStatus = (msg, isError) => {
-    if(statusEl){ statusEl.textContent = msg; statusEl.style.color = isError ? 'var(--red)' : 'var(--accent)'; statusEl.style.display = msg ? 'inline' : 'none'; }
-    if(msg) toast(msg, isError ? 'error' : 'success');
-  };
-  setStatus('Reading file...');
-  const reader = new FileReader();
-  reader.onerror = () => setStatus('Could not read file', true);
-  reader.onload = async e => {
-    try {
-      let text = e.target.result.replace(/^\uFEFF/, '');
-      const lines = text.split(/\r?\n/).filter(l => l.trim());
-      if(lines.length < 2){ setStatus('File is empty or has no data rows', true); return; }
-      const hdrs = parseCSVLine(lines[0]).map(h => h.trim());
-      const idIdx = hdrs.indexOf('PlayerID');
-      const nameIdx = hdrs.indexOf('Name');
-      const shirtIdx = hdrs.indexOf('Shirt Name');
-      if(idIdx === -1){ setStatus('Missing PlayerID column', true); return; }
-      if(nameIdx === -1 && shirtIdx === -1){ setStatus('Missing Name / Shirt Name columns', true); return; }
-      let updated = 0, skipped = 0, total = lines.length - 1;
-      for(let i = 1; i < lines.length; i++){
-        const cols = parseCSVLine(lines[i]);
-        const id = (cols[idIdx]||'').trim();
-        if(!id){ skipped++; continue; }
-        const newName = nameIdx !== -1 ? (cols[nameIdx]||'').trim() : '';
-        const newShirt = shirtIdx !== -1 ? (cols[shirtIdx]||'').trim() : '';
-        if(!newName && !newShirt){ skipped++; continue; }
-        setStatus(`Updating ${i} of ${total}...`);
-        const fields = {};
-        if(newName) fields.Name = toProperName(newName);
-        if(newShirt) fields.ShirtName = toShirtName(newShirt);
-        await atUpdate(TABLES.players, id, fields);
-        const cached = CACHE.players.find(p => p.id === id);
-        if(cached){ if(fields.Name) cached.Name = fields.Name; if(fields.ShirtName) cached.ShirtName = fields.ShirtName; }
-        updated++;
-      }
-      invalidateCache();
-      refreshManage();
-      setStatus(`Done — ${updated} player${updated!==1?'s':''} updated${skipped?' ('+skipped+' skipped)':''}`);
-      setTimeout(() => setStatus(''), 4000);
-    } catch(err) {
-      console.error('importCorrectedPlayers error:', err);
-      setStatus('Error: ' + err.message, true);
-    }
-  };
-  reader.readAsText(file, 'utf-8');
-}
-
 function refreshClubs() {
   const tbody = document.getElementById('clubs-tbody');
   if (!tbody||!cacheLoaded) return;
@@ -2358,7 +2268,6 @@ async function confirmImport() {
       done += newHeroes.length;
     }
     setProgress(total, total, 'Complete!');
-    invalidateCache();
     updateStats(); refreshFilterSelects();
     const _importedPlayerList = d.players.map(p=>({name:p.name,clubId:p.clubId,seasonId:p.seasonId}));
     clearImport();
