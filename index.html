@@ -484,6 +484,13 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       </div>
     </div>
 
+    <!-- Full Data Wipe -->
+    <div class="card" style="border-color:rgba(255,60,60,0.3);">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--red);margin-bottom:4px;">Full Data Wipe</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Deletes all Hero PIDs, Players and Parent PIDs in one go. Clubs and Seasons are kept. This cannot be undone.</div>
+      <button class="btn btn-danger" onclick="openWipeModal('full','all Hero PIDs, Players and Parent PIDs')">⚠ Full Data Wipe</button>
+    </div>
+
   </div>
 </div>
 
@@ -565,13 +572,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       </div>
     </div>
     <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-add-hero')">Cancel</button><button class="btn btn-primary" onclick="saveHero()">Save Hero PID</button></div>
-  
-  <div class="card" style="border-color:rgba(255,60,60,0.3);">
-    <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--red);margin-bottom:4px;">Full Data Wipe</div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Deletes all Hero PIDs, Players and Parent PIDs. Clubs and Seasons are kept.</div>
-    <button class="btn btn-danger" onclick="openWipeModal('full','all Hero PIDs, Players and Parent PIDs')">⚠ Full Data Wipe</button>
   </div>
-</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -2664,7 +2665,11 @@ async function manageDeleteSelected(key){
   const tbls={players:TABLES.players,parents:TABLES.parents,heroes:TABLES.heroes,clubs:TABLES.clubs,seasons:TABLES.seasons};
   const caches={players:CACHE.players,parents:CACHE.parents,heroes:CACHE.heroes,clubs:CACHE.clubs,seasons:CACHE.seasons};
   toast('Deleting '+sel.size+'...');
-  await Promise.all([...sel].map(id=>atDelete(tbls[key],id)));
+  const delIds=[...sel];
+  for(let i=0;i<delIds.length;i+=5){
+    await Promise.all(delIds.slice(i,i+5).map(id=>atDelete(tbls[key],id)));
+    if(i+5<delIds.length) await new Promise(r=>setTimeout(r,200));
+  }
   const arr=caches[key];
   [...sel].forEach(id=>{const i=arr.findIndex(r=>r.id===id);if(i>-1)arr.splice(i,1);});
   sel.clear();invalidateCache();refreshAll();updateStats();refreshFilterSelects();toast('Deleted');
@@ -2691,17 +2696,26 @@ function openWipeModal(target,label){
 async function executeWipe(){
   const target=_wipeTarget;if(!target)return;
   closeModal('modal-wipe');
-  const wipe=async(tbl,arr,lbl)=>{
-    toast('Deleting '+arr.length+' '+lbl+'...');
-    await Promise.all(arr.map(r=>r.id).map(id=>atDelete(tbl,id)));
+  // Batch deletes in chunks of 5 to avoid rate limits
+  const wipeBatched=async(tbl,arr,lbl)=>{
+    const ids=[...arr.map(r=>r.id)];
+    const total=ids.length;
+    if(!total){return;}
+    const CHUNK=5;
+    for(let i=0;i<ids.length;i+=CHUNK){
+      const batch=ids.slice(i,i+CHUNK);
+      toast(`Deleting ${lbl}: ${Math.min(i+CHUNK,total)} of ${total}...`);
+      await Promise.all(batch.map(id=>atDelete(tbl,id)));
+      if(i+CHUNK<ids.length) await new Promise(r=>setTimeout(r,250));
+    }
     arr.splice(0,arr.length);
   };
   try{
-    if(target==='heroes'||target==='full')await wipe(TABLES.heroes,CACHE.heroes,'hero PIDs');
-    if(target==='players'||target==='full')await wipe(TABLES.players,CACHE.players,'players');
-    if(target==='parents'||target==='full')await wipe(TABLES.parents,CACHE.parents,'parent PIDs');
-    if(target==='clubs')await wipe(TABLES.clubs,CACHE.clubs,'clubs');
-    if(target==='seasons')await wipe(TABLES.seasons,CACHE.seasons,'seasons');
+    if(target==='heroes'||target==='full')await wipeBatched(TABLES.heroes,CACHE.heroes,'hero PIDs');
+    if(target==='players'||target==='full')await wipeBatched(TABLES.players,CACHE.players,'players');
+    if(target==='parents'||target==='full')await wipeBatched(TABLES.parents,CACHE.parents,'parent PIDs');
+    if(target==='clubs')await wipeBatched(TABLES.clubs,CACHE.clubs,'clubs');
+    if(target==='seasons')await wipeBatched(TABLES.seasons,CACHE.seasons,'seasons');
     invalidateCache();refreshAll();updateStats();refreshFilterSelects();
     toast(target==='full'?'Full wipe complete':'Cleared');
   }catch(e){toast('Error: '+e.message,'error');}
