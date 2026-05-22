@@ -251,7 +251,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         </label>
         <div id="export-actions" style="display:none;align-items:center;gap:6px;">
           <span style="font-size:11px;color:var(--accent);" id="selected-count-label"></span>
-          <button class="btn btn-primary btn-sm" onclick="exportSelectedPids()">⬇ Export PIDs</button><button class="btn btn-ghost btn-sm" onclick="exportExclusionsFromSelection()" style="margin-left:4px;">⬇ Exclusions</button>
+          <button class="btn btn-primary btn-sm" onclick="exportSelectedPids()">⬇ Export PIDs</button><button class="btn btn-ghost btn-sm" id="btn-exclusions" onclick="runExclusionsExport(this)" style="margin-left:4px;">⬇ Exclusions</button>
         </div>
       </div>
     </div>
@@ -277,7 +277,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <div id="tabcontent-players">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
         <span style="font-family:'Syne',sans-serif;font-size:14px;font-weight:600;">All Players</span>
-        <button class="btn btn-primary btn-sm" onclick="openModal('modal-add-player')">+ Add Player</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportCorruptedPlayers()" style="margin-right:6px;" title="Export corrupted player names">⚠ Corrupted</button><label class="btn btn-ghost btn-sm" style="margin-right:6px;cursor:pointer;" title="Upload corrected names CSV">↑ Fix Upload<input type="file" accept=".csv" style="display:none" onchange="importCorrectedPlayers(this.files[0])"></label><span id="fix-upload-status" style="display:none;font-size:11px;margin-right:6px;"></span><button class="btn btn-primary btn-sm" onclick="openModal('modal-add-player')">+ Add Player</button>
       </div>
       <div class="card"><table class="data-table"><thead><tr><th>Name</th><th>Shirt</th><th>No.</th><th>Club</th><th>Season</th><th>Status</th><th></th></tr></thead><tbody id="players-tbody"><tr><td colspan="7" class="loading"><div class="loading-spinner"></div><br>Loading...</td></tr></tbody></table></div>
     </div>
@@ -1433,6 +1433,101 @@ async function deactivatePlayer(id) {
   refreshManage();
   toast(`${p.Name} ${newStatus === 'archived' ? 'archived' : 'reactivated'}`);
 }
+
+// ─── CORRUPTED PLAYER REPORT ─────────────────────────────────────────────────
+function isCorrupted(s){
+  if(!s)return false;
+  if(/[◆�]/.test(s))return true;
+  for(let i=0;i<s.length-1;i++){const a=s.charCodeAt(i),b=s.charCodeAt(i+1);if((a===0xC3||a===0xC2)&&b>=0x80&&b<=0xBF)return true;}
+  if(/[-]/.test(s))return true;
+  return false;
+}
+function exportCorruptedPlayers(){
+  const bad=CACHE.players.filter(p=>isCorrupted(p.Name)||isCorrupted(p.ShirtName));
+  if(bad.length===0){toast('No corrupted players found ✓');return;}
+  const hdrs=['PlayerID','Name','Shirt Name','Club','Season'];
+  const rows=bad.map(p=>{const cl=CACHE.clubs.find(c=>c.id===p.ClubID);const se=CACHE.seasons.find(s=>s.id===p.SeasonID);return[p.id,p.Name||'',p.ShirtName||'',cl?.Name||'',se?.Label||''];});
+  const BOM='﻿';const esc=v=>`"${String(v).replace(/"/g,'""')}"`;
+  const csv=BOM+[hdrs,...rows].map(r=>r.map(esc).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');
+  a.href=url;a.download='corrupted_players.csv';a.click();URL.revokeObjectURL(url);
+  toast(`Exported ${bad.length} corrupted player${bad.length!==1?'s':''}`);
+}
+function importCorrectedPlayers(file){
+  if(!file)return;
+  const statusEl=document.getElementById('fix-upload-status');
+  const setStatus=(msg,isErr)=>{if(statusEl){statusEl.textContent=msg;statusEl.style.color=isErr?'var(--red)':'var(--accent)';statusEl.style.display=msg?'inline':'none';}console.log('[FixUpload]',msg);};
+  setStatus('Reading file...');
+  const reader=new FileReader();
+  reader.onerror=()=>setStatus('Could not read file',true);
+  reader.onload=async e=>{
+    try{
+      setStatus('Parsing...');
+      let text=e.target.result.replace(/^﻿/,'');
+      const lines=text.split(/\r?\n/).filter(l=>l.trim());
+      if(lines.length<2){setStatus('File has no data rows',true);return;}
+      const hdrs=parseCSVLine(lines[0]).map(h=>h.trim());
+      const idIdx=hdrs.indexOf('PlayerID'),nameIdx=hdrs.indexOf('Name'),shirtIdx=hdrs.indexOf('Shirt Name');
+      console.log('[FixUpload] cols:',hdrs);
+      if(idIdx===-1){setStatus('Missing PlayerID column',true);return;}
+      if(nameIdx===-1&&shirtIdx===-1){setStatus('Missing Name/Shirt Name columns',true);return;}
+      const updates=[];let skipped=0;
+      for(let i=1;i<lines.length;i++){
+        const cols=parseCSVLine(lines[i]);
+        const id=(cols[idIdx]||'').trim();
+        if(!id){skipped++;continue;}
+        const nn=nameIdx!==-1?(cols[nameIdx]||'').trim():'';
+        const ns=shirtIdx!==-1?(cols[shirtIdx]||'').trim():'';
+        if(!nn&&!ns){skipped++;continue;}
+        const fields={};if(nn)fields.Name=toProperName(nn);if(ns)fields.ShirtName=toShirtName(ns);
+        updates.push({id,fields});
+      }
+      if(updates.length===0){setStatus('Nothing to update — fill in Name or Shirt Name columns',true);return;}
+      setStatus(`Saving ${updates.length} player${updates.length!==1?'s':''}...`);
+      await Promise.all(updates.map(async ({id,fields})=>{
+        await atUpdate(TABLES.players,id,fields);
+        const p=CACHE.players.find(x=>x.id===id);
+        if(p){if(fields.Name)p.Name=fields.Name;if(fields.ShirtName)p.ShirtName=fields.ShirtName;}
+      }));
+      invalidateCache();refreshManage();
+      setStatus(`Done — ${updates.length} updated${skipped?' ('+skipped+' skipped)':''}`);
+      setTimeout(()=>setStatus(''),5000);
+    }catch(err){console.error('[FixUpload]',err);setStatus('Error: '+err.message,true);}
+  };
+  reader.readAsText(file,'utf-8');
+}
+
+// ─── EXCLUSIONS EXPORT ───────────────────────────────────────────────────────
+function runExclusionsExport(btn){
+  if(btn){btn.textContent='⌛ Exporting...';btn.disabled=true;}
+  try{
+    exportExclusionsFromSelection();
+  } finally {
+    setTimeout(()=>{if(btn){btn.textContent='⬇ Exclusions';btn.disabled=false;}},1500);
+  }
+}
+function exportExclusionsFromSelection(){
+  const selected=window._selectedPids||new Set();
+  if(selected.size===0){toast('No PIDs selected','error');return;}
+  const rows=[];
+  selected.forEach(pid=>{
+    const hero=CACHE.heroes.find(h=>h.PID===pid);if(!hero)return;
+    const parent=hero.ParentPIDID?CACHE.parents.find(p=>p.id===hero.ParentPIDID):null;
+    rows.push([parent?parent.PID:'',pid]);
+  });
+  if(rows.length===0){toast('No PIDs found','error');return;}
+  const ws=XLSX.utils.aoa_to_sheet([['Parent PID','Hero PID'],...rows]);
+  ws['!cols']=[{wch:14},{wch:14}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Sheet1');
+  const firstHero=CACHE.heroes.find(h=>selected.has(h.PID));
+  const club=firstHero?(CACHE.clubs.find(c=>c.id===firstHero.ClubID)?.Name||''):'';
+  const today=new Date();
+  const d=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  XLSX.writeFile(wb,`${d}${club?' '+club:''} exclusions.xlsx`);
+  toast(`Exported ${rows.length} exclusion${rows.length!==1?'s':''}`);
+}
+
 function refreshClubs() {
   const tbody = document.getElementById('clubs-tbody');
   if (!tbody||!cacheLoaded) return;
