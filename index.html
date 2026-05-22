@@ -1115,10 +1115,13 @@ function localParseAndSearch(query, filterClub, filterSeason, filterFont, filter
   const _qLow = query.toLowerCase();
   // Fuzzy: any word in query (3+ chars) matches any word in club name
   const _clubHit = CACHE.clubs.find(c => {
-    if((c.Name||'').length < 2) return false;
-    const cWords = (c.Name||'').toLowerCase().split(' ').filter(w=>w.length>2);
-    const qWords = _qLow.split(' ').filter(w=>w.length>2);
-    return cWords.some(cw => qWords.some(qw => cw.includes(qw) || qw.includes(cw)));
+    if (!c.Name || c.Name.length < 2) return false;
+    const cn = c.Name.toLowerCase();
+    const ql = _qLow.trim();
+    // Match if club name contains query OR query contains any word from club name
+    if (cn.includes(ql) || ql.includes(cn)) return true;
+    const cnParts = cn.split(' ');
+    return cnParts.some(part => part.length > 2 && ql.includes(part));
   });
   const _seasonHit = CACHE.seasons.find(s => (s.Label||'').length > 2 && _qLow.includes((s.Label||'').toLowerCase()));
   if (_clubHit) {
