@@ -80,7 +80,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 .pid-cell{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;display:flex;flex-direction:column;gap:4px;transition:border-color 0.15s}
 .pid-cell:hover{border-color:var(--border2)}
 .pid-cell.archived{opacity:0.5}
-.pid-garment{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.07em}
+.pid-garment{font-size:10px;color:rgba(255,255,255,0.6);font-weight:700;text-transform:uppercase;letter-spacing:0.07em}
 .pid-number{font-family:'DM Mono',monospace;font-size:14px;font-weight:500;color:var(--text);display:flex;align-items:center;gap:6px}
 .pid-copy{margin-left:auto;cursor:pointer;color:var(--text3);font-size:11px;padding:2px 4px;border-radius:4px;transition:all 0.15s;background:transparent;border:none}
 .pid-copy:hover{color:var(--accent);background:var(--accent-glow)}
@@ -493,6 +493,8 @@ let TABLES = JSON.parse(localStorage.getItem('at_tables') || '{}');
 
 const GARMENT_LABELS = {mens_ss:'Mens S/S',mens_ls:'Mens L/S',pro_shirt:'Pro Shirt',womens:'Womens',womens_pro:'Womens Pro',womens_cropped:'Womens Cropped',pro_kids:'Pro Kids',kids_ss:'Kids S/S',little_kids:'Little Kids',infants:'Infants',other:'Other'};
 const FONT_LABELS = {league:'League',cup:'Cup',womens:'Womens League',womens_cup:'Womens Cup',other:'Other'};
+const GARMENT_ORDER = ['pro_shirt','mens_ls','mens_ss','womens_pro','womens_cropped','womens','pro_kids','kids_ss','little_kids','infants','other'];
+const KIT_ORDER = ['Home','Away','Third','GK','GK Plain'];
 const GARMENT_KEYWORDS = ['pro shirt','pro kids','mens ss','mens s/s','mens ls','mens l/s','dri fit adv mens','dri-fit adv mens','dri fit adv womens','dri-fit adv womens','authentic shirt','authentic l/s','authentic kids','authentic womens','womens pro shirt','womens ss','womens s/s','womens','kids ss','kids s/s','minikit','babykit','cropped','little kids','infants','gk','goalkeeper','dri fit','dri-fit'];
 const GARMENT_ALIASES = {'mens ss':'mens_ss','mens s/s':'mens_ss','mens short sleeve':'mens_ss','mens jersey':'mens_ss','mens shirt':'mens_ss','jersey':'mens_ss','dri fit adv mens ss':'pro_shirt','dri-fit adv mens ss':'pro_shirt','mens ls':'mens_ls','mens l/s':'mens_ls','mens long sleeve':'mens_ls','mens ls jersey':'mens_ls','pro shirt':'pro_shirt','pro':'pro_shirt','authentic':'pro_shirt','dri fit':'pro_shirt','dri-fit':'pro_shirt','adv':'pro_shirt','dri fit adv':'pro_shirt','dri-fit adv':'pro_shirt','authentic shirt':'pro_shirt','authentic l/s':'mens_ls','womens':'womens','womens ss':'womens','womens s/s':'womens','womens jersey':'womens','womens shirt':'womens','womens pro':'womens_pro','womens pro shirt':'womens_pro','dri fit adv womens ss':'womens_pro','womens authentic':'womens_pro','authentic womens':'womens_pro','womens cropped':'womens_cropped','kids ss':'kids_ss','kids s/s':'kids_ss','kids':'kids_ss','pro kids':'pro_kids','dri fit adv kids ss':'pro_kids','authentic kids':'pro_kids','little kids':'little_kids','lk':'little_kids','mini kit little kids':'little_kids','minikit':'little_kids','babykit':'infants','infants':'infants','baby':'infants','mini kit infants':'infants','gk shirt':'pro_shirt','goalkeeper shirt':'pro_shirt','gk authentic':'pro_shirt','gk':'pro_shirt'};
 const FED_MAP = {'FRNC':'FFF','FRANCE':'FFF','GERM':'DFB','GERMANY':'DFB','ENG':'England','ENGL':'England','SPAN':'Spain','ITAL':'Italy','PORT':'Portugal','NETH':'Netherlands','BELG':'Belgium','BRAZ':'Brazil','ARG':'Argentina','ARGEN':'Argentina'};
@@ -536,13 +538,15 @@ async function atCreate(table, fields) {
 }
 
 async function atCreateBatch(table, fieldsList) {
-  const results = [];
-  for (let i = 0; i < fieldsList.length; i += 10) {
-    const chunk = fieldsList.slice(i, i+10);
-    const data = await atFetch(table, {method:'POST', body:JSON.stringify({records:chunk.map(f=>({fields:f})), typecast:true})});
-    results.push(...(data.records||[]));
-  }
-  return results;
+  if (fieldsList.length === 0) return [];
+  // Split into chunks of 10 (Airtable max), fire all in parallel, then flatten
+  const chunks = [];
+  for (let i = 0; i < fieldsList.length; i += 10) chunks.push(fieldsList.slice(i, i+10));
+  const results = await Promise.all(chunks.map(chunk =>
+    atFetch(table, {method:'POST', body:JSON.stringify({records:chunk.map(f=>({fields:f})), typecast:true})})
+      .then(data => data.records||[])
+  ));
+  return results.flat();
 }
 
 async function atUpdate(table, id, fields) {
@@ -1085,14 +1089,21 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
       pidsHtml += '<div style="color:var(--text3);font-size:12px;padding:8px 0;">No hero PIDs found</div>';
     } else {
       Object.keys(byFont).forEach(fontType => {
-        const fontHeroes = byFont[fontType];
+        const fontHeroes = byFont[fontType].slice().sort((a, b) => {
+          const gi = g => { const i = GARMENT_ORDER.indexOf(g); return i === -1 ? 99 : i; };
+          const ki = k => { const i = KIT_ORDER.findIndex(t => (k||'').toLowerCase().includes(t.toLowerCase())); return i === -1 ? 99 : i; };
+          const kitDiff = ki(a.KitType) - ki(b.KitType);
+          if (kitDiff !== 0) return kitDiff;
+          return gi(a.GarmentType) - gi(b.GarmentType);
+        });
         const fontPids = fontHeroes.map(h=>h.PID).join('|');
         const fontGroupId = 'fg_'+key+'_'+fontType;
         pidsHtml += `<div class="pid-section"><div class="pid-section-title" style="display:flex;align-items:center;gap:8px;"><label onclick="event.stopPropagation()" style="display:flex;align-items:center;cursor:pointer;"><input type="checkbox" class="font-group-chk" onchange="onFontGroupChange(this)" style="cursor:pointer;accent-color:var(--accent);width:13px;height:13px;margin-right:6px;">${FONT_LABELS[fontType]||fontType}</label><button class="pid-copy btn-sm" style="margin-left:4px;" onclick="copyAll('${fontPids}',this)">⎘ Copy all</button></div><div class="pid-grid">${fontHeroes.map(h=>`<div class="pid-cell${h.Status==='archived'?' archived':''}"><label style="display:flex;align-items:flex-start;gap:5px;width:100%;cursor:pointer;"><input type="checkbox" class="pid-sel-chk" data-pid="${h.PID}" onchange="onPidCheckChange(this)" onclick="event.stopPropagation()" style="cursor:pointer;accent-color:var(--accent);width:12px;height:12px;margin-top:2px;flex-shrink:0;"><span style="flex:1;"><span class="pid-garment">${GARMENT_LABELS[h.GarmentType]||h.GarmentType}${h.KitType?' · '+h.KitType:''}</span><span class="pid-number">${h.PID}<button class="pid-copy" onclick="event.stopPropagation();copyPid('${h.PID}',this)">⎘</button></span>${h.Status==='archived'?'<span style="font-size:10px;color:var(--red);">archived</span>':''}</span></label></div>`).join('')}</div></div>`;
       });
     }
     const cardKey = key;
-    html += `<div class="player-card" data-key="${cardKey}"><div class="player-header" onclick="togglePlayer(this)"><label class="pid-select-check" onclick="event.stopPropagation()" style="display:flex;align-items:center;padding:0 8px 0 4px;cursor:pointer;"><input type="checkbox" class="card-select-chk" data-key="${cardKey}" onchange="onCardSelectChange()" style="cursor:pointer;accent-color:var(--accent);width:14px;height:14px;"></label><div class="player-avatar">${initials}</div><div class="player-info"><div class="player-name">${player.Name}</div><div class="player-meta">${player.ShirtName||''}${player.SquadNumber?' · #'+player.SquadNumber:''}${club?' · '+(club.Name||club.name):''}${season?' · '+(season.Label||season.label):''}</div></div><div class="player-badges">${statusBadge}${typeBadge}${club?`<span class="badge badge-club">${club.Name||club.name}</span>`:''}${season?`<span class="badge badge-season">${season.Label||season.label}</span>`:''}<span style="font-size:12px;color:var(--text3);margin-left:4px;">${heroes.length} PIDs</span>${allPids?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();copyAll('${allPids}',this)">⎘ Copy all</button>`:''}</div><span class="chevron">▶</span></div><div class="player-pids">${pidsHtml}</div></div>`;
+    const allCardPids = heroes.map(h=>h.PID).filter(Boolean);
+    html += `<div class="player-card" data-key="${cardKey}" data-pids="${allCardPids.join(',')}"><div class="player-header" onclick="togglePlayer(this)"><label class="pid-select-check" onclick="event.stopPropagation()" style="display:flex;align-items:center;padding:0 8px 0 4px;cursor:pointer;"><input type="checkbox" class="card-select-chk" data-key="${cardKey}" data-pids="${allCardPids.join(',')}" onchange="onCardSelectChange(this)" style="cursor:pointer;accent-color:var(--accent);width:14px;height:14px;"></label><div class="player-avatar">${initials}</div><div class="player-info"><div class="player-name">${player.Name}</div><div class="player-meta">${player.ShirtName||''}${player.SquadNumber?' · #'+player.SquadNumber:''}${club?' · '+(club.Name||club.name):''}${season?' · '+(season.Label||season.label):''}</div></div><div class="player-badges">${statusBadge}${typeBadge}${club?`<span class="badge badge-club">${club.Name||club.name}</span>`:''}${season?`<span class="badge badge-season">${season.Label||season.label}</span>`:''}<span style="font-size:12px;color:var(--text3);margin-left:4px;">${heroes.length} PIDs</span>${allPids?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();copyAll('${allPids}',this)">⎘ Copy all</button>`:''}</div><span class="chevron">▶</span></div><div class="player-pids">${pidsHtml}</div></div>`;
   });
   html += '</div>';
   document.getElementById('search-results').innerHTML = html;
@@ -1126,24 +1137,33 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
 // _pidMeta: Map of pid -> {playerId,clubId,seasonId} for export lookup
 
 function toggleSelectAll(checked) {
+  if (!window._selectedPids) window._selectedPids = new Set();
+  document.querySelectorAll('.card-select-chk').forEach(chk => {
+    chk.checked = checked;
+    const pids = (chk.dataset.pids||'').split(',').filter(Boolean);
+    pids.forEach(pid => { if (checked) window._selectedPids.add(pid); else window._selectedPids.delete(pid); });
+  });
   document.querySelectorAll('.pid-sel-chk').forEach(chk => { chk.checked = checked; });
-  document.querySelectorAll('.card-select-chk').forEach(chk => { chk.checked = checked; });
   document.querySelectorAll('.font-group-chk').forEach(chk => { chk.checked = checked; });
-  window._selectedPids = checked ? new Set(Object.keys(window._pidMeta||{})) : new Set();
+  if (!checked) window._selectedPids = new Set();
   updateSelectionUI();
 }
 
 function onCardSelectChange(cardChk) {
-  // Select/deselect all PIDs within this player card
-  const card = cardChk.closest('.player-card');
-  const pidChks = card ? card.querySelectorAll('.pid-sel-chk') : [];
-  const fontChks = card ? card.querySelectorAll('.font-group-chk') : [];
-  pidChks.forEach(chk => {
-    chk.checked = cardChk.checked;
-    if (cardChk.checked) (window._selectedPids=window._selectedPids||new Set()).add(chk.dataset.pid);
-    else (window._selectedPids||new Set()).delete(chk.dataset.pid);
+  if (!window._selectedPids) window._selectedPids = new Set();
+  // Use data-pids from the card element — works even when card is collapsed
+  const pidsAttr = cardChk.dataset.pids || '';
+  const cardPids = pidsAttr ? pidsAttr.split(',').filter(Boolean) : [];
+  cardPids.forEach(pid => {
+    if (cardChk.checked) window._selectedPids.add(pid);
+    else window._selectedPids.delete(pid);
   });
-  fontChks.forEach(chk => { chk.checked = cardChk.checked; });
+  // Sync any visible checkboxes inside the card
+  const card = cardChk.closest('.player-card');
+  if (card) {
+    card.querySelectorAll('.pid-sel-chk').forEach(chk => { chk.checked = cardChk.checked; });
+    card.querySelectorAll('.font-group-chk').forEach(chk => { chk.checked = cardChk.checked; });
+  }
   syncGlobalCheckbox();
   updateSelectionUI();
 }
@@ -1740,11 +1760,35 @@ async function confirmCreationImport() {
       const recs=await atCreateBatch(TABLES.heroes,heroFields);
       recs.forEach(r=>CACHE.heroes.push({id:r.id,...r.fields}));
     }
-    for (const h of d.provisional) {
-      let provPlayer=CACHE.players.find(p=>p.Name==='__provisional__'&&p.ClubID===h.clubId&&p.SeasonID===h.seasonId);
-      if (!provPlayer) { const rec=await atCreate(TABLES.players,{Name:'__provisional__',ShirtName:'UNKNOWN',Type:'player',ClubID:h.clubId,SeasonID:h.seasonId,Status:'provisional'}); CACHE.players.push({id:rec.id,...rec.fields}); provPlayer={id:rec.id,...rec.fields}; }
-      const rec=await atCreate(TABLES.heroes,{PID:h.pid,PlayerID:provPlayer.id,ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.name,KitType:h.kitType,Status:'provisional'});
-      CACHE.heroes.push({id:rec.id,...rec.fields});
+    if (d.provisional.length > 0) {
+      // Ensure one __provisional__ player per club+season (batch create missing ones)
+      const provPlayerMap = {};
+      const provKeys = [...new Set(d.provisional.map(h => h.clubId+'_'+h.seasonId))];
+      // Find existing provisional players
+      provKeys.forEach(k => {
+        const [cId, sId] = k.split('_');
+        const existing = CACHE.players.find(p => p.Name==='__provisional__' && p.ClubID===cId && p.SeasonID===sId);
+        if (existing) provPlayerMap[k] = existing.id;
+      });
+      // Batch create missing provisional players
+      const missingProvKeys = provKeys.filter(k => !provPlayerMap[k]);
+      if (missingProvKeys.length > 0) {
+        const newProvRecs = await atCreateBatch(TABLES.players, missingProvKeys.map(k => {
+          const [cId, sId] = k.split('_');
+          return {Name:'__provisional__',ShirtName:'UNKNOWN',Type:'player',ClubID:cId,SeasonID:sId,Status:'provisional'};
+        }));
+        newProvRecs.forEach((r, i) => { CACHE.players.push({id:r.id,...r.fields}); provPlayerMap[missingProvKeys[i]] = r.id; });
+      }
+      // Batch create all provisional hero PIDs
+      const provHeroFields = d.provisional.map(h => ({
+        PID:h.pid, PlayerID:provPlayerMap[h.clubId+'_'+h.seasonId]||'',
+        ClubID:h.clubId, SeasonID:h.seasonId, FontType:h.fontType,
+        GarmentType:h.garmentType, GarmentRaw:h.name, KitType:h.kitType, Status:'provisional'
+      })).filter(h => h.PlayerID);
+      if (provHeroFields.length > 0) {
+        const recs = await atCreateBatch(TABLES.heroes, provHeroFields);
+        recs.forEach(r => CACHE.heroes.push({id:r.id,...r.fields}));
+      }
     }
     updateStats();refreshFilterSelects();
     // Build unique player list from d.players (source of truth, not d.heroes which may be empty if all dupes)
