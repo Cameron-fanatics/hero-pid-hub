@@ -1125,11 +1125,11 @@ function localParseAndSearch(query, filterClub, filterSeason, filterFont, filter
   const _seasonHit = CACHE.seasons.find(s => (s.Label||'').length > 2 && _qLow.includes((s.Label||'').toLowerCase()));
 
   if (_clubHit) {
-    const _stripped = _qLow
-      .replace((_clubHit.Name||'').toLowerCase(), '')
-      .replace((_seasonHit?.Label||'').toLowerCase(), '')
-      .replace(/home|away|third|fourth|gk|league|cup|wsl|womens|mens/g, '')
-      .replace(/[-\/\s]/g, '').trim();
+    // Strip each word of the club name individually so partial matches work
+    let _stripped = _qLow;
+    (_clubHit.Name||'').toLowerCase().split(' ').forEach(w => { if(w.length>1) _stripped = _stripped.replace(w,''); });
+    if (_seasonHit) (_seasonHit.Label||'').toLowerCase().split(' ').forEach(w => { if(w.length>1) _stripped = _stripped.replace(w,''); });
+    _stripped = _stripped.replace(/home|away|third|fourth|gk|league|cup|wsl|womens|mens/g,'').replace(/[-\/\s]/g,'').trim();
     if (!_stripped) {
       const _kitM = _qLow.match(/\b(home|away|third|fourth|gk)\b/);
       const _fClub = _clubHit.id;
