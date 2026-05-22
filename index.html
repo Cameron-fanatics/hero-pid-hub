@@ -1865,12 +1865,12 @@ function exportFootballContent(playerIds) {
   const club=firstHero?(CACHE.clubs.find(c=>c.id===firstHero.ClubID)?.Name||''):'';
   const wb=new ExcelJS.Workbook();wb.creator="HeroPID Hub";
   const thin={style:'thin'};const allB={top:thin,left:thin,bottom:thin,right:thin};
-  const hair={style:'hair',color:{argb:'FFD3D3D3'}};const hairB={top:hair,left:hair,bottom:hair,right:hair};
+  const grey={style:'thin',color:{argb:'FFD3D3D3'}};const hairB={top:grey,left:grey,bottom:grey,right:grey};
   Object.entries(sheets).forEach(([key,heroes])=>{
     const sn=FOOTBALL_SHEET_NAMES[key]||key;
     const kt=(heroes[0]?.KitType||'').toLowerCase(),ft=(heroes[0]?.FontType||'').toLowerCase();
     const pm={};
-    heroes.forEach(h=>{if(!pm[h.PlayerID]){const pl=CACHE.players.find(p=>p.id===h.PlayerID);pm[h.PlayerID]={pl,sn:(pl?.ShirtName||'').toUpperCase(),num:pl?.SquadNumber||9999,hs:[]};}pm[h.PlayerID].hs.push(h);});
+    heroes.forEach(h=>{if(!pm[h.PlayerID]){const pl=CACHE.players.find(p=>p.id===h.PlayerID);if(pl?.Status==='archived')return;pm[h.PlayerID]={pl,sn:(pl?.ShirtName||'').toUpperCase(),num:pl?.SquadNumber||9999,hs:[]};}if(pm[h.PlayerID])pm[h.PlayerID].hs.push(h);});
     const players=Object.values(pm).sort((a,b)=>a.num-b.num);
     const pr=new Array(18).fill(null);
     heroes.forEach(h=>{if(!h.ParentPIDID)return;const par=CACHE.parents.find(p=>p.id===h.ParentPIDID);if(!par)return;const ci=FOOTBALL_COL_MAP[h.GarmentType];if(ci!==undefined&&!pr[ci])pr[ci]=par.PID?Number(par.PID):null;if(h.GarmentType==='infants'&&!pr[BABY_COL])pr[BABY_COL]=par.PID?Number(par.PID):null;});
