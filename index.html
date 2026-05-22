@@ -1112,19 +1112,17 @@ async function interpretAndSearch(query, filterClub, filterSeason, filterFont, f
 
 function localParseAndSearch(query, filterClub, filterSeason, filterFont, filterStatus, filterKit) {
   const STRIP = new Set(['home','away','third','fourth','gk','goalkeeper','specials','league','cup','wsl','womens','mens','men','long','sleeve','ls','pro','authentic','dri','fit','adv','kids','kid','infants','infant','baby','little','shirt','jersey']);
-  // Check if query resolves entirely to club+season+kit with no player name component
-  const _qLow = query.toLowerCase();
-  // Fuzzy: any word in query (3+ chars) matches any word in club name
+  const _qLow = query.toLowerCase().trim();
+
+  // Fuzzy club detection
   const _clubHit = CACHE.clubs.find(c => {
     if (!c.Name || c.Name.length < 2) return false;
     const cn = c.Name.toLowerCase();
-    const ql = _qLow.trim();
-    // Match if club name contains query OR query contains any word from club name
-    if (cn.includes(ql) || ql.includes(cn)) return true;
-    const cnParts = cn.split(' ');
-    return cnParts.some(part => part.length > 2 && ql.includes(part));
+    if (cn.includes(_qLow) || _qLow.includes(cn)) return true;
+    return cn.split(' ').some(part => part.length > 2 && _qLow.includes(part));
   });
   const _seasonHit = CACHE.seasons.find(s => (s.Label||'').length > 2 && _qLow.includes((s.Label||'').toLowerCase()));
+
   if (_clubHit) {
     const _stripped = _qLow
       .replace((_clubHit.Name||'').toLowerCase(), '')
@@ -1133,28 +1131,32 @@ function localParseAndSearch(query, filterClub, filterSeason, filterFont, filter
       .replace(/[-\/\s]/g, '').trim();
     if (!_stripped) {
       const _kitM = _qLow.match(/\b(home|away|third|fourth|gk)\b/);
-      executeSearch(null, null, null, _kitM?_kitM[1]:null, _clubHit.id, _seasonHit?.id||filterSeason||'', filterFont, filterStatus, true);
+      const _fClub = _clubHit.id;
+      const _fSeason = _seasonHit ? _seasonHit.id : (filterSeason || '');
+      const _fKit = _kitM ? _kitM[1] : (filterKit || null);
+      // Use empty nameQ so all players for this club are returned
+      executeSearch('', null, null, _fKit, _fClub, _fSeason, filterFont || null, filterStatus || null, true);
       return;
     }
   }
-  const tokens = query.toLowerCase().split(/\s+/);
-  // Strip club/season tokens from nameQ
-  const clubTokens = _clubHit ? (_clubHit.Name||'').toLowerCase().split(/\s+/) : [];
-  const seasonTokens = _seasonHit ? (_seasonHit.Label||'').toLowerCase().split(/\s+/) : [];
+
+  const tokens = query.toLowerCase().split(/[\s]+/);
+  const clubTokens = _clubHit ? (_clubHit.Name||'').toLowerCase().split(/[\s]+/) : [];
+  const seasonTokens = _seasonHit ? (_seasonHit.Label||'').toLowerCase().split(/[\s]+/) : [];
   const allStrip = new Set([...STRIP, ...clubTokens, ...seasonTokens]);
   const nameTokens = tokens.filter(t=>!allStrip.has(t));
   const nameQ = nameTokens.length > 0 ? nameTokens.join(' ') : tokens[0];
   const q = query.toLowerCase();
   let garment = null;
   if (/long.?sleeve|\bls\b/.test(q)) garment='mens_ls';
-  else if (/pro|authentic|dri.?fit|\badv\b/.test(q)) garment='pro_shirt';
   else if (/pro.?kids/.test(q)) garment='pro_kids';
   else if (/little.?kids|\blk\b/.test(q)) garment='little_kids';
   else if (/\bkids\b/.test(q)) garment='kids_ss';
   else if (/infant|baby/.test(q)) garment='infants';
+  else if (/pro|authentic|dri.?fit|\badv\b/.test(q)) garment='pro_shirt';
   else if (/\bmens\b|\bmen\b/.test(q)) garment='mens_ss';
   else if (/\bwomens\b/.test(q)) garment='womens';
-  let font = filterFont||null;
+  let font = filterFont || null;
   if (!font) {
     if (/\bwsl\b/.test(q)) font='womens';
     else if (/womens.?cup/.test(q)) font='womens_cup';
