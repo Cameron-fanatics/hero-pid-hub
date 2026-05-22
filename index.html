@@ -1888,21 +1888,20 @@ function exportFootballContent(playerIds) {
     const ws=wb.addWorksheet(sn,{properties:{defaultColWidth:14},views:[{showGridLines:false}]});
     ws.columns=[{width:22},{width:9},...new Array(16).fill({width:14})];
     rows.forEach((rd,ri)=>{const row=ws.addRow(rd);
-      if(ri<4) {
-        // Rows 1-4: no borders, just team name font on row 0
-        if(ri===0) row.getCell(1).font={bold:true,size:14};
-        return;
-      }
-      if(ri===7) return; // blank spacer row 8 - no borders
-      // Apply borders based on row type
+      // Apply grey border to every cell in every row, no exceptions
       for(let _c=1;_c<=18;_c++){
         const cell=row.getCell(_c);
         if(!cell.value&&cell.value!==0) cell.value=null;
-        const isHeaderRow = ri===4||ri===5; // rows 5,6: all 18 cols bordered
-        const isParentRow = ri===6; // row 7: cols B-R bordered (not A)
-        const isPlayerRow = ri>=8; // rows 9+
-        // Default: hairline grid on all cells
         cell.border=hairB;
+      }
+      if(ri===0){row.getCell(1).font={bold:true,size:14};return;}
+      if(ri===7) return; // blank spacer row - grey borders already applied above
+      // Overlay thick black borders on structural rows
+      for(let _c=1;_c<=18;_c++){
+        const cell=row.getCell(_c);
+        const isHeaderRow = ri===4||ri===5;
+        const isParentRow = ri===6;
+        const isPlayerRow = ri>=8;
         if(isHeaderRow) {
           cell.border=allB;
           if(ri===4&&_c<=2) cell.font={bold:true,size:11};
