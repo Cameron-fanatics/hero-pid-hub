@@ -1865,11 +1865,12 @@ function exportFootballContent(playerIds) {
   const club=firstHero?(CACHE.clubs.find(c=>c.id===firstHero.ClubID)?.Name||''):'';
   const wb=new ExcelJS.Workbook();wb.creator="HeroPID Hub";
   const thin={style:'thin'};const allB={top:thin,left:thin,bottom:thin,right:thin};
+  const hair={style:'hair',color:{argb:'FFD3D3D3'}};const hairB={top:hair,left:hair,bottom:hair,right:hair};
   Object.entries(sheets).forEach(([key,heroes])=>{
     const sn=FOOTBALL_SHEET_NAMES[key]||key;
     const kt=(heroes[0]?.KitType||'').toLowerCase(),ft=(heroes[0]?.FontType||'').toLowerCase();
     const pm={};
-    heroes.forEach(h=>{if(!pm[h.PlayerID]){const pl=CACHE.players.find(p=>p.id===h.PlayerID);pm[h.PlayerID]={pl,sn:fixEncoding((pl?.ShirtName||'').toUpperCase()),num:pl?.SquadNumber||9999,hs:[]};}pm[h.PlayerID].hs.push(h);});
+    heroes.forEach(h=>{if(!pm[h.PlayerID]){const pl=CACHE.players.find(p=>p.id===h.PlayerID);pm[h.PlayerID]={pl,sn:(pl?.ShirtName||'').toUpperCase(),num:pl?.SquadNumber||9999,hs:[]};}pm[h.PlayerID].hs.push(h);});
     const players=Object.values(pm).sort((a,b)=>a.num-b.num);
     const pr=new Array(18).fill(null);
     heroes.forEach(h=>{if(!h.ParentPIDID)return;const par=CACHE.parents.find(p=>p.id===h.ParentPIDID);if(!par)return;const ci=FOOTBALL_COL_MAP[h.GarmentType];if(ci!==undefined&&!pr[ci])pr[ci]=par.PID?Number(par.PID):null;if(h.GarmentType==='infants'&&!pr[BABY_COL])pr[BABY_COL]=par.PID?Number(par.PID):null;});
@@ -1899,14 +1900,18 @@ function exportFootballContent(playerIds) {
         if(!cell.value&&cell.value!==0) cell.value=null;
         const isHeaderRow = ri===4||ri===5; // rows 5,6: all 18 cols bordered
         const isParentRow = ri===6; // row 7: cols B-R bordered (not A)
-        const isPlayerRow = ri>=8; // rows 9+: only A,B bordered; PIDs no border
+        const isPlayerRow = ri>=8; // rows 9+
+        // Default: hairline grid on all cells
+        cell.border=hairB;
         if(isHeaderRow) {
           cell.border=allB;
           if(ri===4&&_c<=2) cell.font={bold:true,size:11};
-        } else if(isParentRow&&_c>=2) {
-          cell.border=allB;
-          if(_c===2) cell.font={bold:true,size:11};
-          else if(cell.value) cell.font={bold:true,color:{argb:'FFFFAA00'}};
+        } else if(isParentRow) {
+          if(_c>=2) {
+            cell.border=allB;
+            if(_c===2) cell.font={bold:true,size:11};
+            else if(cell.value) cell.font={bold:true,color:{argb:'FFFFAA00'}};
+          }
         } else if(isPlayerRow&&_c<=2) {
           cell.border=allB;
           if(ri===8) cell.font={bold:true,size:11};
@@ -1917,8 +1922,9 @@ function exportFootballContent(playerIds) {
     const lastDataRow = 9 + players.length;
     for(let tr=lastDataRow+1;tr<=33;tr++){
       const row=ws.getRow(tr);
-      row.getCell(1).border=allB; row.getCell(1).value=null;
-      row.getCell(2).border=allB; row.getCell(2).value=null;
+      for(let _c=1;_c<=18;_c++){row.getCell(_c).border=hairB;row.getCell(_c).value=null;}
+      row.getCell(1).border=allB;
+      row.getCell(2).border=allB;
     }
   });
   const today=new Date();
