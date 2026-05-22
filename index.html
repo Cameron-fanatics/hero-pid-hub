@@ -1870,7 +1870,11 @@ function exportFootballContent(playerIds) {
     ws.columns=[{width:22},{width:9},...new Array(16).fill({width:14})];
     rows.forEach((rd,ri)=>{const row=ws.addRow(rd);
       // Ensure all 18 cells exist so borders render on empty cells
-      for(let _c=1;_c<=18;_c++){if(!row.getCell(_c).value&&row.getCell(_c).value!==0)row.getCell(_c).value=null;}row.eachCell({includeEmpty:true},(cell,cn)=>{if(cn>18)return;cell.border=allB;if(ri===0&&cn===1)cell.font={bold:true,size:14};else if([4,5,8].includes(ri))cell.font={bold:true,size:11};else if(ri===6&&cn>1&&cell.value)cell.font={bold:true,color:{argb:'FFFFAA00'}};});});
+      for(let _c=1;_c<=18;_c++){if(!row.getCell(_c).value&&row.getCell(_c).value!==0)row.getCell(_c).value=null;}row.eachCell({includeEmpty:true},(cell,cn)=>{if(cn>18)return;cell.border=allB;if(ri===0&&cn===1){cell.font={bold:true,size:14};}
+        else if(ri===4&&cn<=2){cell.font={bold:true,size:11};}
+        else if(ri===8&&cn<=2){cell.font={bold:true,size:11};}
+        else if(ri===6&&cn===2){cell.font={bold:true,size:11};}
+        else if(ri===6&&cn>2&&cell.value){cell.font={bold:true,color:{argb:'FFFFAA00'}};}});});
   });
   const today=new Date();
   const yy=String(today.getFullYear()).slice(2),mm=String(today.getMonth()+1).padStart(2,'0'),dd=String(today.getDate()).padStart(2,'0');
