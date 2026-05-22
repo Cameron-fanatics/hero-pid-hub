@@ -1191,7 +1191,7 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
     if (effectiveFont && h.FontType!==effectiveFont) return;
     if (filterStatus && h.Status!==filterStatus) return;
     if (resolvedGarment && h.GarmentType!==resolvedGarment) return;
-    if (resolvedKit && !((h.KitType||'').toLowerCase().includes(resolvedKit))) return;
+    if (resolvedKit && !((h.KitType||'').toLowerCase().includes(resolvedKit.toLowerCase()))) return;
     // League = mens only; womens = womens only — strict separation
     if (effectiveFont==='league' && (h.FontType||'')==='womens') return;
     if (effectiveFont==='womens' && (h.FontType||'')==='league') return;
@@ -1842,7 +1842,7 @@ function exportFootballContent(playerIds) {
   const heroList=selected.map(pid=>CACHE.heroes.find(h=>h.PID===pid)).filter(Boolean);
   if(!heroList.length){toast('No hero PIDs found','error');return;}
   const sheets={};
-  heroList.forEach(hero=>{const key=((hero.FontType||'').toLowerCase()+'_'+(hero.KitType||'').toLowerCase()).replace(/ /g,'');if(!sheets[key])sheets[key]=[];sheets[key].push(hero);});
+  heroList.forEach(hero=>{const key=((hero.FontType||'').toLowerCase()+'_'+(hero.KitType||'').toLowerCase());if(!sheets[key])sheets[key]=[];sheets[key].push(hero);});
   const firstHero=heroList[0];
   const club=firstHero?(CACHE.clubs.find(c=>c.id===firstHero.ClubID)?.Name||''):'';
   const wb=new ExcelJS.Workbook();wb.creator="HeroPID Hub";
@@ -1851,7 +1851,7 @@ function exportFootballContent(playerIds) {
     const sn=FOOTBALL_SHEET_NAMES[key]||key;
     const kt=(heroes[0]?.KitType||'').toLowerCase(),ft=(heroes[0]?.FontType||'').toLowerCase();
     const pm={};
-    heroes.forEach(h=>{if(!pm[h.PlayerID]){const pl=CACHE.players.find(p=>p.id===h.PlayerID);pm[h.PlayerID]={pl,sn:(pl?.ShirtName||'').toUpperCase(),num:pl?.SquadNumber||9999,hs:[]};}pm[h.PlayerID].hs.push(h);});
+    heroes.forEach(h=>{if(!pm[h.PlayerID]){const pl=CACHE.players.find(p=>p.id===h.PlayerID);pm[h.PlayerID]={pl,sn:fixEncoding((pl?.ShirtName||'').toUpperCase()),num:pl?.SquadNumber||9999,hs:[]};}pm[h.PlayerID].hs.push(h);});
     const players=Object.values(pm).sort((a,b)=>a.num-b.num);
     const pr=new Array(18).fill(null);
     heroes.forEach(h=>{if(!h.ParentPIDID)return;const par=CACHE.parents.find(p=>p.id===h.ParentPIDID);if(!par)return;const ci=FOOTBALL_COL_MAP[h.GarmentType];if(ci!==undefined&&!pr[ci])pr[ci]=par.PID?Number(par.PID):null;if(h.GarmentType==='infants'&&!pr[BABY_COL])pr[BABY_COL]=par.PID?Number(par.PID):null;});
