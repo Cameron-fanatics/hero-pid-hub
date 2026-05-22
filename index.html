@@ -80,7 +80,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 .pid-cell{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;display:flex;flex-direction:column;gap:4px;transition:border-color 0.15s}
 .pid-cell:hover{border-color:var(--border2)}
 .pid-cell.archived{opacity:0.5}
-.pid-garment{font-size:10px;color:rgba(255,255,255,0.6);font-weight:700;text-transform:uppercase;letter-spacing:0.07em}
+.pid-garment{font-size:10px;color:var(--text2);font-weight:500;text-transform:uppercase;letter-spacing:0.07em}
 .pid-number{font-family:'DM Mono',monospace;font-size:14px;font-weight:500;color:var(--text);display:flex;align-items:center;gap:6px}
 .pid-copy{margin-left:auto;cursor:pointer;color:var(--text3);font-size:11px;padding:2px 4px;border-radius:4px;transition:all 0.15s;background:transparent;border:none}
 .pid-copy:hover{color:var(--accent);background:var(--accent-glow)}
@@ -502,6 +502,11 @@ const BRAND_ANCHORS = ['FRANCE NIKE','FRANCE ADIDAS','FRANCE PUMA','DFB ADIDAS',
 
 // Local cache for search performance
 let CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[]};
+
+// ─── NAME NORMALISATION ───────────────────────────────────────────────────────
+const toProperName = s => (s||'').trim().replace(/\s+/g,' ')
+  .replace(/([^\s\-']+)/g, w => w.charAt(0).toUpperCase()+w.slice(1).toLowerCase());
+const toShirtName  = s => (s||'').trim().toUpperCase();
 let cacheLoaded = false;
 
 // ─── AIRTABLE API ─────────────────────────────────────────────────────────────
@@ -875,7 +880,7 @@ async function savePlayer() {
   const seasonId = document.getElementById('player-season').value;
   if (!name||!shirt||!clubId||!seasonId) { toast('Name, shirt, club and season required','error'); return; }
   try {
-    const rec = await atCreate(TABLES.players, {Name:name,ShirtName:shirt.toUpperCase(),SquadNumber:parseInt(document.getElementById('player-number').value)||null,Type:document.getElementById('player-type').value,ClubID:clubId,SeasonID:seasonId,Status:document.getElementById('player-status').value,MDMActorID:document.getElementById('player-mdm').value.trim()});
+    const rec = await atCreate(TABLES.players, {Name:toProperName(name),ShirtName:toShirtName(shirt),SquadNumber:parseInt(document.getElementById('player-number').value)||null,Type:document.getElementById('player-type').value,ClubID:clubId,SeasonID:seasonId,Status:document.getElementById('player-status').value,MDMActorID:document.getElementById('player-mdm').value.trim()});
     CACHE.players.push({id:rec.id,...rec.fields});
     closeModal('modal-add-player');
     ['player-name','player-shirt','player-number','player-mdm'].forEach(id=>document.getElementById(id).value='');
@@ -1089,21 +1094,34 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
       pidsHtml += '<div style="color:var(--text3);font-size:12px;padding:8px 0;">No hero PIDs found</div>';
     } else {
       Object.keys(byFont).forEach(fontType => {
-        const fontHeroes = byFont[fontType].slice().sort((a, b) => {
+        const allFontHeroes = byFont[fontType].slice().sort((a, b) => {
           const gi = g => { const i = GARMENT_ORDER.indexOf(g); return i === -1 ? 99 : i; };
           const ki = k => { const i = KIT_ORDER.findIndex(t => (k||'').toLowerCase().includes(t.toLowerCase())); return i === -1 ? 99 : i; };
           const kitDiff = ki(a.KitType) - ki(b.KitType);
           if (kitDiff !== 0) return kitDiff;
           return gi(a.GarmentType) - gi(b.GarmentType);
         });
-        const fontPids = fontHeroes.map(h=>h.PID).join('|');
-        const fontGroupId = 'fg_'+key+'_'+fontType;
-        pidsHtml += `<div class="pid-section"><div class="pid-section-title" style="display:flex;align-items:center;gap:8px;"><label onclick="event.stopPropagation()" style="display:flex;align-items:center;cursor:pointer;"><input type="checkbox" class="font-group-chk" onchange="onFontGroupChange(this)" style="cursor:pointer;accent-color:var(--accent);width:13px;height:13px;margin-right:6px;">${FONT_LABELS[fontType]||fontType}</label><button class="pid-copy btn-sm" style="margin-left:4px;" onclick="copyAll('${fontPids}',this)">⎘ Copy all</button></div><div class="pid-grid">${fontHeroes.map(h=>`<div class="pid-cell${h.Status==='archived'?' archived':''}"><label style="display:flex;align-items:flex-start;gap:5px;width:100%;cursor:pointer;"><input type="checkbox" class="pid-sel-chk" data-pid="${h.PID}" onchange="onPidCheckChange(this)" onclick="event.stopPropagation()" style="cursor:pointer;accent-color:var(--accent);width:12px;height:12px;margin-top:2px;flex-shrink:0;"><span style="flex:1;"><span class="pid-garment">${GARMENT_LABELS[h.GarmentType]||h.GarmentType}${h.KitType?' · '+h.KitType:''}</span><span class="pid-number">${h.PID}<button class="pid-copy" onclick="event.stopPropagation();copyPid('${h.PID}',this)">⎘</button></span>${h.Status==='archived'?'<span style="font-size:10px;color:var(--red);">archived</span>':''}</span></label></div>`).join('')}</div></div>`;
+        const fontPids = allFontHeroes.map(h=>h.PID).join('|');
+        const byKit = {};
+        allFontHeroes.forEach(h => { const kt = h.KitType||'Other'; if(!byKit[kt])byKit[kt]=[]; byKit[kt].push(h); });
+        const kitOrder2 = [...KIT_ORDER,'Other'];
+        const sortedKits = Object.keys(byKit).sort((a,b)=>{
+          const ai=kitOrder2.findIndex(k=>k.toLowerCase()===a.toLowerCase());
+          const bi=kitOrder2.findIndex(k=>k.toLowerCase()===b.toLowerCase());
+          return (ai===-1?99:ai)-(bi===-1?99:bi);
+        });
+        let kitGroupsHtml='';
+        sortedKits.forEach(kitType => {
+          const kitHeroes=byKit[kitType];
+          const kitPids=kitHeroes.map(h=>h.PID).join('|');
+          kitGroupsHtml+=`<div class="kit-subgroup"><div class="kit-subgroup-title"><label onclick="event.stopPropagation()" style="display:flex;align-items:center;cursor:pointer;gap:5px;"><input type="checkbox" class="kit-group-chk" onchange="onFontGroupChange(this)" style="cursor:pointer;accent-color:var(--accent);width:12px;height:12px;flex-shrink:0;"><span style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.06em;">${kitType}</span></label><button class="pid-copy btn-sm" onclick="event.stopPropagation();copyAll('${kitPids}',this)">⎘</button></div><div class="pid-grid">${kitHeroes.map(h=>`<div class="pid-cell${h.Status==='archived'?' archived':''}"><label style="display:flex;align-items:flex-start;gap:5px;width:100%;cursor:pointer;"><input type="checkbox" class="pid-sel-chk" data-pid="${h.PID}" onchange="onPidCheckChange(this)" onclick="event.stopPropagation()" style="cursor:pointer;accent-color:var(--accent);width:12px;height:12px;margin-top:2px;flex-shrink:0;"><span style="flex:1;"><span class="pid-garment">${GARMENT_LABELS[h.GarmentType]||h.GarmentType}</span><span class="pid-number">${h.PID}<button class="pid-copy" onclick="event.stopPropagation();copyPid('${h.PID}',this)">⎘</button></span>${h.Status==='archived'?'<span style="font-size:10px;color:var(--red);">archived</span>':''}</span></label></div>`).join('')}</div></div>`;
+        });
+        pidsHtml+=`<div class="pid-section"><div class="pid-section-title" style="display:flex;align-items:center;gap:8px;"><label onclick="event.stopPropagation()" style="display:flex;align-items:center;cursor:pointer;"><input type="checkbox" class="font-group-chk" onchange="onFontGroupChange(this)" style="cursor:pointer;accent-color:var(--accent);width:13px;height:13px;margin-right:6px;">${FONT_LABELS[fontType]||fontType}</label><button class="pid-copy btn-sm" style="margin-left:4px;" onclick="copyAll('${fontPids}',this)">⎘ Copy all</button></div>${kitGroupsHtml}</div>`;
       });
     }
     const cardKey = key;
     const allCardPids = heroes.map(h=>h.PID).filter(Boolean);
-    html += `<div class="player-card" data-key="${cardKey}" data-pids="${allCardPids.join(',')}"><div class="player-header" onclick="togglePlayer(this)"><label class="pid-select-check" onclick="event.stopPropagation()" style="display:flex;align-items:center;padding:0 8px 0 4px;cursor:pointer;"><input type="checkbox" class="card-select-chk" data-key="${cardKey}" data-pids="${allCardPids.join(',')}" onchange="onCardSelectChange(this)" style="cursor:pointer;accent-color:var(--accent);width:14px;height:14px;"></label><div class="player-avatar">${initials}</div><div class="player-info"><div class="player-name">${player.Name}</div><div class="player-meta">${player.ShirtName||''}${player.SquadNumber?' · #'+player.SquadNumber:''}${club?' · '+(club.Name||club.name):''}${season?' · '+(season.Label||season.label):''}</div></div><div class="player-badges">${statusBadge}${typeBadge}${club?`<span class="badge badge-club">${club.Name||club.name}</span>`:''}${season?`<span class="badge badge-season">${season.Label||season.label}</span>`:''}<span style="font-size:12px;color:var(--text3);margin-left:4px;">${heroes.length} PIDs</span>${allPids?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();copyAll('${allPids}',this)">⎘ Copy all</button>`:''}</div><span class="chevron">▶</span></div><div class="player-pids">${pidsHtml}</div></div>`;
+    html += `<div class="player-card" data-key="${cardKey}" data-pids="${allCardPids.join(',')}"><div class="player-header" onclick="togglePlayer(this)"><label class="pid-select-check" onclick="event.stopPropagation()" style="display:flex;align-items:center;padding:0 8px 0 4px;cursor:pointer;"><input type="checkbox" class="card-select-chk" data-key="${cardKey}" data-pids="${allCardPids.join(',')}" onchange="onCardSelectChange(this)" style="cursor:pointer;accent-color:var(--accent);width:14px;height:14px;"></label><div class="player-avatar">${initials}</div><div class="player-info"><div class="player-name">${player.Name}</div><div class="player-meta">${player.ShirtName||''}${player.SquadNumber?' · #'+player.SquadNumber:''}${club?' · '+(club.Name||club.name):''}${season?' · '+(season.Label||season.label):''}</div></div><div class="player-badges">${statusBadge}${typeBadge}${club?`<span class="badge badge-club">${club.Name||club.name}</span>`:''}${season?`<span class="badge badge-season">${season.Label||season.label}</span>`:''}<span style="font-size:12px;color:var(--text3);margin-left:4px;">${heroes.length} PIDs</span>${allPids?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();copyAll('${allPids}',this)">⎘ Copy all</button>`:''}<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditPlayer('${player.id}')" style="margin-left:2px;">✎ Edit</button><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();deactivatePlayer('${player.id}').then(()=>runSearch())" style="margin-left:2px;">${player.Status==='archived'?'Activate':'Archive'}</button></div><span class="chevron">▶</span></div><div class="player-pids">${pidsHtml}</div></div>`;
   });
   html += '</div>';
   document.getElementById('search-results').innerHTML = html;
@@ -1169,15 +1187,22 @@ function onCardSelectChange(cardChk) {
 }
 
 function onFontGroupChange(groupChk) {
-  // Select/deselect all PIDs within this font group section
-  const section = groupChk.closest('.pid-section');
-  const pidChks = section ? section.querySelectorAll('.pid-sel-chk') : [];
-  pidChks.forEach(chk => {
-    chk.checked = groupChk.checked;
-    if (groupChk.checked) (window._selectedPids=window._selectedPids||new Set()).add(chk.dataset.pid);
-    else (window._selectedPids||new Set()).delete(chk.dataset.pid);
-  });
-  // Sync card checkbox
+  if (!window._selectedPids) window._selectedPids = new Set();
+  const section = groupChk.closest('.pid-section,.kit-subgroup');
+  if (section) {
+    section.querySelectorAll('.pid-sel-chk').forEach(chk => {
+      chk.checked = groupChk.checked;
+      if (groupChk.checked) window._selectedPids.add(chk.dataset.pid);
+      else window._selectedPids.delete(chk.dataset.pid);
+    });
+    if (groupChk.classList.contains('kit-group-chk')) {
+      const pidSection = groupChk.closest('.pid-section');
+      if (pidSection) {
+        const fontChk = pidSection.querySelector('.pid-section-title .font-group-chk');
+        if (fontChk) { const allKits=pidSection.querySelectorAll('.kit-group-chk'); fontChk.checked=allKits.length>0&&[...allKits].every(c=>c.checked); }
+      }
+    }
+  }
   const card = groupChk.closest('.player-card');
   if (card) {
     const cardChk = card.querySelector('.card-select-chk');
@@ -1323,6 +1348,49 @@ async function saveSquadNumbers() {
 }
 
 // ─── REFRESH VIEWS ────────────────────────────────────────────────────────────
+async function openEditPlayer(id) {
+  const p = CACHE.players.find(x => x.id === id);
+  if (!p) return;
+  document.getElementById('edit-player-id').value = id;
+  document.getElementById('edit-player-name').value = p.Name || '';
+  document.getElementById('edit-player-shirt').value = p.ShirtName || '';
+  document.getElementById('edit-player-number').value = p.SquadNumber || '';
+  document.getElementById('edit-player-status').value = p.Status || 'active';
+  document.getElementById('edit-player-type').value = p.Type || 'player';
+  fillSelect('edit-player-club', CACHE.clubs, c=>({v:c.id,l:c.Name||''}));
+  fillSelect('edit-player-season', CACHE.seasons, s=>({v:s.id,l:s.Label||''}));
+  document.getElementById('edit-player-club').value = p.ClubID || '';
+  document.getElementById('edit-player-season').value = p.SeasonID || '';
+  openModal('modal-edit-player');
+}
+async function saveEditPlayer() {
+  const id = document.getElementById('edit-player-id').value;
+  const name = document.getElementById('edit-player-name').value.trim();
+  const shirt = document.getElementById('edit-player-shirt').value.trim();
+  const number = parseInt(document.getElementById('edit-player-number').value) || null;
+  const status = document.getElementById('edit-player-status').value;
+  const type = document.getElementById('edit-player-type').value;
+  const clubId = document.getElementById('edit-player-club').value;
+  const seasonId = document.getElementById('edit-player-season').value;
+  if (!name || !shirt) { toast('Name and shirt name required', 'error'); return; }
+  try {
+    await atUpdate(TABLES.players, id, {Name:toProperName(name), ShirtName:toShirtName(shirt), SquadNumber:number, Status:status, Type:type, ClubID:clubId, SeasonID:seasonId});
+    const cached = CACHE.players.find(p => p.id === id);
+    if (cached) { cached.Name=name; cached.ShirtName=shirt.toUpperCase(); cached.SquadNumber=number; cached.Status=status; cached.Type=type; cached.ClubID=clubId; cached.SeasonID=seasonId; }
+    closeModal('modal-edit-player');
+    refreshManage();
+    toast(`${name} updated`);
+  } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+async function deactivatePlayer(id) {
+  const p = CACHE.players.find(x => x.id === id);
+  if (!p) return;
+  const newStatus = p.Status === 'archived' ? 'active' : 'archived';
+  await atUpdate(TABLES.players, id, {Status: newStatus});
+  p.Status = newStatus;
+  refreshManage();
+  toast(`${p.Name} ${newStatus === 'archived' ? 'archived' : 'reactivated'}`);
+}
 function refreshClubs() {
   const tbody = document.getElementById('clubs-tbody');
   if (!tbody||!cacheLoaded) return;
@@ -1344,7 +1412,7 @@ function refreshManage() {
       CACHE.players.slice(0,200).map(p=>{
         const club=CACHE.clubs.find(c=>c.id===p.ClubID);
         const season=CACHE.seasons.find(s=>s.id===p.SeasonID);
-        return `<tr><td style="color:var(--text);font-weight:500;">${p.Name||''}</td><td class="mono">${p.ShirtName||''}</td><td class="mono">${p.SquadNumber||'—'}</td><td>${club?.Name||'—'}</td><td>${season?.Label||'—'}</td><td>${p.Status==='archived'?'<span class="badge badge-archived">Archived</span>':'<span class="badge badge-active">Active</span>'}</td><td><button class="btn btn-danger btn-sm" onclick="deletePlayer('${p.id}')">Delete</button></td></tr>`;
+        return `<tr><td style="color:var(--text);font-weight:500;">${p.Name||''}</td><td class="mono">${p.ShirtName||''}</td><td class="mono">${p.SquadNumber||'—'}</td><td>${club?.Name||'—'}</td><td>${season?.Label||'—'}</td><td>${p.Status==='archived'?'<span class="badge badge-archived">Archived</span>':'<span class="badge badge-active">Active</span>'}</td><td style="display:flex;gap:4px;"><button class="btn btn-ghost btn-sm" onclick="openEditPlayer('${p.id}')">Edit</button><button class="btn btn-ghost btn-sm" onclick="deactivatePlayer('${p.id}').then(()=>refreshManage())">${p.Status==='archived'?'Activate':'Archive'}</button><button class="btn btn-danger btn-sm" onclick="deletePlayer('${p.id}')">Delete</button></td></tr>`;
       }).join('');
   }
   const parbody = document.getElementById('parents-tbody');
@@ -1551,7 +1619,7 @@ async function confirmImport() {
     for (let pi=0; pi<newPlayers.length; pi++) {
       const p = newPlayers[pi];
       setProgress(done+pi, total, `Writing player ${pi+1} of ${newPlayers.length}...`);
-      const rec=await atCreate(TABLES.players,{Name:p.name,ShirtName:p.shirtName,SquadNumber:p.number,Type:p.type,ClubID:p.clubId,SeasonID:p.seasonId,Status:p.status,MDMActorID:p.mdmId||''});
+      const rec=await atCreate(TABLES.players,{Name:toProperName(p.name),ShirtName:toShirtName(p.shirtName),SquadNumber:p.number,Type:p.type,ClubID:p.clubId,SeasonID:p.seasonId,Status:p.status,MDMActorID:p.mdmId||''});
       CACHE.players.push({id:rec.id,...rec.fields});
       playerMap[p.name+'_'+p.clubId+'_'+p.seasonId]=rec.id;
     }
@@ -1678,7 +1746,7 @@ function parseCreationFedCode(nameStr) {
 }
 
 function parseCreationRows(rows,seasonId,fontType,fileNames) {
-  creationImportData={seasonId,fontType,fileNames,heroes:[],players:[],parents:[],provisional:[],stats:{matched:0,unmatched:0,duplicate:0,provisional:0}};
+  creationImportData={seasonId,fontType,fileNames,heroes:[],players:[],parents:[],provisional:[],allParsedPlayers:[],stats:{matched:0,unmatched:0,duplicate:0,provisional:0}};
   const seen=new Set();
   rows.forEach(row=>{
     const pid=(row['productId']||'').trim();
@@ -1697,7 +1765,8 @@ function parseCreationRows(rows,seasonId,fontType,fileNames) {
     if (knownParent) creationImportData.stats.matched++;
     else { creationImportData.stats.unmatched++; if(basePid&&!creationImportData.parents.find(p=>p.pid===basePid)) creationImportData.parents.push({pid:basePid,clubId,seasonId,kitType,garmentType}); }
     if (!playerName) { creationImportData.stats.provisional++; creationImportData.provisional.push({pid,basePid,clubId,seasonId,kitType,garmentType,fontType,name}); }
-    else { creationImportData.players.push({name:playerName,clubId,seasonId,fontType,kitType}); creationImportData.heroes.push({pid,playerName,basePid,clubId,seasonId,fontType,kitType,garmentType,garmentRaw:name,status:'active'}); }
+    else { creationImportData.players.push({name:toProperName(playerName),clubId,seasonId,fontType,kitType}); creationImportData.heroes.push({pid,playerName:toProperName(playerName),basePid,clubId,seasonId,fontType,kitType,garmentType,garmentRaw:name,status:'active'}); }
+    if (playerName && clubId) { const _pk=playerName+'_'+clubId+'_'+seasonId; if(!creationImportData.allParsedPlayers.find(p=>p._key===_pk)) creationImportData.allParsedPlayers.push({name:toProperName(playerName),clubId,seasonId,_key:_pk}); }
   });
   showCreationPreview(fileNames);
 }
@@ -1748,7 +1817,7 @@ async function confirmCreationImport() {
       const key=h.playerName+'_'+h.clubId+'_'+h.seasonId;
       if (!playerMap[key]&&!newPlayerKeys.includes(key)) {
         newPlayerKeys.push(key);
-        newPlayerFields.push({Name:h.playerName,ShirtName:h.playerName.toUpperCase(),Type:'player',ClubID:h.clubId,SeasonID:h.seasonId,Status:'active'});
+        newPlayerFields.push({Name:toProperName(h.playerName),ShirtName:toShirtName(h.playerName),Type:'player',ClubID:h.clubId,SeasonID:h.seasonId,Status:'active'});
       }
     });
     if (newPlayerFields.length>0) {
@@ -1791,17 +1860,10 @@ async function confirmCreationImport() {
       }
     }
     updateStats();refreshFilterSelects();
-    // Build unique player list from d.players (source of truth, not d.heroes which may be empty if all dupes)
-    const _csvSeenKeys = new Set();
-    const _csvPlayerList = [];
-    [...d.players, ...d.heroes.map(h=>({name:h.playerName,clubId:h.clubId,seasonId:h.seasonId}))].forEach(p => {
-      const k = (p.name||p.playerName||'')+'_'+p.clubId+'_'+p.seasonId;
-      if (!_csvSeenKeys.has(k)) { _csvSeenKeys.add(k); _csvPlayerList.push({name:p.name||p.playerName,clubId:p.clubId,seasonId:p.seasonId}); }
-    });
+    const _csvPlayerList = (d.allParsedPlayers||[]);
     const _heroCount = d.heroes.length, _provCount = d.provisional.length;
     clearCreationImport();
     toast(`Imported: ${_heroCount} hero PIDs · ${_provCount} provisional`);
-    // CSV files don't have numbers — always show confirmation modal if any players found
     if (_csvPlayerList.length > 0) showSquadNumberModal(_csvPlayerList, true);
   } catch(e) { toast('Import error: '+e.message,'error'); btn.textContent='Import all';btn.disabled=false; }
 }
@@ -1859,7 +1921,7 @@ async function confirmHomeplateResolve() {
     if (!hero) continue;
     let player=CACHE.players.find(p=>normaliseAccents((p.Name||'').toLowerCase())===normaliseAccents(r.playerName.toLowerCase())&&p.ClubID===r.clubId&&p.SeasonID===r.seasonId&&p.Status!=='provisional');
     if (!player) {
-      const rec=await atCreate(TABLES.players,{Name:r.playerName,ShirtName:r.playerName.toUpperCase(),SquadNumber:r.squadNumber||null,Type:'player',ClubID:r.clubId,SeasonID:r.seasonId,Status:'active'});
+      const rec=await atCreate(TABLES.players,{Name:toProperName(r.playerName),ShirtName:toShirtName(r.playerName),SquadNumber:r.squadNumber||null,Type:'player',ClubID:r.clubId,SeasonID:r.seasonId,Status:'active'});
       CACHE.players.push({id:rec.id,...rec.fields}); player={id:rec.id,...rec.fields};
     }
     await atUpdate(TABLES.heroes,r.heroId,{PlayerID:player.id,Status:'active'});
@@ -2054,7 +2116,7 @@ function parseSingleSection(rows,startRow,endRow,fontType,kitType,clubId,seasonI
       const number=parseInt(row[nameCol+3])||null;
       if (!shirtName&&!number) continue;
       const mdmId=/^\d{4,8}$/.test(String(row[nameCol+1]||'').trim())?String(row[nameCol+1]).trim():'';
-      importData.players.push({name:actorName,shirtName:(shirtName||actorName).toUpperCase(),number,mdmId,clubId,seasonId,type:isVariantName(actorName)?'variant':'player',status:'active',fontType,kitType});
+      importData.players.push({name:toProperName(actorName),shirtName:toShirtName(shirtName||actorName),number,mdmId,clubId,seasonId,type:isVariantName(actorName)?'variant':'player',status:'active',fontType,kitType});
       garmentCols.forEach(gc => {
         const rawVal=row[gc.col];
         const pid=String(rawVal===null||rawVal===undefined?'':rawVal).trim();
@@ -2137,7 +2199,7 @@ async function confirmImport() {
     for (let pi=0; pi<newPlayers.length; pi++) {
       const p = newPlayers[pi];
       setProgress(done+pi, total, `Writing player ${pi+1} of ${newPlayers.length}...`);
-      const rec=await atCreate(TABLES.players,{Name:p.name,ShirtName:p.shirtName,SquadNumber:p.number,Type:p.type,ClubID:p.clubId,SeasonID:p.seasonId,Status:p.status,MDMActorID:p.mdmId||''});
+      const rec=await atCreate(TABLES.players,{Name:toProperName(p.name),ShirtName:toShirtName(p.shirtName),SquadNumber:p.number,Type:p.type,ClubID:p.clubId,SeasonID:p.seasonId,Status:p.status,MDMActorID:p.mdmId||''});
       CACHE.players.push({id:rec.id,...rec.fields});
       playerMap[p.name+'_'+p.clubId+'_'+p.seasonId]=rec.id;
     }
@@ -2215,5 +2277,20 @@ init();
   </div>
 </div>
 
+
+<!-- EDIT PLAYER MODAL -->
+<div id="modal-edit-player" class="modal-overlay hidden" onclick="if(event.target===this)closeModal('modal-edit-player')">
+  <div class="modal">
+    <div class="modal-header"><span class="modal-title">Edit Player</span><button class="modal-close" onclick="closeModal('modal-edit-player')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-player-id">
+      <div class="form-row"><div class="form-group"><label class="form-label">Full Name *</label><input class="form-input" id="edit-player-name" /></div><div class="form-group"><label class="form-label">Shirt Name *</label><input class="form-input" id="edit-player-shirt" /></div></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Squad Number</label><input class="form-input" id="edit-player-number" type="number" /></div><div class="form-group"><label class="form-label">Player Type</label><select class="form-select" id="edit-player-type"><option value="player">Player</option><option value="variant">Variant</option></select></div></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Club</label><select class="form-select" id="edit-player-club"></select></div><div class="form-group"><label class="form-label">Season</label><select class="form-select" id="edit-player-season"></select></div></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Status</label><select class="form-select" id="edit-player-status"><option value="active">Active</option><option value="archived">Archived</option></select></div></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-edit-player')">Cancel</button><button class="btn btn-primary" onclick="saveEditPlayer()">Save Changes</button></div>
+  </div>
+</div>
 </body>
 </html>
