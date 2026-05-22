@@ -216,8 +216,15 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         <button class="btn btn-primary" onclick="runSearch()">Search</button>
       </div>
       <div class="search-filters">
-        <select class="filter-select" id="filter-club" onchange="runSearch()"><option value="">All clubs</option></select>
+        <select class="filter-select" id="filter-club" onchange="onClubFilterChange()"><option value="">All clubs</option></select>
         <select class="filter-select" id="filter-season" onchange="runSearch()"><option value="">All seasons</option></select>
+        <select class="filter-select" id="filter-status" onchange="runSearch()">
+          <option value="">Active + Archived</option>
+          <option value="active">Active only</option>
+          <option value="archived">Archived only</option>
+        </select>
+      </div>
+      <div class="search-filters" id="filter-extra" style="display:none;margin-top:6px;">
         <select class="filter-select" id="filter-font" onchange="runSearch()">
           <option value="">All font types</option>
           <option value="league">League</option>
@@ -225,10 +232,13 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
           <option value="womens">Womens League</option>
           <option value="womens_cup">Womens Cup</option>
         </select>
-        <select class="filter-select" id="filter-status" onchange="runSearch()">
-          <option value="">Active + Archived</option>
-          <option value="active">Active only</option>
-          <option value="archived">Archived only</option>
+        <select class="filter-select" id="filter-kit" onchange="runSearch()">
+          <option value="">All kits</option>
+          <option value="Home">Home</option>
+          <option value="Away">Away</option>
+          <option value="Third">Third</option>
+          <option value="Fourth">Fourth</option>
+          <option value="GK">GK</option>
         </select>
       </div>
     </div>
@@ -474,15 +484,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       <div class="form-row"><div class="form-group"><label class="form-label">Club *</label><select class="form-select" id="hero-club" onchange="updateHeroPlayerOptions()"></select></div><div class="form-group"><label class="form-label">Season *</label><select class="form-select" id="hero-season" onchange="updateHeroPlayerOptions()"></select></div></div>
       <div class="form-group"><label class="form-label">Player *</label><select class="form-select" id="hero-player"><option value="">Select club & season first</option></select></div>
       <div class="form-row"><div class="form-group"><label class="form-label">Font Type</label><select class="form-select" id="hero-font"><option value="league">League</option><option value="cup">Cup</option><option value="womens">Womens League</option><option value="womens_cup">Womens Cup</option><option value="other">Other</option></select></div><div class="form-group"><label class="form-label">Kit Type</label><input class="form-input" id="hero-kit" placeholder="e.g. Home, Away" /></div></div>
-      <div class="form-row"><div class="form-group"><label class="form-label">Garment Type</label><select class="form-select" id="hero-garment"><option value="mens_ss">Mens S/S</option><option value="mens_ls">Mens L/S</option><option value="pro_shirt">Pro Shirt</option><option value="womens">Womens</option><option value="womens_pro">Womens Pro</option><option value="womens_cropped">Womens Cropped</option><option value="pro_kids">Pro Kids</option><option value="kids_ss">Kids S/S</option><option value="little_kids">Little Kids</option><option value="infants">Infants</option><option value="other">Other</option></select></div><div class="form-group"><label class="form-label">Status</label><select class="form-select" id="hero-status"><option value="active">Active</option><option value="archived">Archived</option></select></div></div>
-    </div>
-    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-add-hero')">Cancel</button><button class="btn btn-primary" onclick="saveHero()">Save Hero PID</button></div>
-  </div>
-</div>
-
-<div class="toast-container" id="toast-container"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script>
+      <div class="form-row"><div class="form-group"><label class="form-label">Garment Type</label><select class="form-select" id="hero-garment"><option value="mens_ss">Mens S/S</option><option value="mens_ls">Mens L/S</option><option value="pro_shirt">Pro Shirt</option><option value="womens">Womens</option><option value="womens_pro">Womens Pro</option><option value="womens_cropped">Womens Cropped</option><option value="pro_kids">Pro Kids</option><option value="kids_ss">Kids S/S</option><option value="little_kids">Little Kids</option><option value="infants">Infants</option><option value="other">Other</option></select></div><div class="form-group"><label class="form-label">Status</label><select class="form-select" id="hero-status"><op
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 const AT_API = 'https://api.airtable.com/v0';
 let AT_TOKEN = localStorage.getItem('at_token') || '';
@@ -956,7 +958,18 @@ function searchMatch(h,n) { return normaliseAccents(h.toLowerCase()).includes(no
 let searchTimer = null;
 function debounceSearch() { clearTimeout(searchTimer); searchTimer = setTimeout(runSearch, 300); }
 
-async function runSearch() {
+async function onClubFilterChange() {
+  const clubVal = document.getElementById('filter-club').value;
+  const extra = document.getElementById('filter-extra');
+  if (extra) extra.style.display = clubVal ? 'flex' : 'none';
+  if (!clubVal) {
+    const fk = document.getElementById('filter-kit'); if(fk) fk.value='';
+    const ff = document.getElementById('filter-font'); if(ff) ff.value='';
+  }
+  runSearch();
+}
+
+function runSearch() {
   const raw = document.getElementById('search-q').value.trim();
   const filterClub = document.getElementById('filter-club').value;
   const filterSeason = document.getElementById('filter-season').value;
@@ -2269,6 +2282,15 @@ function clearImport() {
   document.getElementById('import-preview').classList.add('hidden');
   document.getElementById('file-input-storage').value='';
   const btn=document.getElementById('import-confirm-btn');
+  if(btn){btn.textContent='Import all';btn.disabled=false;}
+}
+
+// ─── CREATION CSV PARSER ──────────────────────────────────────────────────────
+
+function toast(msg,type='success'){const container=document.getElementById('toast-container');const t=document.createElement('div');t.className=`toast ${type}`;t.innerHTML=`<span class="toast-dot"></span>${msg}`;container.appendChild(t);setTimeout(()=>t.remove(),3000);}
+
+init();
+st btn=document.getElementById('import-confirm-btn');
   if(btn){btn.textContent='Import all';btn.disabled=false;}
 }
 
