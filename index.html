@@ -158,6 +158,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <div class="nav-section" style="margin-top:8px;">Data</div>
     <div class="nav-item" onclick="showPage('clubs')" id="nav-clubs"><span class="icon">◈</span> Clubs</div>
     <div class="nav-item" onclick="showPage('seasons')" id="nav-seasons"><span class="icon">◷</span> Seasons</div>
+    <div class="nav-item" onclick="showPage('cleanup')" id="nav-cleanup"><span class="icon">⚠</span> Data Cleanup</div>
     <div class="nav-section" style="margin-top:8px;">Settings</div>
     <div class="nav-item" onclick="showPage('settings')" id="nav-settings"><span class="icon">⚙</span> Settings</div>
   </nav>
@@ -251,7 +252,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         </label>
         <div id="export-actions" style="display:none;align-items:center;gap:6px;">
           <span style="font-size:11px;color:var(--accent);" id="selected-count-label"></span>
-          <button class="btn btn-primary btn-sm" onclick="exportSelectedPids()">⬇ Export PIDs</button><button class="btn btn-ghost btn-sm" id="btn-exclusions" onclick="runExclusionsExport(this)" style="margin-left:4px;">⬇ Exclusions</button>
+          <button class="btn btn-primary btn-sm" onclick="exportSelectedPids()">⬇ Export PIDs</button><button class="btn btn-ghost btn-sm" id="btn-exclusions" onclick="runExclusionsExport(this)" style="margin-left:4px;">⬇ Exclusions</button><button class="btn btn-ghost btn-sm" onclick="exportFootballContent()" style="margin-left:4px;">⬇ Content</button>
         </div>
       </div>
     </div>
@@ -410,6 +411,81 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
   </div>
 </div>
 
+
+<!-- DATA CLEANUP PAGE -->
+<div id="page-cleanup" class="hidden">
+  <div class="topbar"><div class="page-title">Data Cleanup</div></div>
+  <div class="content">
+
+    <!-- CORRUPTED PLAYERS (moved from Manage) -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Corrupted Player Names</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Export players with encoding issues in their name or shirt name. Correct the Name and Shirt Name columns, then re-upload.</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" onclick="exportCorruptedPlayers()">⬇ Export Corrupted</button>
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">↑ Upload Corrections<input type="file" accept=".csv" style="display:none" onchange="importCorrectedPlayers(this.files[0])"></label>
+        <span id="fix-upload-status-2" style="display:none;font-size:11px;color:var(--accent);"></span>
+      </div>
+    </div>
+
+    <!-- CLUBS -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Clubs — Incomplete Data</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Flags clubs missing Sport, League, or Country. CSV columns: <span class="mono" style="font-size:11px;">ClubID, Name, Sport, League, Country</span></div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="exportIncomplete('clubs')">⬇ Export Incomplete</button>
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">↑ Upload Fixes<input type="file" accept=".csv" style="display:none" onchange="importCleanup('clubs',this.files[0])"></label>
+        <span class="cleanup-status" id="cleanup-status-clubs" style="display:none;font-size:11px;color:var(--accent);"></span>
+      </div>
+    </div>
+
+    <!-- SEASONS -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Seasons — Incomplete Data</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Flags seasons missing a Label. CSV columns: <span class="mono" style="font-size:11px;">SeasonID, Label</span></div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="exportIncomplete('seasons')">⬇ Export Incomplete</button>
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">↑ Upload Fixes<input type="file" accept=".csv" style="display:none" onchange="importCleanup('seasons',this.files[0])"></label>
+        <span class="cleanup-status" id="cleanup-status-seasons" style="display:none;font-size:11px;color:var(--accent);"></span>
+      </div>
+    </div>
+
+    <!-- PLAYERS -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Players — Incomplete Data</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Flags players missing Squad Number or Shirt Name. CSV columns: <span class="mono" style="font-size:11px;">PlayerID, Name, ShirtName, SquadNumber, Club, Season</span></div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="exportIncomplete('players')">⬇ Export Incomplete</button>
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">↑ Upload Fixes<input type="file" accept=".csv" style="display:none" onchange="importCleanup('players',this.files[0])"></label>
+        <span class="cleanup-status" id="cleanup-status-players" style="display:none;font-size:11px;color:var(--accent);"></span>
+      </div>
+    </div>
+
+    <!-- PARENT PIDs -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Parent PIDs — Incomplete Data</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Flags parent PIDs missing a PID value, or missing CustomSKU for US sport clubs. CSV columns: <span class="mono" style="font-size:11px;">ParentID, PID, GarmentType, CustomSKU, Club, Season</span></div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="exportIncomplete('parents')">⬇ Export Incomplete</button>
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">↑ Upload Fixes<input type="file" accept=".csv" style="display:none" onchange="importCleanup('parents',this.files[0])"></label>
+        <span class="cleanup-status" id="cleanup-status-parents" style="display:none;font-size:11px;color:var(--accent);"></span>
+      </div>
+    </div>
+
+    <!-- HERO PIDs -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Hero PIDs — Incomplete Data</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Flags hero PIDs missing ParentPID, KitType, or GarmentType. For US sport clubs also flags missing ProductTitle, Gender, or JerseyColour. CSV columns: <span class="mono" style="font-size:11px;">HeroID, PID, GarmentType, KitType, ParentPID, ProductTitle, Gender, JerseyColour, Player, Club, Season</span></div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="exportIncomplete('heroes')">⬇ Export Incomplete</button>
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">↑ Upload Fixes<input type="file" accept=".csv" style="display:none" onchange="importCleanup('heroes',this.files[0])"></label>
+        <span class="cleanup-status" id="cleanup-status-heroes" style="display:none;font-size:11px;color:var(--accent);"></span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 </main>
 </div>
 
@@ -501,12 +577,12 @@ let AT_BASE = localStorage.getItem('at_base') || '';
 // Table IDs (set after init)
 let TABLES = JSON.parse(localStorage.getItem('at_tables') || '{}');
 
-const GARMENT_LABELS = {mens_ss:'Mens S/S',mens_ls:'Mens L/S',pro_shirt:'Pro Shirt',womens:'Womens',womens_pro:'Womens Pro',womens_cropped:'Womens Cropped',pro_kids:'Pro Kids',kids_ss:'Kids S/S',little_kids:'Little Kids',infants:'Infants',other:'Other'};
+const GARMENT_LABELS = {pro_shirt:'Pro Shirt',pro_shirt_ls:'Pro Shirt L/S',mens_ss:'Mens S/S',mens_ls:'Mens L/S',womens_pro:'Womens Pro',womens_pro_ls:'Womens Pro L/S',womens:'Womens',womens_ls:'Womens L/S',womens_cropped:'Womens Cropped',pro_kids:'Pro Kids',pro_kids_ls:'Pro Kids L/S',kids_ss:'Kids S/S',kids_ls:'Kids L/S',little_kids:'Little Kids',infants:'Infants',other:'Other'};
 const FONT_LABELS = {league:'League',cup:'Cup',womens:'Womens League',womens_cup:'Womens Cup',other:'Other'};
-const GARMENT_ORDER = ['pro_shirt','mens_ls','mens_ss','womens_pro','womens_cropped','womens','pro_kids','kids_ss','little_kids','infants','other'];
+const GARMENT_ORDER = ['pro_shirt','pro_shirt_ls','mens_ss','mens_ls','womens_pro','womens_pro_ls','womens','womens_ls','womens_cropped','pro_kids','pro_kids_ls','kids_ss','kids_ls','little_kids','infants','other'];
 const KIT_ORDER = ['Home','Away','Third','GK','GK Plain'];
 const GARMENT_KEYWORDS = ['pro shirt','pro kids','mens ss','mens s/s','mens ls','mens l/s','dri fit adv mens','dri-fit adv mens','dri fit adv womens','dri-fit adv womens','authentic shirt','authentic l/s','authentic kids','authentic womens','womens pro shirt','womens ss','womens s/s','womens','kids ss','kids s/s','minikit','babykit','cropped','little kids','infants','gk','goalkeeper','dri fit','dri-fit'];
-const GARMENT_ALIASES = {'mens ss':'mens_ss','mens s/s':'mens_ss','mens short sleeve':'mens_ss','mens jersey':'mens_ss','mens shirt':'mens_ss','jersey':'mens_ss','dri fit adv mens ss':'pro_shirt','dri-fit adv mens ss':'pro_shirt','mens ls':'mens_ls','mens l/s':'mens_ls','mens long sleeve':'mens_ls','mens ls jersey':'mens_ls','pro shirt':'pro_shirt','pro':'pro_shirt','authentic':'pro_shirt','dri fit':'pro_shirt','dri-fit':'pro_shirt','adv':'pro_shirt','dri fit adv':'pro_shirt','dri-fit adv':'pro_shirt','authentic shirt':'pro_shirt','authentic l/s':'mens_ls','womens':'womens','womens ss':'womens','womens s/s':'womens','womens jersey':'womens','womens shirt':'womens','womens pro':'womens_pro','womens pro shirt':'womens_pro','dri fit adv womens ss':'womens_pro','womens authentic':'womens_pro','authentic womens':'womens_pro','womens cropped':'womens_cropped','kids ss':'kids_ss','kids s/s':'kids_ss','kids':'kids_ss','pro kids':'pro_kids','dri fit adv kids ss':'pro_kids','authentic kids':'pro_kids','little kids':'little_kids','lk':'little_kids','mini kit little kids':'little_kids','minikit':'little_kids','babykit':'infants','infants':'infants','baby':'infants','mini kit infants':'infants','gk shirt':'pro_shirt','goalkeeper shirt':'pro_shirt','gk authentic':'pro_shirt','gk':'pro_shirt'};
+const GARMENT_ALIASES = {'mens ss':'mens_ss','mens s/s':'mens_ss','mens short sleeve':'mens_ss','mens jersey':'mens_ss','mens shirt':'mens_ss','jersey':'mens_ss','dri fit adv mens ss':'pro_shirt','dri-fit adv mens ss':'pro_shirt','mens ls':'mens_ls','mens l/s':'mens_ls','mens long sleeve':'mens_ls','mens ls jersey':'mens_ls','pro shirt':'pro_shirt','pro':'pro_shirt','authentic':'pro_shirt','dri fit':'pro_shirt','dri-fit':'pro_shirt','adv':'pro_shirt','dri fit adv':'pro_shirt','dri-fit adv':'pro_shirt','authentic shirt':'pro_shirt','authentic l/s':'pro_shirt_ls','authentic long sleeve':'pro_shirt_ls','authentic ls':'pro_shirt_ls','womens':'womens','womens ss':'womens','womens s/s':'womens','womens jersey':'womens','womens shirt':'womens','womens pro':'womens_pro','womens pro shirt':'womens_pro','dri fit adv womens ss':'womens_pro','womens authentic':'womens_pro','authentic womens':'womens_pro','womens cropped':'womens_cropped','kids ss':'kids_ss','kids s/s':'kids_ss','kids':'kids_ss','pro kids':'pro_kids','dri fit adv kids ss':'pro_kids','authentic kids':'pro_kids','vapor kids':'pro_kids','aero-fit kids':'pro_kids','dri-fit adv kids':'pro_kids','pro kids ls':'pro_kids_ls','authentic kids ls':'pro_kids_ls','authentic kids l/s':'pro_kids_ls','kids l/s':'kids_ls','kids ls':'kids_ls','kids long sleeve':'kids_ls','womens ls':'womens_ls','womens l/s':'womens_ls','womens long sleeve':'womens_ls','womens pro ls':'womens_pro_ls','womens pro l/s':'womens_pro_ls','authentic womens ls':'womens_pro_ls','authentic womens l/s':'womens_pro_ls','little kids':'little_kids','lk':'little_kids','mini kit little kids':'little_kids','minikit':'little_kids','babykit':'infants','infants':'infants','baby':'infants','mini kit infants':'infants','gk shirt':'pro_shirt','goalkeeper shirt':'pro_shirt','gk authentic':'pro_shirt','gk':'pro_shirt'};
 const FED_MAP = {'FRNC':'FFF','FRANCE':'FFF','GERM':'DFB','GERMANY':'DFB','ENG':'England','ENGL':'England','SPAN':'Spain','ITAL':'Italy','PORT':'Portugal','NETH':'Netherlands','BELG':'Belgium','BRAZ':'Brazil','ARG':'Argentina','ARGEN':'Argentina'};
 const BRAND_ANCHORS = ['FRANCE NIKE','FRANCE ADIDAS','FRANCE PUMA','DFB ADIDAS','DFB NIKE','DFB PUMA','ENGLAND NIKE','SPAIN ADIDAS','ITALY PUMA','PORTUGAL NIKE','NETHERLANDS NIKE'];
 
@@ -749,7 +825,7 @@ async function loadCache(force){
 
 // ─── PAGES ────────────────────────────────────────────────────────────────────
 function showPage(page) {
-  ['search','manage','import','clubs','seasons','settings'].forEach(p => {
+  ['search','manage','import','clubs','seasons','settings','cleanup'].forEach(p => {
     document.getElementById('page-'+p)?.classList.add('hidden');
     document.getElementById('nav-'+p)?.classList.remove('active');
   });
@@ -1457,7 +1533,7 @@ function exportCorruptedPlayers(){
 function importCorrectedPlayers(file){
   if(!file)return;
   const statusEl=document.getElementById('fix-upload-status');
-  const setStatus=(msg,isErr)=>{if(statusEl){statusEl.textContent=msg;statusEl.style.color=isErr?'var(--red)':'var(--accent)';statusEl.style.display=msg?'inline':'none';}console.log('[FixUpload]',msg);};
+  const setStatus=(msg,isErr)=>{if(statusEl){statusEl.textContent=msg;statusEl.style.color=isErr?'var(--red)':'var(--accent)';statusEl.style.display=msg?'inline':'none';}const s2=document.getElementById('fix-upload-status-2');if(s2){s2.textContent=msg;s2.style.color=isErr?'var(--red)':'var(--accent)';s2.style.display=msg?'inline':'none';}console.log('[FixUpload]',msg);};
   setStatus('Reading file...');
   const reader=new FileReader();
   reader.onerror=()=>setStatus('Could not read file',true);
@@ -1528,6 +1604,351 @@ function exportExclusionsFromSelection(){
   toast(`Exported ${rows.length} exclusion${rows.length!==1?'s':''}`);
 }
 
+
+// ─── DATA CLEANUP ─────────────────────────────────────────────────────────────
+const US_SPORTS = ['nfl','nba','nhl','mlb'];
+
+function isUSSport(clubId) {
+  const club = CACHE.clubs.find(c => c.id === clubId);
+  return club && US_SPORTS.includes((club.Sport||'').toLowerCase());
+}
+
+function cleanupSetStatus(tableKey, msg, isErr) {
+  // Also route fix-upload-status-2 for corrupted players on cleanup page
+  const el = document.getElementById('cleanup-status-' + tableKey);
+  if (el) { el.textContent = msg; el.style.color = isErr ? 'var(--red)' : 'var(--accent)'; el.style.display = msg ? 'inline' : 'none'; }
+  console.log('[Cleanup:'+tableKey+']', msg);
+}
+
+function exportIncomplete(tableKey) {
+  const BOM = '\uFEFF';
+  const esc = v => `"${String(v===null||v===undefined?'':v).replace(/"/g,'""')}"`;
+  const toCSV = (hdrs, rows) => BOM + [hdrs, ...rows].map(r => r.map(esc).join(',')).join('\n');
+  const dl = (csv, name) => {
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url);
+  };
+
+  if (tableKey === 'clubs') {
+    const incomplete = CACHE.clubs.filter(c => !c.Sport || !c.League || !c.Country);
+    if (!incomplete.length) { toast('All clubs complete ✓'); return; }
+    const hdrs = ['ClubID','Name','Sport','League','Country'];
+    const rows = incomplete.map(c => [c.id, c.Name||'', c.Sport||'', c.League||'', c.Country||'']);
+    dl(toCSV(hdrs, rows), 'incomplete_clubs.csv');
+    toast(`Exported ${incomplete.length} incomplete club${incomplete.length!==1?'s':''}`);
+  }
+  else if (tableKey === 'seasons') {
+    const incomplete = CACHE.seasons.filter(s => !s.Label);
+    if (!incomplete.length) { toast('All seasons complete ✓'); return; }
+    const hdrs = ['SeasonID','Label'];
+    const rows = incomplete.map(s => [s.id, s.Label||'']);
+    dl(toCSV(hdrs, rows), 'incomplete_seasons.csv');
+    toast(`Exported ${incomplete.length} incomplete season${incomplete.length!==1?'s':''}`);
+  }
+  else if (tableKey === 'players') {
+    const incomplete = CACHE.players.filter(p => !p.SquadNumber || !p.ShirtName);
+    if (!incomplete.length) { toast('All players complete ✓'); return; }
+    const hdrs = ['PlayerID','Name','ShirtName','SquadNumber','Club','Season'];
+    const rows = incomplete.map(p => {
+      const cl = CACHE.clubs.find(c=>c.id===p.ClubID);
+      const se = CACHE.seasons.find(s=>s.id===p.SeasonID);
+      return [p.id, p.Name||'', p.ShirtName||'', p.SquadNumber||'', cl?.Name||'', se?.Label||''];
+    });
+    dl(toCSV(hdrs, rows), 'incomplete_players.csv');
+    toast(`Exported ${incomplete.length} incomplete player${incomplete.length!==1?'s':''}`);
+  }
+  else if (tableKey === 'parents') {
+    const incomplete = CACHE.parents.filter(p => {
+      if (!p.PID) return true;
+      if (isUSSport(p.ClubID) && !p.CustomSKU) return true;
+      return false;
+    });
+    if (!incomplete.length) { toast('All parent PIDs complete ✓'); return; }
+    const hdrs = ['ParentID','PID','GarmentType','CustomSKU','Club','Season'];
+    const rows = incomplete.map(p => {
+      const cl = CACHE.clubs.find(c=>c.id===p.ClubID);
+      const se = CACHE.seasons.find(s=>s.id===p.SeasonID);
+      return [p.id, p.PID||'', p.GarmentType||'', p.CustomSKU||'', cl?.Name||'', se?.Label||''];
+    });
+    dl(toCSV(hdrs, rows), 'incomplete_parents.csv');
+    toast(`Exported ${incomplete.length} incomplete parent PID${incomplete.length!==1?'s':''}`);
+  }
+  else if (tableKey === 'heroes') {
+    const incomplete = CACHE.heroes.filter(h => {
+      if (!h.ParentPIDID || !h.KitType || !h.GarmentType) return true;
+      if (isUSSport(h.ClubID) && (!h.ProductTitle || !h.Gender || !h.JerseyColour)) return true;
+      return false;
+    });
+    if (!incomplete.length) { toast('All hero PIDs complete ✓'); return; }
+    const hdrs = ['HeroID','PID','GarmentType','KitType','ParentPID','ProductTitle','Gender','JerseyColour','Player','Club','Season'];
+    const rows = incomplete.map(h => {
+      const pl = CACHE.players.find(p=>p.id===h.PlayerID);
+      const cl = CACHE.clubs.find(c=>c.id===h.ClubID);
+      const se = CACHE.seasons.find(s=>s.id===h.SeasonID);
+      const pa = h.ParentPIDID ? CACHE.parents.find(p=>p.id===h.ParentPIDID) : null;
+      return [h.id, h.PID||'', h.GarmentType||'', h.KitType||'', pa?.PID||'', h.ProductTitle||'', h.Gender||'', h.JerseyColour||'', pl?.ShirtName||'', cl?.Name||'', se?.Label||''];
+    });
+    dl(toCSV(hdrs, rows), 'incomplete_heroes.csv');
+    toast(`Exported ${incomplete.length} incomplete hero PID${incomplete.length!==1?'s':''}`);
+  }
+}
+
+async function importCleanup(tableKey, file) {
+  if (!file) return;
+  const setStatus = (msg, isErr) => cleanupSetStatus(tableKey, msg, isErr);
+  setStatus('Reading...');
+  const reader = new FileReader();
+  reader.onerror = () => setStatus('Could not read file', true);
+  reader.onload = async e => {
+    try {
+      let text = e.target.result.replace(/^\uFEFF/, '');
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) { setStatus('No data rows', true); return; }
+      const hdrs = parseCSVLine(lines[0]).map(h => h.trim());
+      console.log('[Cleanup:'+tableKey+'] headers:', hdrs);
+
+      // ID column name varies by table
+      const idColMap = {clubs:'ClubID', seasons:'SeasonID', players:'PlayerID', parents:'ParentID', heroes:'HeroID'};
+      const idCol = idColMap[tableKey];
+      const idIdx = hdrs.indexOf(idCol);
+      if (idIdx === -1) { setStatus('Missing ' + idCol + ' column', true); return; }
+
+      // Field mappings per table
+      const fieldMaps = {
+        clubs: {Name:'Name', Sport:'Sport', League:'League', Country:'Country'},
+        seasons: {Label:'Label'},
+        players: {Name:'Name', ShirtName:'ShirtName', SquadNumber:'SquadNumber'},
+        parents: {PID:'PID', GarmentType:'GarmentType', CustomSKU:'CustomSKU'},
+        heroes: {GarmentType:'GarmentType', KitType:'KitType', ProductTitle:'ProductTitle', Gender:'Gender', JerseyColour:'JerseyColour'},
+      };
+      const fieldMap = fieldMaps[tableKey] || {};
+      const tableId = TABLES[tableKey === 'parents' ? 'parents' : tableKey === 'heroes' ? 'heroes' : tableKey];
+
+      const updates = []; let skipped = 0;
+      for (let i = 1; i < lines.length; i++) {
+        const cols = parseCSVLine(lines[i]);
+        const id = (cols[idIdx]||'').trim();
+        if (!id) { skipped++; continue; }
+        const fields = {};
+        Object.entries(fieldMap).forEach(([csvCol, atField]) => {
+          const ci = hdrs.indexOf(csvCol);
+          if (ci !== -1) {
+            const val = (cols[ci]||'').trim();
+            if (val) {
+              // Normalise player names
+              if (atField === 'Name') fields[atField] = toProperName(val);
+              else if (atField === 'ShirtName') fields[atField] = toShirtName(val);
+              else if (atField === 'SquadNumber') fields[atField] = parseInt(val)||null;
+              else fields[atField] = val;
+            }
+          }
+        });
+        if (!Object.keys(fields).length) { skipped++; continue; }
+        updates.push({id, fields});
+      }
+
+      if (!updates.length) { setStatus('Nothing to update', true); return; }
+      setStatus(`Saving ${updates.length}...`);
+
+      // Batch parallel updates
+      const cacheMap = { clubs: CACHE.clubs, seasons: CACHE.seasons, players: CACHE.players, parents: CACHE.parents, heroes: CACHE.heroes };
+      const tableRef = TABLES[tableKey === 'parents' ? 'parents' : tableKey === 'heroes' ? 'heroes' : tableKey];
+      await Promise.all(updates.map(async ({id, fields}) => {
+        await atUpdate(tableRef, id, fields);
+        const rec = (cacheMap[tableKey]||[]).find(r => r.id === id);
+        if (rec) Object.assign(rec, fields);
+      }));
+
+      invalidateCache();
+      if (tableKey === 'clubs') { refreshClubs(); refreshFilterSelects(); }
+      else if (tableKey === 'seasons') { refreshSeasons(); refreshFilterSelects(); }
+      else if (tableKey === 'players') { refreshManage(); }
+
+      setStatus(`Done — ${updates.length} updated${skipped?' ('+skipped+' skipped)':''}`);
+      setTimeout(() => setStatus(''), 5000);
+    } catch(err) {
+      console.error('[Cleanup:'+tableKey+']', err);
+      setStatus('Error: ' + err.message, true);
+    }
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+// ─── FOOTBALL CONTENT EXPORT ─────────────────────────────────────────────────
+const FOOTBALL_COL_MAP = {
+  pro_shirt:    2,   // C — Authentic/Vapor Mens SS
+  pro_shirt_ls: 3,   // D — Authentic/Vapor Mens LS
+  womens_pro:   4,   // E — Authentic/Vapor Womens SS
+  mens_ss:      5,   // F — Rep/Stadium Mens SS
+  mens_ls:      6,   // G — Rep/Stadium Mens LS
+  kids_ss:      7,   // H — Rep Kids SS
+  kids_ls:      8,   // I — Rep Kids LS
+  womens:       9,   // J — Rep Womens SS
+  little_kids:  10,  // K — Little Kids / Mini Kit
+  infants:      11,  // L — Infants (also M=Baby, same col via dual-write)
+  pro_kids:     13,  // N — Authentic Kids SS
+  womens_pro_ls:14,  // O — Authentic Womens LS
+  womens_ls:    15,  // P — Rep Womens LS
+  pro_kids_ls:  16,  // Q — Authentic Kids LS
+  womens_cropped:17, // R — Womens Cropped
+};
+// Baby (Adidas infants) also goes in col M (index 12) — handled separately
+const BABY_COL = 12; // M
+
+// Sheet name map: fontType_kitType → sheet name
+const FOOTBALL_SHEET_NAMES = {
+  'league_home':'League Home','league_away':'League Away','league_third':'League Third',
+  'cup_home':'Cup Home','cup_away':'Cup Away','cup_third':'Cup Third',
+  'womens_home':'Womens Home','womens_away':'Womens Away','womens_third':'Womens Third',
+  'womens_cup_home':'Womens Cup Home','womens_cup_away':'Womens Cup Away','womens_cup_third':'Womens Cup Third',
+};
+
+function exportFootballContent(playerIds) {
+  if (!window.XLSX) { toast('XLSX library not loaded', 'error'); return; }
+  const selected = playerIds || [...(window._selectedPids||new Set())];
+  if (!selected.length) { toast('No PIDs selected', 'error'); return; }
+
+  // Group heroes by fontType+kitType sheet
+  const sheets = {};
+  const heroList = typeof selected[0] === 'string'
+    ? selected.map(pid => CACHE.heroes.find(h => h.PID === pid)).filter(Boolean)
+    : selected;
+
+  heroList.forEach(hero => {
+    const key = ((hero.FontType||'').toLowerCase() + '_' + (hero.KitType||'').toLowerCase()).replace(/ /g,'');
+    if (!sheets[key]) sheets[key] = [];
+    sheets[key].push(hero);
+  });
+
+  if (!Object.keys(sheets).length) { toast('No hero PIDs to export', 'error'); return; }
+
+  // Detect club from first hero
+  const firstHero = heroList[0];
+  const club = firstHero ? (CACHE.clubs.find(c => c.id === firstHero.ClubID)?.Name || '') : '';
+  const season = firstHero ? (CACHE.seasons.find(s => s.id === firstHero.SeasonID)?.Label || '') : '';
+
+  const wb = window.XLSX.utils.book_new();
+  const NUM_COLS = 18; // A-R
+
+  Object.entries(sheets).forEach(([key, heroes]) => {
+    const sheetName = FOOTBALL_SHEET_NAMES[key] || key;
+    const kitType = (heroes[0]?.KitType || '').toLowerCase();
+    const fontType = (heroes[0]?.FontType || '').toLowerCase();
+
+    // Group by player, then build rows sorted by squad number
+    const playerMap = {};
+    heroes.forEach(hero => {
+      const pid = hero.PlayerID;
+      if (!playerMap[pid]) {
+        const pl = CACHE.players.find(p => p.id === pid);
+        playerMap[pid] = {
+          player: pl,
+          shirtName: (pl?.ShirtName || '').toUpperCase(),
+          number: pl?.SquadNumber || 9999,
+          heroes: [],
+          parentPids: {},
+        };
+      }
+      playerMap[pid].heroes.push(hero);
+    });
+
+    // Sort players by squad number
+    const players = Object.values(playerMap).sort((a, b) => a.number - b.number);
+
+    // Build parent PID row (row 7, index 6) — one parent per garment column
+    const parentRow = new Array(NUM_COLS).fill(null);
+    // Collect parent PIDs by garment type
+    heroes.forEach(hero => {
+      if (!hero.ParentPIDID) return;
+      const parent = CACHE.parents.find(p => p.id === hero.ParentPIDID);
+      if (!parent) return;
+      const gt = hero.GarmentType;
+      const colIdx = FOOTBALL_COL_MAP[gt];
+      if (colIdx !== undefined && !parentRow[colIdx]) {
+        parentRow[colIdx] = parent.PID ? Number(parent.PID) : null;
+      }
+      // Baby (infants) also fills col M
+      if (gt === 'infants' && !parentRow[BABY_COL]) {
+        parentRow[BABY_COL] = parent.PID ? Number(parent.PID) : null;
+      }
+    });
+
+    // Build sheet data array
+    const fontLabel = FONT_LABELS[fontType] || fontType;
+    const kitLabel = kitType.charAt(0).toUpperCase() + kitType.slice(1);
+
+    const rows = [];
+    // Row 1: Team Name
+    rows.push([club, ...new Array(NUM_COLS-1).fill(null)]);
+    // Rows 2-4: blank
+    rows.push(new Array(NUM_COLS).fill(null));
+    rows.push(new Array(NUM_COLS).fill(null));
+    rows.push(new Array(NUM_COLS).fill(null));
+    // Row 5: headers (font in A, kit in B, garment names C-R)
+    const hdr5 = new Array(NUM_COLS).fill(null);
+    hdr5[0] = fontLabel; hdr5[1] = kitLabel;
+    hdr5[2]='Authentic Mens SS'; hdr5[3]='Authentic Mens LS'; hdr5[4]='Authentic Womens SS';
+    hdr5[5]='Rep Mens SS'; hdr5[6]='Rep Mens LS'; hdr5[7]='Rep Kids SS'; hdr5[8]='Rep Kids LS';
+    hdr5[9]='Rep Womens SS'; hdr5[10]='Little Kids'; hdr5[11]='Infants'; hdr5[12]='Baby';
+    hdr5[13]='Authentic Kids SS'; hdr5[14]='Authentic Womens LS'; hdr5[15]='Rep Womens LS';
+    hdr5[16]='Authentic Kids LS'; hdr5[17]='Womens Cropped';
+    rows.push(hdr5);
+    // Row 6: sub-headers
+    const hdr6 = new Array(NUM_COLS).fill(null);
+    hdr6[2]='Vapor Mens SS'; hdr6[3]='Vapor Mens LS'; hdr6[4]='Vapor Womens SS';
+    hdr6[5]='Stadium Mens SS'; hdr6[6]='Stadium Mens LS'; hdr6[10]='Mini Kit';
+    rows.push(hdr6);
+    // Row 7: parent PID row (Blank label in B)
+    const pr = new Array(NUM_COLS).fill(null);
+    pr[1] = 'Blank';
+    for (let i = 0; i < NUM_COLS; i++) if (parentRow[i]) pr[i] = parentRow[i];
+    rows.push(pr);
+    // Row 8: blank
+    rows.push(new Array(NUM_COLS).fill(null));
+    // Row 9: player headers
+    const ph = new Array(NUM_COLS).fill(null);
+    ph[0] = 'Name Plate'; ph[1] = 'Number';
+    rows.push(ph);
+    // Row 10+: one row per player sorted by number
+    players.forEach(({shirtName, number, heroes: pHeroes}) => {
+      const prow = new Array(NUM_COLS).fill(null);
+      prow[0] = shirtName;
+      prow[1] = number === 9999 ? null : number;
+      pHeroes.forEach(hero => {
+        const gt = hero.GarmentType;
+        const colIdx = FOOTBALL_COL_MAP[gt];
+        if (colIdx !== undefined) prow[colIdx] = hero.PID ? Number(hero.PID) : null;
+        if (gt === 'infants') prow[BABY_COL] = hero.PID ? Number(hero.PID) : null;
+      });
+      rows.push(prow);
+    });
+
+    const ws = window.XLSX.utils.aoa_to_sheet(rows);
+    // Column widths
+    ws['!cols'] = [
+      {wch:18},{wch:8},
+      ...new Array(16).fill({wch:14})
+    ];
+    window.XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  });
+
+  // Filename: YY.MM.DD_ClubName_PlayerAdd_NPlayers.xlsx
+  const today = new Date();
+  const yy = String(today.getFullYear()).slice(2);
+  const mm = String(today.getMonth()+1).padStart(2,'0');
+  const dd = String(today.getDate()).padStart(2,'0');
+  const playerCount = Object.keys(
+    heroList.reduce((acc,h) => { if(h.PlayerID) acc[h.PlayerID]=1; return acc; }, {})
+  ).length;
+  const clubSlug = club.replace(/[^a-zA-Z0-9]/g,'_').replace(/_+/g,'_');
+  const playerSuffix = playerCount === 1
+    ? (heroList.find(h=>h.PlayerID) ? (CACHE.players.find(p=>p.id===heroList.find(h=>h.PlayerID).PlayerID)?.ShirtName||playerCount+'Players') : playerCount+'Players')
+    : playerCount + 'Players';
+  const filename = `${yy}.${mm}.${dd}_${clubSlug}_PlayerAdd_${playerSuffix}.xlsx`;
+  window.XLSX.writeFile(wb, filename);
+  toast(`Exported ${heroList.length} PIDs across ${Object.keys(sheets).length} sheet${Object.keys(sheets).length!==1?'s':''}`);
+}
 function refreshClubs() {
   const tbody = document.getElementById('clubs-tbody');
   if (!tbody||!cacheLoaded) return;
