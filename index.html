@@ -305,13 +305,13 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
   <div class="topbar"><div class="page-title">Import</div></div>
   <div class="content">
     <div class="tabs">
-      <div class="tab active" onclick="switchImportTab('storage')" id="import-tab-storage">Storage Sheet</div>
+      <div class="tab active" onclick="switchImportTab('storage')" id="import-tab-storage">Club Hero PID Upload</div>
       <div class="tab" onclick="switchImportTab('creation')" id="import-tab-creation">Creation CSVs</div>
       <div class="tab" onclick="switchImportTab('homeplate')" id="import-tab-homeplate">Homeplate Resolver</div>
     </div>
     <div id="import-content-storage" style="max-width:700px;">
       <div class="card" style="margin-bottom:20px;">
-        <div class="card-header"><span class="card-title">Upload storage sheet</span></div>
+        <div class="card-header"><span class="card-title">Upload Club Hero PID</span></div>
         <div style="padding:20px;">
           <div class="form-row" style="margin-bottom:16px;">
             <div class="form-group" style="margin:0;"><label class="form-label">Club</label><select class="form-select" id="import-club"><option value="">Select club...</option></select></div>
@@ -320,7 +320,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
           <div class="drop-zone" id="drop-zone-storage" onclick="document.getElementById('file-input-storage').click()">
             <input type="file" id="file-input-storage" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleStorageFileSelect(event)" />
             <div class="drop-zone-icon">↑</div>
-            <div class="drop-zone-text">Drop your storage sheet here</div>
+            <div class="drop-zone-text">Drop your Club Hero PID Upload here</div>
             <div class="drop-zone-sub">Chelsea / PSG / FFF style Excel sheets — kit types auto-detected</div>
           </div>
         </div>
@@ -2328,7 +2328,7 @@ async function confirmImport() {
     const _importedPlayerList = d.players.map(p=>({name:p.name,clubId:p.clubId,seasonId:p.seasonId}));
     clearImport();
     toast(`Import complete — ${newHeroes.length} hero PIDs, ${newPlayers.length} players added`);
-    // For storage sheets numbers come from file — just show modal to let user verify
+    // For Club Hero PID Uploads numbers come from file — just show modal to let user verify
     // Only show if any players are missing numbers
     const _missingNums = _importedPlayerList.filter(p => {
       const rec = CACHE.players.find(e => e.Name === p.name && e.ClubID === p.clubId && e.SeasonID === p.seasonId);
@@ -2688,7 +2688,7 @@ let _wipeTarget=null;
 function openWipeModal(target,label){
   _wipeTarget=target;
   document.getElementById('wipe-modal-title').textContent='Clear All — '+label;
-  document.getElementById('wipe-modal-desc').innerHTML='Permanently delete <strong>all '+label+'</strong> from Airtable.<br>This cannot be undone.';
+  document.getElementById('wipe-modal-desc').innerHTML='Permanently delete <strong>'+label+'</strong> from Airtable.<br>This cannot be undone.';
   document.getElementById('wipe-confirm-input').value='';
   document.getElementById('wipe-confirm-btn').disabled=true;
   openModal('modal-wipe');
@@ -3012,7 +3012,7 @@ async function confirmImport() {
     const _importedPlayerList = d.players.map(p=>({name:p.name,clubId:p.clubId,seasonId:p.seasonId}));
     clearImport();
     toast(`Import complete — ${newHeroes.length} hero PIDs, ${newPlayers.length} players added`);
-    // For storage sheets numbers come from file — just show modal to let user verify
+    // For Club Hero PID Uploads numbers come from file — just show modal to let user verify
     // Only show if any players are missing numbers
     const _missingNums = _importedPlayerList.filter(p => {
       const rec = CACHE.players.find(e => e.Name === p.name && e.ClubID === p.clubId && e.SeasonID === p.seasonId);
@@ -3093,7 +3093,7 @@ init();
     <div class="modal-body">
       <div id="wipe-modal-desc" style="font-size:13px;color:var(--text2);margin-bottom:16px;"></div>
       <label class="form-label">Type <strong>DELETE</strong> to confirm</label>
-      <input class="form-input" id="wipe-confirm-input" placeholder="DELETE" oninput="document.getElementById('wipe-confirm-btn').disabled=this.value!=='DELETE'"/>
+      <input class="form-input" id="wipe-confirm-input" placeholder="DELETE" oninput="document.getElementById('wipe-confirm-btn').disabled=this.value.toUpperCase()!=='DELETE'"/>
     </div>
     <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-wipe')">Cancel</button><button class="btn btn-danger" id="wipe-confirm-btn" disabled onclick="executeWipe()">Delete All</button></div>
   </div>
