@@ -962,19 +962,19 @@ async function runSearch() {
   const filterSeason = document.getElementById('filter-season').value;
   const filterFont = document.getElementById('filter-font').value;
   const filterStatus = document.getElementById('filter-status').value;
-  if (!raw && !filterClub && !filterSeason && !filterFont && !filterStatus) {
+  if (!raw && !filterClub && !filterSeason && !filterFont && !filterStatus && !filterKit) {
     document.getElementById('search-results').innerHTML = `<div class="empty-state"><div class="empty-icon">⌕</div><div class="empty-title">Search for a player or PID</div><div class="empty-sub">Try "Palmer", "Palmer home mens", "203072419", or "Dembele cup"</div></div>`;
     document.getElementById('result-count').textContent = '';
     return;
   }
   if (raw && raw.trim().split(/\s+/).length > 1 && !raw.match(/^\d{6,12}$/)) {
-    interpretAndSearch(raw, filterClub, filterSeason, filterFont, filterStatus);
+    interpretAndSearch(raw, filterClub, filterSeason, filterFont, filterStatus, filterKit);
     return;
   }
-  executeSearch(raw, null, null, null, filterClub, filterSeason, filterFont, filterStatus);
+  executeSearch(raw, null, null, filterKit||null, filterClub, filterSeason, filterFont, filterStatus);
 }
 
-async function interpretAndSearch(query, filterClub, filterSeason, filterFont, filterStatus) {
+async function interpretAndSearch(query, filterClub, filterSeason, filterFont, filterStatus, filterKit) {
   document.getElementById('search-results').innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3);font-size:12px;"><div class="loading-spinner"></div><br>Interpreting query...</div>';
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -991,19 +991,39 @@ async function interpretAndSearch(query, filterClub, filterSeason, filterFont, f
     let parsed = {};
     try { parsed = JSON.parse(text); } catch(e) {}
     if (!parsed.playerName && !parsed.garmentType && !parsed.fontType && !parsed.kitType) {
-      localParseAndSearch(query, filterClub, filterSeason, filterFont, filterStatus);
+      localParseAndSearch(query, filterClub, filterSeason, filterFont, filterStatus, filterKit);
       return;
     }
-    executeSearch(parsed.playerName||query, parsed.garmentType||null, parsed.fontType||null, parsed.kitType?parsed.kitType.toLowerCase():null, filterClub, filterSeason, parsed.fontType||filterFont, filterStatus);
+    executeSearch(parsed.playerName||query, parsed.garmentType||null, parsed.fontType||null, parsed.kitType?parsed.kitType.toLowerCase():(filterKit||null), filterClub, filterSeason, parsed.fontType||filterFont, filterStatus);
   } catch(e) {
-    localParseAndSearch(query, filterClub, filterSeason, filterFont, filterStatus);
+    localParseAndSearch(query, filterClub, filterSeason, filterFont, filterStatus, filterKit);
   }
 }
 
-function localParseAndSearch(query, filterClub, filterSeason, filterFont, filterStatus) {
+function localParseAndSearch(query, filterClub, filterSeason, filterFont, filterStatus, filterKit) {
   const STRIP = new Set(['home','away','third','fourth','gk','goalkeeper','specials','league','cup','wsl','womens','mens','men','long','sleeve','ls','pro','authentic','dri','fit','adv','kids','kid','infants','infant','baby','little','shirt','jersey']);
+  // Check if query resolves entirely to club+season+kit with no player name component
+  const _qLow = query.toLowerCase();
+  const _clubHit = CACHE.clubs.find(c => (c.Name||'').length > 2 && _qLow.includes((c.Name||'').toLowerCase()));
+  const _seasonHit = CACHE.seasons.find(s => (s.Label||'').length > 2 && _qLow.includes((s.Label||'').toLowerCase()));
+  if (_clubHit) {
+    const _stripped = _qLow
+      .replace((_clubHit.Name||'').toLowerCase(), '')
+      .replace((_seasonHit?.Label||'').toLowerCase(), '')
+      .replace(/home|away|third|fourth|gk|league|cup|wsl|womens|mens/g, '')
+      .replace(/[-\/\s]/g, '').trim();
+    if (!_stripped) {
+      const _kitM = _qLow.match(/\b(home|away|third|fourth|gk)\b/);
+      executeSearch(null, null, null, _kitM?_kitM[1]:null, _clubHit.id, _seasonHit?.id||filterSeason||'', filterFont, filterStatus, true);
+      return;
+    }
+  }
   const tokens = query.toLowerCase().split(/\s+/);
-  const nameTokens = tokens.filter(t=>!STRIP.has(t));
+  // Strip club/season tokens from nameQ
+  const clubTokens = _clubHit ? (_clubHit.Name||'').toLowerCase().split(/\s+/) : [];
+  const seasonTokens = _seasonHit ? (_seasonHit.Label||'').toLowerCase().split(/\s+/) : [];
+  const allStrip = new Set([...STRIP, ...clubTokens, ...seasonTokens]);
+  const nameTokens = tokens.filter(t=>!allStrip.has(t));
   const nameQ = nameTokens.length > 0 ? nameTokens.join(' ') : tokens[0];
   const q = query.toLowerCase();
   let garment = null;
@@ -1023,10 +1043,12 @@ function localParseAndSearch(query, filterClub, filterSeason, filterFont, filter
     else if (/\bleague\b/.test(q)) font='league';
   }
   const kitMatch = q.match(/\b(home|away|third|fourth|gk|goalkeeper)\b/);
-  executeSearch(nameQ, garment, font, kitMatch?kitMatch[1]:null, filterClub, filterSeason, font||filterFont, filterStatus);
+  const _resolvedClub = _clubHit ? _clubHit.id : filterClub;
+  const _resolvedSeason = _seasonHit ? _seasonHit.id : filterSeason;
+  executeSearch(nameQ, garment, font, kitMatch?kitMatch[1]:(filterKit||null), _resolvedClub, _resolvedSeason, font||filterFont, filterStatus);
 }
 
-function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filterClub, filterSeason, filterFont, filterStatus) {
+function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filterClub, filterSeason, filterFont, filterStatus, groupByClub) {
   const effectiveFont = resolvedFont||filterFont||null;
   const q = (nameQ||'').trim().toLowerCase();
   let matchedPlayerIds = new Set();
@@ -1035,10 +1057,10 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
     const seasonMatch = !filterSeason || p.SeasonID===filterSeason;
     const statusMatch = !filterStatus || p.Status===filterStatus;
     if (!clubMatch||!seasonMatch||!statusMatch) return;
-    if (!q) { matchedPlayerIds.add(p.id); return; }
+    if (groupByClub || !q) { matchedPlayerIds.add(p.id); return; }
     if (searchMatch(p.Name||'',q)||searchMatch(p.ShirtName||'',q)) matchedPlayerIds.add(p.id);
   });
-  if (q) CACHE.heroes.forEach(h => { if (h.PID&&h.PID.includes(q)) matchedPlayerIds.add(h.PlayerID); });
+  if (q && !groupByClub) CACHE.heroes.forEach(h => { if (h.PID&&h.PID.includes(q)) matchedPlayerIds.add(h.PlayerID); });
   const grouped = {};
   CACHE.heroes.forEach(h => {
     if (!matchedPlayerIds.has(h.PlayerID)) return;
@@ -1321,7 +1343,7 @@ function showSquadNumberModal(importedPlayers, forceShow) {
       <td>${p.isNew ? '<span class="badge" style="background:rgba(255,179,64,0.15);color:var(--amber);">New</span>' : '<span class="badge badge-active">Existing</span>'}</td>
     </tr>
   `).join('');
-  document.getElementById('modal-squad-numbers').classList.remove('hidden');
+  openModal('modal-squad-numbers');
 }
 
 async function saveSquadNumbers() {
@@ -1445,6 +1467,9 @@ function refreshFilterSelects() {
   const sortedSeasons = [...CACHE.seasons].sort((a,b)=>(a.Label||'').localeCompare(b.Label||''));
   clubSel.innerHTML = '<option value="">All clubs</option>'+sortedClubs.map(c=>`<option value="${c.id}"${c.id===cv?' selected':''}>${c.Name||''}</option>`).join('');
   seasonSel.innerHTML = '<option value="">All seasons</option>'+sortedSeasons.map(s=>`<option value="${s.id}"${s.id===sv?' selected':''}>${s.Label||''}</option>`).join('');
+  // Show/hide extra filters based on whether a club is selected
+  const extra = document.getElementById('filter-extra');
+  if (extra) extra.style.display = cv ? 'flex' : 'none';
 }
 
 function refreshImportSelects() {
@@ -2255,7 +2280,7 @@ init();
 </script>
 
 <!-- SQUAD NUMBER CONFIRMATION MODAL -->
-<div id="modal-squad-numbers" class="modal-overlay hidden" onclick="if(event.target===this)closeModal('modal-squad-numbers')">
+<div id="modal-squad-numbers" class="modal-overlay">
   <div class="modal" style="max-width:560px;max-height:80vh;display:flex;flex-direction:column;">
     <div class="modal-header">
       <div class="modal-title">Confirm Squad Numbers</div>
@@ -2279,7 +2304,7 @@ init();
 
 
 <!-- EDIT PLAYER MODAL -->
-<div id="modal-edit-player" class="modal-overlay hidden" onclick="if(event.target===this)closeModal('modal-edit-player')">
+<div id="modal-edit-player" class="modal-overlay">
   <div class="modal">
     <div class="modal-header"><span class="modal-title">Edit Player</span><button class="modal-close" onclick="closeModal('modal-edit-player')">✕</button></div>
     <div class="modal-body">
