@@ -225,6 +225,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
           <option value="archived">Archived only</option>
         </select>
       </div>
+      <div id="search-chips" style="display:none;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
       <div class="search-filters" id="filter-extra" style="display:none;margin-top:6px;">
         <select class="filter-select" id="filter-font" onchange="runSearch()">
           <option value="">All font types</option>
@@ -1058,6 +1059,7 @@ function runSearch() {
   const filterFont = document.getElementById('filter-font').value;
   const filterStatus = document.getElementById('filter-status').value;
   const filterKit=(document.getElementById('filter-kit')?.value)||'';
+  updateSearchChips();
   if (!raw && !filterClub && !filterSeason && !filterFont && !filterStatus && !filterKit) {
     document.getElementById('search-results').innerHTML = `<div class="empty-state"><div class="empty-icon">⌕</div><div class="empty-title">Search for a player or PID</div><div class="empty-sub">Try "Palmer", "Palmer home mens", "203072419", or "Dembele cup"</div></div>`;
     document.getElementById('result-count').textContent = '';
@@ -1166,6 +1168,9 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
     if (filterStatus && h.Status!==filterStatus) return;
     if (resolvedGarment && h.GarmentType!==resolvedGarment) return;
     if (resolvedKit && !((h.KitType||'').toLowerCase().includes(resolvedKit))) return;
+    // League = mens only; womens = womens only — strict separation
+    if (effectiveFont==='league' && (h.FontType||'')==='womens') return;
+    if (effectiveFont==='womens' && (h.FontType||'')==='league') return;
     const key = h.PlayerID+'_'+h.ClubID+'_'+h.SeasonID;
     if (!grouped[key]) grouped[key]={heroes:[]};
     grouped[key].heroes.push(h);
@@ -1799,7 +1804,9 @@ const BABY_COL = 12; // M
 // Sheet name map: fontType_kitType → sheet name
 const FOOTBALL_SHEET_NAMES = {
   'league_home':'League Home','league_away':'League Away','league_third':'League Third',
+  'league_gk home':'League GK Home','league_gk away':'League GK Away','league_gk third':'League GK Third',
   'cup_home':'Cup Home','cup_away':'Cup Away','cup_third':'Cup Third',
+  'cup_gk home':'Cup GK Home','cup_gk away':'Cup GK Away','cup_gk third':'Cup GK Third',
   'womens_home':'Womens Home','womens_away':'Womens Away','womens_third':'Womens Third',
   'womens_cup_home':'Womens Cup Home','womens_cup_away':'Womens Cup Away','womens_cup_third':'Womens Cup Third',
 };
@@ -1925,6 +1932,22 @@ function exportFootballContent(playerIds) {
     });
 
     const ws = window.XLSX.utils.aoa_to_sheet(rows);
+    // Add borders to all populated cells
+    const borderStyle = {style:'thin',color:{rgb:'CCCCCC'}};
+    const border = {top:borderStyle,bottom:borderStyle,left:borderStyle,right:borderStyle};
+    const range = window.XLSX.utils.decode_range(ws['!ref']||'A1');
+    for (let R=range.s.r;R<=range.e.r;R++) {
+      for (let C=range.s.c;C<=range.e.c;C++) {
+        const addr=window.XLSX.utils.encode_cell({r:R,c:C});
+        if (!ws[addr]) ws[addr]={t:'z',v:undefined};
+        ws[addr].s = ws[addr].s||{};
+        ws[addr].s.border = border;
+        // Bold header rows (rows 0,4,5,8 = rows 1,5,6,9 in 1-indexed)
+        if ([0,4,5,8].includes(R)) { ws[addr].s.font = {bold:true}; }
+        // Team name row - larger font
+        if (R===0 && C===0) { ws[addr].s.font = {bold:true,sz:14}; }
+      }
+    }
     // Column widths
     ws['!cols'] = [
       {wch:18},{wch:8},
@@ -1948,6 +1971,68 @@ function exportFootballContent(playerIds) {
   const filename = `${yy}.${mm}.${dd}_${clubSlug}_PlayerAdd_${playerSuffix}.xlsx`;
   window.XLSX.writeFile(wb, filename);
   toast(`Exported ${heroList.length} PIDs across ${Object.keys(sheets).length} sheet${Object.keys(sheets).length!==1?'s':''}`);
+}
+
+// ─── SEARCH CHIPS ────────────────────────────────────────────────────────────
+function updateSearchChips() {
+  const container = document.getElementById('search-chips');
+  if (!container) return;
+  const chips = [];
+  const q = document.getElementById('search-q')?.value.trim();
+  const club = document.getElementById('filter-club')?.value;
+  const season = document.getElementById('filter-season')?.value;
+  const font = document.getElementById('filter-font')?.value;
+  const kit = document.getElementById('filter-kit')?.value;
+  const status = document.getElementById('filter-status')?.value;
+
+  if (q) chips.push({label: q, type:'query'});
+  if (club) {
+    const clubName = CACHE.clubs.find(c=>c.id===club)?.Name || club;
+    chips.push({label: clubName, type:'club', value: club});
+  }
+  if (season) {
+    const seasonLabel = CACHE.seasons.find(s=>s.id===season)?.Label || season;
+    chips.push({label: seasonLabel, type:'season', value: season});
+  }
+  if (font) chips.push({label: (FONT_LABELS[font]||font), type:'font', value: font});
+  if (kit) chips.push({label: kit, type:'kit', value: kit});
+  if (status && status !== '') chips.push({label: status==='active'?'Active only':'Archived only', type:'status', value: status});
+
+  if (chips.length === 0) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+  container.style.display = 'flex';
+  container.innerHTML = chips.map(chip => `
+    <span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--accent);border-radius:20px;padding:3px 10px 3px 12px;font-size:11px;color:var(--accent);font-weight:500;">
+      ${chip.label}
+      <button onclick="removeChip('${chip.type}')" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:13px;line-height:1;padding:0;opacity:0.7;" title="Remove">×</button>
+    </span>
+  `).join('');
+}
+
+function removeChip(type) {
+  if (type === 'query') {
+    const inp = document.getElementById('search-q');
+    if (inp) inp.value = '';
+  } else if (type === 'club') {
+    const sel = document.getElementById('filter-club');
+    if (sel) { sel.value = ''; onClubFilterChange(); return; }
+  } else if (type === 'season') {
+    const sel = document.getElementById('filter-season');
+    if (sel) sel.value = '';
+  } else if (type === 'font') {
+    const sel = document.getElementById('filter-font');
+    if (sel) sel.value = '';
+  } else if (type === 'kit') {
+    const sel = document.getElementById('filter-kit');
+    if (sel) sel.value = '';
+  } else if (type === 'status') {
+    const sel = document.getElementById('filter-status');
+    if (sel) sel.value = '';
+  }
+  runSearch();
 }
 function refreshClubs() {
   const tbody = document.getElementById('clubs-tbody');
@@ -2655,7 +2740,10 @@ function parseSingleSection(rows,startRow,endRow,fontType,kitType,clubId,seasonI
     garmentCols.forEach(gc => {
       const pid=String(pRow[gc.col]===null||pRow[gc.col]===undefined?'':pRow[gc.col]).trim();
       if (/^\d{6,12}$/.test(pid)) {
-        if (!importData.parents.find(p=>p.pid===pid)) importData.parents.push({pid,clubId,seasonId,kitType,garmentType:label?label+' · '+gc.label:gc.label});
+        const _pgcLow=(gc.label||'').toLowerCase();
+        const _isGKParent=_pgcLow.includes('gk')||_pgcLow.includes('goalkeeper');
+        const _parentKitType=_isGKParent?('GK '+kitType):(label==='GK Plain'?('GK '+kitType):kitType);
+        if (!importData.parents.find(p=>p.pid===pid)) importData.parents.push({pid,clubId,seasonId,kitType:_parentKitType,garmentType:label?label+' · '+gc.label:gc.label});
         if (!colToParentPid[gc.col]) colToParentPid[gc.col]=pid;
       }
     });
@@ -2685,7 +2773,11 @@ function parseSingleSection(rows,startRow,endRow,fontType,kitType,clubId,seasonI
         const pid=String(rawVal===null||rawVal===undefined?'':rawVal).trim();
         if (/^\d{6,12}$/.test(pid)) {
           if (!importData.heroes.find(h=>h.pid===pid)) {
-            importData.heroes.push({pid,playerName:actorName,clubId,seasonId,fontType,garmentRaw:gc.label,garmentType:normaliseGarment(gc.label),kitType,status:'active',parentPid:colToParentPid[gc.col]||null});
+            // GK garments inherit the section kit type prefixed with 'GK '
+          const _gcLow=(gc.label||'').toLowerCase();
+          const _isGKGarment=_gcLow.includes('gk')||_gcLow.includes('goalkeeper');
+          const _heroKitType=_isGKGarment?('GK '+kitType):kitType;
+          importData.heroes.push({pid,playerName:actorName,clubId,seasonId,fontType,garmentRaw:gc.label,garmentType:normaliseGarment(gc.label),kitType:_heroKitType,status:'active',parentPid:colToParentPid[gc.col]||null});
           }
         }
       });
