@@ -277,7 +277,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <div id="tabcontent-players">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
         <span style="font-family:'Syne',sans-serif;font-size:14px;font-weight:600;">All Players</span>
-        <button class="btn btn-ghost btn-sm" onclick="exportCorruptedPlayers()" style="margin-right:6px;" title="Export corrupted player names">⚠ Corrupted</button><label class="btn btn-ghost btn-sm" style="margin-right:6px;cursor:pointer;" title="Upload corrected names CSV">↑ Fix Upload<input type="file" accept=".csv" style="display:none" onchange="importCorrectedPlayers(this.files[0])"></label><button class="btn btn-primary btn-sm" onclick="openModal('modal-add-player')">+ Add Player</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportCorruptedPlayers()" style="margin-right:6px;" title="Export corrupted player names">⚠ Corrupted</button><label class="btn btn-ghost btn-sm" style="margin-right:6px;cursor:pointer;" title="Upload corrected names CSV">↑ Fix Upload<input type="file" accept=".csv" style="display:none" onchange="importCorrectedPlayers(this.files[0])"></label><span id="fix-upload-status" style="display:none;font-size:11px;margin-right:6px;"></span><button class="btn btn-primary btn-sm" onclick="openModal('modal-add-player')">+ Add Player</button>
       </div>
       <div class="card"><table class="data-table"><thead><tr><th>Name</th><th>Shirt</th><th>No.</th><th>Club</th><th>Season</th><th>Status</th><th></th></tr></thead><tbody id="players-tbody"><tr><td colspan="7" class="loading"><div class="loading-spinner"></div><br>Loading...</td></tr></tbody></table></div>
     </div>
@@ -1474,38 +1474,53 @@ function exportCorruptedPlayers(){
 }
 function importCorrectedPlayers(file){
   if(!file)return;
-  toast('Reading file...','success');
-  const reader=new FileReader();
-  reader.onload=async e=>{
-    try{
-      let text=e.target.result.replace(/^﻿/,'');
-      const lines=text.split('\n').filter(l=>l.trim());
-      const hdrs=lines[0].split(',').map(h=>h.replace(/^"|"$/g,'').trim());
-      const idIdx=hdrs.indexOf('PlayerID');
-      const nameIdx=hdrs.indexOf('Name');
-      const shirtIdx=hdrs.indexOf('Shirt Name');
-      if(idIdx===-1||(nameIdx===-1&&shirtIdx===-1)){toast('Unrecognised file format — needs PlayerID and Name/Shirt Name columns','error');return;}
-      let updated=0,skipped=0;
-      for(let i=1;i<lines.length;i++){
-        const cols=parseCSVLine(lines[i]);
-        const id=(cols[idIdx]||'').trim();
-        if(!id){skipped++;continue;}
-        const newName=nameIdx!==-1?(cols[nameIdx]||'').trim():'';
-        const newShirt=shirtIdx!==-1?(cols[shirtIdx]||'').trim():'';
-        if(!newName&&!newShirt){skipped++;continue;}
-        const fields={};
-        if(newName)fields.Name=toProperName(newName);
-        if(newShirt)fields.ShirtName=toShirtName(newShirt);
-        await atUpdate(TABLES.players,id,fields);
-        const cached=CACHE.players.find(p=>p.id===id);
-        if(cached){if(fields.Name)cached.Name=fields.Name;if(fields.ShirtName)cached.ShirtName=fields.ShirtName;}
+  // Show a persistent status message in the manage header area
+  const statusEl = document.getElementById('fix-upload-status');
+  const setStatus = (msg, isError) => {
+    if(statusEl){ statusEl.textContent = msg; statusEl.style.color = isError ? 'var(--red)' : 'var(--accent)'; statusEl.style.display = msg ? 'inline' : 'none'; }
+    if(msg) toast(msg, isError ? 'error' : 'success');
+  };
+  setStatus('Reading file...');
+  const reader = new FileReader();
+  reader.onerror = () => setStatus('Could not read file', true);
+  reader.onload = async e => {
+    try {
+      let text = e.target.result.replace(/^\uFEFF/, '');
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if(lines.length < 2){ setStatus('File is empty or has no data rows', true); return; }
+      const hdrs = parseCSVLine(lines[0]).map(h => h.trim());
+      const idIdx = hdrs.indexOf('PlayerID');
+      const nameIdx = hdrs.indexOf('Name');
+      const shirtIdx = hdrs.indexOf('Shirt Name');
+      if(idIdx === -1){ setStatus('Missing PlayerID column', true); return; }
+      if(nameIdx === -1 && shirtIdx === -1){ setStatus('Missing Name / Shirt Name columns', true); return; }
+      let updated = 0, skipped = 0, total = lines.length - 1;
+      for(let i = 1; i < lines.length; i++){
+        const cols = parseCSVLine(lines[i]);
+        const id = (cols[idIdx]||'').trim();
+        if(!id){ skipped++; continue; }
+        const newName = nameIdx !== -1 ? (cols[nameIdx]||'').trim() : '';
+        const newShirt = shirtIdx !== -1 ? (cols[shirtIdx]||'').trim() : '';
+        if(!newName && !newShirt){ skipped++; continue; }
+        setStatus(`Updating ${i} of ${total}...`);
+        const fields = {};
+        if(newName) fields.Name = toProperName(newName);
+        if(newShirt) fields.ShirtName = toShirtName(newShirt);
+        await atUpdate(TABLES.players, id, fields);
+        const cached = CACHE.players.find(p => p.id === id);
+        if(cached){ if(fields.Name) cached.Name = fields.Name; if(fields.ShirtName) cached.ShirtName = fields.ShirtName; }
         updated++;
       }
-      invalidateCache();refreshManage();
-      toast(`${updated} player${updated!==1?'s':''} updated${skipped?' ('+skipped+' skipped)':''}`);
-    }catch(err){toast('Error: '+err.message,'error');}
+      invalidateCache();
+      refreshManage();
+      setStatus(`Done — ${updated} player${updated!==1?'s':''} updated${skipped?' ('+skipped+' skipped)':''}`);
+      setTimeout(() => setStatus(''), 4000);
+    } catch(err) {
+      console.error('importCorrectedPlayers error:', err);
+      setStatus('Error: ' + err.message, true);
+    }
   };
-  reader.readAsText(file,'utf-8');
+  reader.readAsText(file, 'utf-8');
 }
 
 function refreshClubs() {
