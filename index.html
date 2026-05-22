@@ -1087,7 +1087,8 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
       Object.keys(byFont).forEach(fontType => {
         const fontHeroes = byFont[fontType];
         const fontPids = fontHeroes.map(h=>h.PID).join('|');
-        pidsHtml += `<div class="pid-section"><div class="pid-section-title">${FONT_LABELS[fontType]||fontType} <button class="pid-copy btn-sm" style="margin-left:8px;" onclick="copyAll('${fontPids}',this)">⎘ Copy all</button></div><div class="pid-grid">${fontHeroes.map(h=>`<div class="pid-cell${h.Status==='archived'?' archived':''}"><span class="pid-garment">${GARMENT_LABELS[h.GarmentType]||h.GarmentType}${h.KitType?' · '+h.KitType:''}</span><span class="pid-number">${h.PID}<button class="pid-copy" onclick="copyPid('${h.PID}',this)">⎘</button></span>${h.Status==='archived'?'<span style="font-size:10px;color:var(--red);">archived</span>':''}</div>`).join('')}</div></div>`;
+        const fontGroupId = 'fg_'+key+'_'+fontType;
+        pidsHtml += `<div class="pid-section"><div class="pid-section-title" style="display:flex;align-items:center;gap:8px;"><label onclick="event.stopPropagation()" style="display:flex;align-items:center;cursor:pointer;"><input type="checkbox" class="font-group-chk" onchange="onFontGroupChange(this)" style="cursor:pointer;accent-color:var(--accent);width:13px;height:13px;margin-right:6px;">${FONT_LABELS[fontType]||fontType}</label><button class="pid-copy btn-sm" style="margin-left:4px;" onclick="copyAll('${fontPids}',this)">⎘ Copy all</button></div><div class="pid-grid">${fontHeroes.map(h=>`<div class="pid-cell${h.Status==='archived'?' archived':''}"><label style="display:flex;align-items:flex-start;gap:5px;width:100%;cursor:pointer;"><input type="checkbox" class="pid-sel-chk" data-pid="${h.PID}" onchange="onPidCheckChange(this)" onclick="event.stopPropagation()" style="cursor:pointer;accent-color:var(--accent);width:12px;height:12px;margin-top:2px;flex-shrink:0;"><span style="flex:1;"><span class="pid-garment">${GARMENT_LABELS[h.GarmentType]||h.GarmentType}${h.KitType?' · '+h.KitType:''}</span><span class="pid-number">${h.PID}<button class="pid-copy" onclick="event.stopPropagation();copyPid('${h.PID}',this)">⎘</button></span>${h.Status==='archived'?'<span style="font-size:10px;color:var(--red);">archived</span>':''}</span></label></div>`).join('')}</div></div>`;
       });
     }
     const cardKey = key;
@@ -1110,73 +1111,133 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
   }
   // Track selected state
   window._searchResultKeys = keys;
-  window._selectedPidKeys = new Set();
+  window._selectedPids = new Set();
+  window._pidMeta = {};
+  // Build pidMeta for all visible heroes
+  keys.forEach(key => {
+    const [playerId,,] = key.split('_');
+    (grouped[key]?.heroes||[]).forEach(h => { if(h.PID) window._pidMeta[h.PID] = {playerId, key}; });
+  });
 }
 
 
 // ─── SELECT ALL + EXPORT ──────────────────────────────────────────────────────
+// _selectedPids: Set of hero PID strings (pid-level selection)
+// _pidMeta: Map of pid -> {playerId,clubId,seasonId} for export lookup
+
 function toggleSelectAll(checked) {
-  const chks = document.querySelectorAll('.card-select-chk');
-  chks.forEach(chk => { chk.checked = checked; });
-  window._selectedPidKeys = checked ? new Set(window._searchResultKeys||[]) : new Set();
+  document.querySelectorAll('.pid-sel-chk').forEach(chk => { chk.checked = checked; });
+  document.querySelectorAll('.card-select-chk').forEach(chk => { chk.checked = checked; });
+  document.querySelectorAll('.font-group-chk').forEach(chk => { chk.checked = checked; });
+  window._selectedPids = checked ? new Set(Object.keys(window._pidMeta||{})) : new Set();
   updateSelectionUI();
 }
 
-function onCardSelectChange() {
-  const chks = document.querySelectorAll('.card-select-chk');
-  window._selectedPidKeys = new Set();
-  chks.forEach(chk => { if(chk.checked) window._selectedPidKeys.add(chk.dataset.key); });
-  const allChecked = chks.length > 0 && [...chks].every(c=>c.checked);
-  const selChk = document.getElementById('select-all-chk');
-  if (selChk) selChk.checked = allChecked;
-  document.getElementById('select-all-label').textContent = allChecked ? 'Select all' : 'Select all';
+function onCardSelectChange(cardChk) {
+  // Select/deselect all PIDs within this player card
+  const card = cardChk.closest('.player-card');
+  const pidChks = card ? card.querySelectorAll('.pid-sel-chk') : [];
+  const fontChks = card ? card.querySelectorAll('.font-group-chk') : [];
+  pidChks.forEach(chk => {
+    chk.checked = cardChk.checked;
+    if (cardChk.checked) (window._selectedPids=window._selectedPids||new Set()).add(chk.dataset.pid);
+    else (window._selectedPids||new Set()).delete(chk.dataset.pid);
+  });
+  fontChks.forEach(chk => { chk.checked = cardChk.checked; });
+  syncGlobalCheckbox();
   updateSelectionUI();
+}
+
+function onFontGroupChange(groupChk) {
+  // Select/deselect all PIDs within this font group section
+  const section = groupChk.closest('.pid-section');
+  const pidChks = section ? section.querySelectorAll('.pid-sel-chk') : [];
+  pidChks.forEach(chk => {
+    chk.checked = groupChk.checked;
+    if (groupChk.checked) (window._selectedPids=window._selectedPids||new Set()).add(chk.dataset.pid);
+    else (window._selectedPids||new Set()).delete(chk.dataset.pid);
+  });
+  // Sync card checkbox
+  const card = groupChk.closest('.player-card');
+  if (card) {
+    const cardChk = card.querySelector('.card-select-chk');
+    const allPidChks = card.querySelectorAll('.pid-sel-chk');
+    if (cardChk) cardChk.checked = allPidChks.length > 0 && [...allPidChks].every(c=>c.checked);
+  }
+  syncGlobalCheckbox();
+  updateSelectionUI();
+}
+
+function onPidCheckChange(pidChk) {
+  if (!window._selectedPids) window._selectedPids = new Set();
+  if (pidChk.checked) window._selectedPids.add(pidChk.dataset.pid);
+  else window._selectedPids.delete(pidChk.dataset.pid);
+  // Sync font group checkbox
+  const section = pidChk.closest('.pid-section');
+  if (section) {
+    const groupChk = section.querySelector('.font-group-chk');
+    const allInGroup = section.querySelectorAll('.pid-sel-chk');
+    if (groupChk) groupChk.checked = allInGroup.length > 0 && [...allInGroup].every(c=>c.checked);
+  }
+  // Sync card checkbox
+  const card = pidChk.closest('.player-card');
+  if (card) {
+    const cardChk = card.querySelector('.card-select-chk');
+    const allPidChks = card.querySelectorAll('.pid-sel-chk');
+    if (cardChk) cardChk.checked = allPidChks.length > 0 && [...allPidChks].every(c=>c.checked);
+  }
+  syncGlobalCheckbox();
+  updateSelectionUI();
+}
+
+function syncGlobalCheckbox() {
+  const allPidChks = document.querySelectorAll('.pid-sel-chk');
+  const selChk = document.getElementById('select-all-chk');
+  if (selChk && allPidChks.length > 0) selChk.checked = [...allPidChks].every(c=>c.checked);
 }
 
 function updateSelectionUI() {
-  const count = (window._selectedPidKeys||new Set()).size;
+  const count = (window._selectedPids||new Set()).size;
   const exportDiv = document.getElementById('export-actions');
   const countLabel = document.getElementById('selected-count-label');
   if (exportDiv) exportDiv.style.display = count > 0 ? 'flex' : 'none';
-  if (countLabel) countLabel.textContent = count > 0 ? `${count} selected` : '';
+  if (countLabel) countLabel.textContent = count > 0 ? `${count} PID${count!==1?'s':''} selected` : '';
 }
 
 function exportSelectedPids() {
-  const selected = window._selectedPidKeys || new Set();
-  if (selected.size === 0) { toast('No players selected', 'error'); return; }
+  const selected = window._selectedPids || new Set();
+  if (selected.size === 0) { toast('No PIDs selected', 'error'); return; }
   const rows = [];
-  selected.forEach(key => {
-    const [playerId, clubId, seasonId] = key.split('_');
-    const player = CACHE.players.find(p => p.id === playerId);
-    if (!player) return;
-    const heroesForKey = CACHE.heroes.filter(h => h.PlayerID === playerId && h.ClubID === clubId && h.SeasonID === seasonId);
-    heroesForKey.forEach(h => {
-      const parent = h.ParentPIDID ? CACHE.parents.find(p => p.id === h.ParentPIDID) : null;
-      rows.push({
-        'Parent PID': parent ? parent.PID : '',
-        'Hero PID': h.PID || '',
-        'Name': player.ShirtName || player.Name || '',
-        'Shirt': h.KitType || '',
-        'Shirt Type': GARMENT_LABELS[h.GarmentType] || h.GarmentType || ''
-      });
+  selected.forEach(pid => {
+    const hero = CACHE.heroes.find(h => h.PID === pid);
+    if (!hero) return;
+    const player = CACHE.players.find(p => p.id === hero.PlayerID);
+    const parent = hero.ParentPIDID ? CACHE.parents.find(p => p.id === hero.ParentPIDID) : null;
+    rows.push({
+      'Parent PID': parent ? parent.PID : '',
+      'Hero PID': pid,
+      'Name': player ? (player.ShirtName || player.Name || '') : '',
+      'Shirt': hero.KitType || '',
+      'Shirt Type': GARMENT_LABELS[hero.GarmentType] || hero.GarmentType || ''
     });
   });
-  if (rows.length === 0) { toast('No PIDs found for selected players', 'error'); return; }
+  if (rows.length === 0) { toast('No PIDs found in selection', 'error'); return; }
+  // Sort: by player name, then kit type, then garment
+  rows.sort((a,b) => (a.Name+a.Shirt+a['Shirt Type']).localeCompare(b.Name+b.Shirt+b['Shirt Type']));
   const ws = XLSX.utils.json_to_sheet(rows);
-  // Column widths
   ws['!cols'] = [{wch:14},{wch:14},{wch:22},{wch:12},{wch:18}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'PIDs');
   XLSX.writeFile(wb, 'hero_pids_export.xlsx');
-  toast(`Exported ${rows.length} PIDs for ${selected.size} player${selected.size!==1?'s':''}`);
+  toast(`Exported ${rows.length} PID${rows.length!==1?'s':''}`);
 }
 
 // ─── SQUAD NUMBER CONFIRMATION ────────────────────────────────────────────────
 let _squadNumberContext = []; // array of {playerId, name, shirtName, clubName, currentNumber, isNew}
 
-function showSquadNumberModal(importedPlayers) {
+function showSquadNumberModal(importedPlayers, forceShow) {
   // importedPlayers: array of {name, clubId, seasonId}
-  // Build list: for each unique player+club+season, find their record and current number
+  // forceShow: true = always open (CSV imports); false/undefined = only open if missing numbers
   const seen = new Set();
   _squadNumberContext = [];
   importedPlayers.forEach(p => {
@@ -1188,7 +1249,7 @@ function showSquadNumberModal(importedPlayers) {
       e.ClubID === p.clubId && e.SeasonID === p.seasonId
     );
     const club = CACHE.clubs.find(c => c.id === p.clubId);
-    if (!existing) return; // shouldn't happen post-import
+    if (!existing) return; // player wasn't imported (e.g. all provisional)
     _squadNumberContext.push({
       playerId: existing.id,
       name: existing.Name || p.name,
@@ -1198,8 +1259,10 @@ function showSquadNumberModal(importedPlayers) {
       isNew: !existing.SquadNumber
     });
   });
-  // Only show modal if there are players without numbers, or let user review all
-  if (_squadNumberContext.length === 0) return;
+  // For storage imports: only show if players are missing numbers
+  // For CSV imports (forceShow): always show so user can fill/verify
+  const hasGaps = _squadNumberContext.some(p => !p.currentNumber);
+  if (_squadNumberContext.length === 0 || (!forceShow && !hasGaps)) return;
   const tbody = document.getElementById('squad-number-rows');
   tbody.innerHTML = _squadNumberContext.map((p, i) => `
     <tr>
@@ -1684,11 +1747,18 @@ async function confirmCreationImport() {
       CACHE.heroes.push({id:rec.id,...rec.fields});
     }
     updateStats();refreshFilterSelects();
-    const _csvPlayerList = d.heroes.map(h=>({name:h.playerName,clubId:h.clubId,seasonId:h.seasonId}));
+    // Build unique player list from d.players (source of truth, not d.heroes which may be empty if all dupes)
+    const _csvSeenKeys = new Set();
+    const _csvPlayerList = [];
+    [...d.players, ...d.heroes.map(h=>({name:h.playerName,clubId:h.clubId,seasonId:h.seasonId}))].forEach(p => {
+      const k = (p.name||p.playerName||'')+'_'+p.clubId+'_'+p.seasonId;
+      if (!_csvSeenKeys.has(k)) { _csvSeenKeys.add(k); _csvPlayerList.push({name:p.name||p.playerName,clubId:p.clubId,seasonId:p.seasonId}); }
+    });
+    const _heroCount = d.heroes.length, _provCount = d.provisional.length;
     clearCreationImport();
-    toast(`Imported: ${d.heroes.length} hero PIDs · ${d.provisional.length} provisional`);
-    // CSV files don't have numbers — always show confirmation modal
-    showSquadNumberModal(_csvPlayerList);
+    toast(`Imported: ${_heroCount} hero PIDs · ${_provCount} provisional`);
+    // CSV files don't have numbers — always show confirmation modal if any players found
+    if (_csvPlayerList.length > 0) showSquadNumberModal(_csvPlayerList, true);
   } catch(e) { toast('Import error: '+e.message,'error'); btn.textContent='Import all';btn.disabled=false; }
 }
 
