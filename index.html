@@ -785,7 +785,8 @@ async function ensureFields() {
       {name:'ClubID',type:'singleLineText'},
       {name:'SeasonID',type:'singleLineText'},
       {name:'Status',type:'singleLineText'},
-      {name:'MDMActorID',type:'singleLineText'}
+      {name:'MDMActorID',type:'singleLineText'},
+      {name:'Goalkeeper',type:'checkbox'}
     ],
     [TABLES.parents]: [
       {name:'PID',type:'singleLineText'},
@@ -1233,7 +1234,7 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
     const heroes = grouped[key].heroes;
     const initials = (player.Name||'?').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
     const statusBadge = player.Status==='archived'?'<span class="badge badge-archived">Archived</span>':'<span class="badge badge-active">Active</span>';
-    const typeBadge = player.Type==='variant'?'<span class="badge badge-variant">Variant</span>':'';
+    const typeBadge = player.Type==='variant'?'<span class="badge badge-variant">Variant</span>':''; const gkBadge = player.Goalkeeper?'<span class="badge" style="background:rgba(99,179,237,0.15);color:#63b3ed;">GK</span>':'';
     const byFont = {};
     heroes.forEach(h => { if(!byFont[h.FontType])byFont[h.FontType]=[]; byFont[h.FontType].push(h); });
     const allPids = heroes.map(h=>h.PID).join('|');
@@ -1275,7 +1276,7 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
     }
     const cardKey = key;
     const allCardPids = heroes.map(h=>h.PID).filter(Boolean);
-    html += `<div class="player-card" data-key="${cardKey}" data-pids="${allCardPids.join(',')}"><div class="player-header" onclick="togglePlayer(this)"><label class="pid-select-check" onclick="event.stopPropagation()" style="display:flex;align-items:center;padding:0 8px 0 4px;cursor:pointer;"><input type="checkbox" class="card-select-chk" data-key="${cardKey}" data-pids="${allCardPids.join(',')}" onchange="onCardSelectChange(this)" style="cursor:pointer;accent-color:var(--accent);width:14px;height:14px;"></label><div class="player-avatar">${initials}</div><div class="player-info"><div class="player-name">${player.Name}</div><div class="player-meta">${player.ShirtName||''}${player.SquadNumber?' · #'+player.SquadNumber:''}${club?' · '+(club.Name||club.name):''}${season?' · '+(season.Label||season.label):''}</div></div><div class="player-badges">${statusBadge}${typeBadge}${club?`<span class="badge badge-club">${club.Name||club.name}</span>`:''}${season?`<span class="badge badge-season">${season.Label||season.label}</span>`:''}<span style="font-size:12px;color:var(--text3);margin-left:4px;">${heroes.length} PIDs</span>${allPids?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();copyAll('${allPids}',this)">⎘ Copy all</button>`:''}<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditPlayer('${player.id}')" style="margin-left:2px;">✎ Edit</button><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();deactivatePlayer('${player.id}').then(()=>runSearch())" style="margin-left:2px;">${player.Status==='archived'?'Activate':'Archive'}</button></div><span class="chevron">▶</span></div><div class="player-pids">${pidsHtml}</div></div>`;
+    html += `<div class="player-card" data-key="${cardKey}" data-pids="${allCardPids.join(',')}"><div class="player-header" onclick="togglePlayer(this)"><label class="pid-select-check" onclick="event.stopPropagation()" style="display:flex;align-items:center;padding:0 8px 0 4px;cursor:pointer;"><input type="checkbox" class="card-select-chk" data-key="${cardKey}" data-pids="${allCardPids.join(',')}" onchange="onCardSelectChange(this)" style="cursor:pointer;accent-color:var(--accent);width:14px;height:14px;"></label><div class="player-avatar">${initials}</div><div class="player-info"><div class="player-name">${player.Name}</div><div class="player-meta">${player.ShirtName||''}${player.SquadNumber?' · #'+player.SquadNumber:''}${club?' · '+(club.Name||club.name):''}${season?' · '+(season.Label||season.label):''}</div></div><div class="player-badges">${statusBadge}${typeBadge}${gkBadge}${club?`<span class="badge badge-club">${club.Name||club.name}</span>`:''}${season?`<span class="badge badge-season">${season.Label||season.label}</span>`:''}<span style="font-size:12px;color:var(--text3);margin-left:4px;">${heroes.length} PIDs</span>${allPids?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();copyAll('${allPids}',this)">⎘ Copy all</button>`:''}<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditPlayer('${player.id}')" style="margin-left:2px;">✎ Edit</button><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();deactivatePlayer('${player.id}').then(()=>runSearch())" style="margin-left:2px;">${player.Status==='archived'?'Activate':'Archive'}</button></div><span class="chevron">▶</span></div><div class="player-pids">${pidsHtml}</div></div>`;
   });
   html += '</div>';
   document.getElementById('search-results').innerHTML = html;
@@ -1510,6 +1511,7 @@ async function openEditPlayer(id) {
   document.getElementById('edit-player-shirt').value = p.ShirtName || '';
   document.getElementById('edit-player-number').value = p.SquadNumber || '';
   document.getElementById('edit-player-status').value = p.Status || 'active';
+  document.getElementById('edit-player-goalkeeper').checked = p.Goalkeeper || false;
   document.getElementById('edit-player-type').value = p.Type || 'player';
   fillSelect('edit-player-club', CACHE.clubs, c=>({v:c.id,l:c.Name||''}));
   fillSelect('edit-player-season', CACHE.seasons, s=>({v:s.id,l:s.Label||''}));
@@ -1523,14 +1525,15 @@ async function saveEditPlayer() {
   const shirt = document.getElementById('edit-player-shirt').value.trim();
   const number = parseInt(document.getElementById('edit-player-number').value) || null;
   const status = document.getElementById('edit-player-status').value;
+  const goalkeeper = document.getElementById('edit-player-goalkeeper').checked;
   const type = document.getElementById('edit-player-type').value;
   const clubId = document.getElementById('edit-player-club').value;
   const seasonId = document.getElementById('edit-player-season').value;
   if (!name || !shirt) { toast('Name and shirt name required', 'error'); return; }
   try {
-    await atUpdate(TABLES.players, id, {Name:toProperName(name), ShirtName:toShirtName(shirt), SquadNumber:number, Status:status, Type:type, ClubID:clubId, SeasonID:seasonId});
+    await atUpdate(TABLES.players, id, {Name:toProperName(name), ShirtName:toShirtName(shirt), SquadNumber:number, Status:status, Type:type, ClubID:clubId, SeasonID:seasonId, Goalkeeper:goalkeeper});
     const cached = CACHE.players.find(p => p.id === id);
-    if (cached) { cached.Name=name; cached.ShirtName=shirt.toUpperCase(); cached.SquadNumber=number; cached.Status=status; cached.Type=type; cached.ClubID=clubId; cached.SeasonID=seasonId; }
+    if (cached) { cached.Name=name; cached.ShirtName=shirt.toUpperCase(); cached.SquadNumber=number; cached.Status=status; cached.Type=type; cached.ClubID=clubId; cached.SeasonID=seasonId; cached.Goalkeeper=goalkeeper; }
     closeModal('modal-edit-player');
     refreshManage();
     toast(`${name} updated`);
@@ -1849,7 +1852,15 @@ function exportFootballContent(playerIds) {
   const heroList=selected.map(pid=>CACHE.heroes.find(h=>h.PID===pid)).filter(Boolean);
   if(!heroList.length){toast('No hero PIDs found','error');return;}
   const sheets={};
-  heroList.forEach(hero=>{const key=((hero.FontType||'').toLowerCase()+'_'+(hero.KitType||'').toLowerCase());if(!sheets[key])sheets[key]=[];sheets[key].push(hero);});
+  heroList.forEach(hero=>{
+    const player=CACHE.players.find(p=>p.id===hero.PlayerID);
+    const isGK=player?.Goalkeeper||false;
+    const kitLabel=(hero.KitType||'').toLowerCase();
+    // GK players get routed to GK sheet unless already on a GK kit type
+    const effectiveKit=isGK&&!kitLabel.startsWith('gk')?('gk '+kitLabel):kitLabel;
+    const key=(hero.FontType||'').toLowerCase()+'_'+effectiveKit;
+    if(!sheets[key])sheets[key]=[];sheets[key].push(hero);
+  });
   const firstHero=heroList[0];
   const club=firstHero?(CACHE.clubs.find(c=>c.id===firstHero.ClubID)?.Name||''):'';
   const wb=new ExcelJS.Workbook();wb.creator="HeroPID Hub";
@@ -1876,12 +1887,39 @@ function exportFootballContent(playerIds) {
     const ws=wb.addWorksheet(sn,{properties:{defaultColWidth:14},views:[{showGridLines:false}]});
     ws.columns=[{width:22},{width:9},...new Array(16).fill({width:14})];
     rows.forEach((rd,ri)=>{const row=ws.addRow(rd);
-      // Ensure all 18 cells exist so borders render on empty cells
-      for(let _c=1;_c<=18;_c++){if(!row.getCell(_c).value&&row.getCell(_c).value!==0)row.getCell(_c).value=null;}row.eachCell({includeEmpty:true},(cell,cn)=>{if(cn>18)return;cell.border=allB;if(ri===0&&cn===1){cell.font={bold:true,size:14};}
-        else if(ri===4&&cn<=2){cell.font={bold:true,size:11};}
-        else if(ri===8&&cn<=2){cell.font={bold:true,size:11};}
-        else if(ri===6&&cn===2){cell.font={bold:true,size:11};}
-        else if(ri===6&&cn>2&&cell.value){cell.font={bold:true,color:{argb:'FFFFAA00'}};}});});
+      if(ri<4) {
+        // Rows 1-4: no borders, just team name font on row 0
+        if(ri===0) row.getCell(1).font={bold:true,size:14};
+        return;
+      }
+      if(ri===7) return; // blank spacer row 8 - no borders
+      // Apply borders based on row type
+      for(let _c=1;_c<=18;_c++){
+        const cell=row.getCell(_c);
+        if(!cell.value&&cell.value!==0) cell.value=null;
+        const isHeaderRow = ri===4||ri===5; // rows 5,6: all 18 cols bordered
+        const isParentRow = ri===6; // row 7: cols B-R bordered (not A)
+        const isPlayerRow = ri>=8; // rows 9+: only A,B bordered; PIDs no border
+        if(isHeaderRow) {
+          cell.border=allB;
+          if(ri===4&&_c<=2) cell.font={bold:true,size:11};
+        } else if(isParentRow&&_c>=2) {
+          cell.border=allB;
+          if(_c===2) cell.font={bold:true,size:11};
+          else if(cell.value) cell.font={bold:true,color:{argb:'FFFFAA00'}};
+        } else if(isPlayerRow&&_c<=2) {
+          cell.border=allB;
+          if(ri===8) cell.font={bold:true,size:11};
+        }
+      }
+    });
+    // Trailing blank rows A+B bordered down to row 33
+    const lastDataRow = 9 + players.length;
+    for(let tr=lastDataRow+1;tr<=33;tr++){
+      const row=ws.getRow(tr);
+      row.getCell(1).border=allB; row.getCell(1).value=null;
+      row.getCell(2).border=allB; row.getCell(2).value=null;
+    }
   });
   const today=new Date();
   const yy=String(today.getFullYear()).slice(2),mm=String(today.getMonth()+1).padStart(2,'0'),dd=String(today.getDate()).padStart(2,'0');
@@ -2163,7 +2201,7 @@ async function confirmImport() {
     for (let pi=0; pi<newPlayers.length; pi++) {
       const p = newPlayers[pi];
       setProgress(done+pi, total, `Writing player ${pi+1} of ${newPlayers.length}...`);
-      const rec=await atCreate(TABLES.players,{Name:toProperName(p.name),ShirtName:toShirtName(p.shirtName),SquadNumber:p.number,Type:p.type,ClubID:p.clubId,SeasonID:p.seasonId,Status:p.status,MDMActorID:p.mdmId||''});
+      const rec=await atCreate(TABLES.players,{Name:toProperName(p.name),ShirtName:toShirtName(p.shirtName),SquadNumber:p.number,Type:p.type,ClubID:p.clubId,SeasonID:p.seasonId,Status:p.status,MDMActorID:p.mdmId||'',Goalkeeper:p.goalkeeper||false});
       CACHE.players.push({id:rec.id,...rec.fields});
       playerMap[p.name+'_'+p.clubId+'_'+p.seasonId]=rec.id;
     }
@@ -2569,7 +2607,7 @@ init();
       <div class="form-row"><div class="form-group"><label class="form-label">Full Name *</label><input class="form-input" id="edit-player-name" /></div><div class="form-group"><label class="form-label">Shirt Name *</label><input class="form-input" id="edit-player-shirt" /></div></div>
       <div class="form-row"><div class="form-group"><label class="form-label">Squad Number</label><input class="form-input" id="edit-player-number" type="number" /></div><div class="form-group"><label class="form-label">Player Type</label><select class="form-select" id="edit-player-type"><option value="player">Player</option><option value="variant">Variant</option></select></div></div>
       <div class="form-row"><div class="form-group"><label class="form-label">Club</label><select class="form-select" id="edit-player-club"></select></div><div class="form-group"><label class="form-label">Season</label><select class="form-select" id="edit-player-season"></select></div></div>
-      <div class="form-row"><div class="form-group"><label class="form-label">Status</label><select class="form-select" id="edit-player-status"><option value="active">Active</option><option value="archived">Archived</option></select></div></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Goalkeeper</label><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><input type="checkbox" id="edit-player-goalkeeper" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;"><label style="font-size:13px;color:var(--text2);cursor:pointer;" for="edit-player-goalkeeper">This player is a goalkeeper</label></div></div></div><div class="form-row"><div class="form-group"><label class="form-label">Status</label><select class="form-select" id="edit-player-status"><option value="active">Active</option><option value="archived">Archived</option></select></div></div>
     </div>
     <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-edit-player')">Cancel</button><button class="btn btn-primary" onclick="saveEditPlayer()">Save Changes</button></div>
   </div>
