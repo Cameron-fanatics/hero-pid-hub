@@ -1845,8 +1845,8 @@ function exportFootballContent(playerIds) {
   heroList.forEach(hero=>{const key=((hero.FontType||'').toLowerCase()+'_'+(hero.KitType||'').toLowerCase()).replace(/ /g,'');if(!sheets[key])sheets[key]=[];sheets[key].push(hero);});
   const firstHero=heroList[0];
   const club=firstHero?(CACHE.clubs.find(c=>c.id===firstHero.ClubID)?.Name||''):'';
-  const wb=new ExcelJS.Workbook();
-  const thin={style:'thin',color:{argb:'FFCCCCCC'}};const allB={top:thin,left:thin,bottom:thin,right:thin};
+  const wb=new ExcelJS.Workbook();wb.creator="HeroPID Hub";
+  const thin={style:'thin',color:{argb:'FFD0D0D0'}};const allB={top:thin,left:thin,bottom:thin,right:thin};
   Object.entries(sheets).forEach(([key,heroes])=>{
     const sn=FOOTBALL_SHEET_NAMES[key]||key;
     const kt=(heroes[0]?.KitType||'').toLowerCase(),ft=(heroes[0]?.FontType||'').toLowerCase();
@@ -1866,9 +1866,11 @@ function exportFootballContent(playerIds) {
       ['Name Plate','Number',...new Array(16).fill(null)],
     ];
     players.forEach(({sn:sn2,num,hs})=>{const row=new Array(18).fill(null);row[0]=sn2;row[1]=num===9999?null:num;hs.forEach(h=>{const ci=FOOTBALL_COL_MAP[h.GarmentType];if(ci!==undefined)row[ci]=h.PID?Number(h.PID):null;if(h.GarmentType==='infants')row[BABY_COL]=h.PID?Number(h.PID):null;});rows.push(row);});
-    const ws=wb.addWorksheet(sn);
+    const ws=wb.addWorksheet(sn,{properties:{defaultColWidth:14}});
     ws.columns=[{width:22},{width:9},...new Array(16).fill({width:14})];
-    rows.forEach((rd,ri)=>{const row=ws.addRow(rd);row.eachCell({includeEmpty:true},(cell,cn)=>{if(cn>18)return;cell.border=allB;if(ri===0&&cn===1)cell.font={bold:true,size:14};else if([4,5,8].includes(ri))cell.font={bold:true,size:11};else if(ri===6&&cn>1&&cell.value)cell.font={bold:true,color:{argb:'FFFFAA00'}};});});
+    rows.forEach((rd,ri)=>{const row=ws.addRow(rd);
+      // Ensure all 18 cells exist so borders render on empty cells
+      for(let _c=1;_c<=18;_c++){if(!row.getCell(_c).value&&row.getCell(_c).value!==0)row.getCell(_c).value=null;}row.eachCell({includeEmpty:true},(cell,cn)=>{if(cn>18)return;cell.border=allB;if(ri===0&&cn===1)cell.font={bold:true,size:14};else if([4,5,8].includes(ri))cell.font={bold:true,size:11};else if(ri===6&&cn>1&&cell.value)cell.font={bold:true,color:{argb:'FFFFAA00'}};});});
   });
   const today=new Date();
   const yy=String(today.getFullYear()).slice(2),mm=String(today.getMonth()+1).padStart(2,'0'),dd=String(today.getDate()).padStart(2,'0');
