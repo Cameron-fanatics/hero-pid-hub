@@ -2157,7 +2157,7 @@ function parseImportWorkbook(wb, clubId, seasonId, filename) {
   const club = CACHE.clubs.find(c=>c.id===clubId);
   const season = CACHE.seasons.find(s=>s.id===seasonId);
   importData = {clubId,seasonId,players:[],parents:[],heroes:[],sheets:[],sectionsFound:[]};
-  const skipSheets = ['sheet1','roster','data','ref'];
+  const skipSheets = ['roster','data','ref','sheet2'];
   wb.SheetNames.forEach(sheetName => {
     if (skipSheets.includes(sheetName.toLowerCase())) return;
     const ws = wb.Sheets[sheetName];
@@ -2249,6 +2249,7 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
 
   // Walk through all rows, handling multiple parent+header+player sections (outfield then GK)
   let currentParentPids = {}; // col -> pid string
+  let sectionParentPids = {}; // the main Blank row PIDs for this section (not GK Plain)
   let nameCol=-1, numberCol=-1, shirtCol=-1, actorIdCol=-1;
   let inPlayerSection = false;
 
@@ -2259,7 +2260,7 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
     if (isParentRowVal(row)) {
       // Capture parent PIDs for this section (Blank row or GK Plain row)
       currentParentPids = {};
-      row.forEach((v, c) => { if (isPidVal(v)) currentParentPids[c] = String(v); });
+      row.forEach((v, c) => { if (isPidVal(v)) currentParentPids[c] = String(parseInt(String(v))); });
       // Register parent PIDs
       Object.entries(currentParentPids).forEach(([col, pid]) => {
         const garmentType = garmentCols[col];
@@ -2267,7 +2268,13 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
           importData.parents.push({pid, clubId, seasonId, kitType, garmentType});
         }
       });
+      // Keep sectionParentPids as the main Blank row (not GK Plain)
+      const rowStr = row.map(v=>String(v||'').toLowerCase()).join('|');
+      if (rowStr.includes('blank') || rowStr.includes('hp pid only')) {
+        sectionParentPids = {...currentParentPids};
+      }
       inPlayerSection = false;
+      nameCol=-1; numberCol=-1; shirtCol=-1; actorIdCol=-1;
       continue;
     }
 
@@ -2285,7 +2292,16 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
       continue;
     }
 
-    if (!inPlayerSection || nameCol===-1) continue;
+    if (!inPlayerSection && nameCol===-1) {
+      // Headerless section: if we have section parent PIDs set and this row has a name + PIDs, treat as player
+      const hasPids = row.some(v => isPidVal(v));
+      const hasName = row[0] && String(row[0]).trim().length > 1;
+      if (!hasPids || !hasName || Object.keys(sectionParentPids).length === 0) continue;
+      // Infer column positions from first such row
+      nameCol=0; shirtCol=2; numberCol=3; actorIdCol=-1;
+      currentParentPids = sectionParentPids;
+      inPlayerSection = true;
+    }
 
     const rawName = String(row[nameCol]||'').trim();
     if (!rawName) continue;
@@ -2294,7 +2310,7 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
 
     const shirtName = shirtCol!==-1 ? String(row[shirtCol]||'').trim()||rawName.toUpperCase() : rawName.toUpperCase();
     const number = numberCol!==-1 ? (parseInt(row[numberCol])||null) : null;
-    const mdmId = actorIdCol!==-1 ? String(row[actorIdCol]||'').trim() : '';
+    const mdmId = actorIdCol!==-1 ? (String(row[actorIdCol]||'').startsWith('=') ? '' : String(row[actorIdCol]||'').trim()) : '';
     const isVariant = isVariantName(rawName);
     const type = isVariant ? 'variant' : 'player';
 
