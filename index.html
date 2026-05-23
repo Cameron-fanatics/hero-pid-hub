@@ -2223,88 +2223,93 @@ function detectFontType(sheetName) {
 function isVariantName(name) { return ['champions','winners','blank','gk plain','plain gk'].some(v=>name.toLowerCase().includes(v)); }
 
 function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, seasonId, garmentHint) {
-  // Find the parent PID row (contains "blank" or "hp pid only")
-  let parentRowIdx = -1, headerRowIdx = -1;
-  for (let i = startRow; i < endRow; i++) {
-    const row = rows[i];
-    const rowStr = row.map(v => String(v||'').toLowerCase()).join('|');
-    if (rowStr.includes('blank') || rowStr.includes('hp pid only')) { parentRowIdx = i; }
-    if (rowStr.includes('actor name') || rowStr.includes('actor id') || rowStr.includes('back of shirt')) { headerRowIdx = i; break; }
-  }
-  if (headerRowIdx === -1) return;
+  const isPidVal = v => { try { const n=parseInt(String(v)); return n>=200000000&&n<=299999999; } catch(e){return false;} };
+  const isParentRowVal = row => { const s=row.map(v=>String(v||'').toLowerCase()).join('|'); return s.includes('blank')||s.includes('hp pid only')||s.includes('gk plain')||s.includes('plain gk'); };
+  const isHeaderRowVal = row => { const s=row.map(v=>String(v||'').toLowerCase()).join('|'); return s.includes('actor name')||s.includes('back of shirt')||s.includes('actor id'); };
+  const isSkipRow = row => { const s=row.map(v=>String(v||'').toLowerCase()).join('|'); return s.includes('assembl')||s.includes('roster name')||s.includes('shorts'); };
 
-  // Build garment column map from garmentHint or by scanning header area
-  const garmentCols = {}; // colIndex -> garmentType
+  // Build garment column map from rows above first header
+  const garmentCols = {}; // 0-based col index -> garmentType
+  let firstHeaderIdx = -1;
+  for (let i = startRow; i < endRow; i++) {
+    if (isHeaderRowVal(rows[i])) { firstHeaderIdx = i; break; }
+  }
+  const scanEnd = firstHeaderIdx !== -1 ? firstHeaderIdx : Math.min(startRow + 6, endRow);
   if (garmentHint && garmentHint.length > 0) {
-    garmentHint.forEach(g => { garmentCols[g.col] = normaliseGarment(g.label); });
+    garmentHint.forEach(g => { const gt = normaliseGarment(g.label); if(gt&&gt!=='other') garmentCols[g.col] = gt; });
   } else {
-    // Scan rows above header for garment labels
-    for (let i = Math.max(startRow, headerRowIdx - 4); i < headerRowIdx; i++) {
+    for (let i = startRow; i < scanEnd; i++) {
       rows[i].forEach((v, c) => {
         if (!v) return;
-        const g = normaliseGarment(String(v));
-        if (g && g !== 'other') garmentCols[c] = g;
+        const gt = normaliseGarment(String(v));
+        if (gt && gt !== 'other') garmentCols[c] = gt;
       });
     }
   }
 
-  // Extract parent PIDs
-  if (parentRowIdx !== -1) {
-    const parentRow = rows[parentRowIdx];
-    Object.entries(garmentCols).forEach(([col, garmentType]) => {
-      const v = parentRow[col];
-      if (v && /^\d{9}$/.test(String(v))) {
-        const pid = String(v);
-        if (!importData.parents.find(p => p.pid === pid)) {
-          importData.parents.push({ pid, clubId, seasonId, kitType, garmentType });
-        }
-      }
-    });
-  }
+  // Walk through all rows, handling multiple parent+header+player sections (outfield then GK)
+  let currentParentPids = {}; // col -> pid string
+  let nameCol=-1, numberCol=-1, shirtCol=-1, actorIdCol=-1;
+  let inPlayerSection = false;
 
-  // Determine column indices from header row
-  const headerRow = rows[headerRowIdx];
-  let nameCol = -1, numberCol = -1, shirtCol = -1, actorIdCol = -1;
-  headerRow.forEach((v, i) => {
-    const vl = String(v||'').toLowerCase().trim();
-    if (vl === 'actor name' || vl === 'name') nameCol = i;
-    if (vl === 'actor id') actorIdCol = i;
-    if (vl === 'back of shirt name' || vl === 'shirt name' || vl === 'jerseyname') shirtCol = i;
-    if (vl === 'number' || vl === 'jersey number' || vl === '#') numberCol = i;
-  });
-  if (nameCol === -1) return;
-
-  // Parse player rows
-  for (let i = headerRowIdx + 1; i < endRow; i++) {
+  for (let i = startRow; i < endRow; i++) {
     const row = rows[i];
+    if (isSkipRow(row)) continue;
+
+    if (isParentRowVal(row)) {
+      // Capture parent PIDs for this section (Blank row or GK Plain row)
+      currentParentPids = {};
+      row.forEach((v, c) => { if (isPidVal(v)) currentParentPids[c] = String(v); });
+      // Register parent PIDs
+      Object.entries(currentParentPids).forEach(([col, pid]) => {
+        const garmentType = garmentCols[col];
+        if (garmentType && !importData.parents.find(p=>p.pid===pid)) {
+          importData.parents.push({pid, clubId, seasonId, kitType, garmentType});
+        }
+      });
+      inPlayerSection = false;
+      continue;
+    }
+
+    if (isHeaderRowVal(row)) {
+      // Reset column positions from this header row
+      nameCol=-1; numberCol=-1; shirtCol=-1; actorIdCol=-1;
+      row.forEach((v, c) => {
+        const vl = String(v||'').toLowerCase().trim();
+        if (vl==='actor name'||vl==='name') nameCol=c;
+        if (vl==='actor id') actorIdCol=c;
+        if (vl==='back of shirt name'||vl==='shirt name'||vl==='jerseyname') shirtCol=c;
+        if (vl==='number'||vl==='jersey number'||vl===' number') numberCol=c;
+      });
+      inPlayerSection = true;
+      continue;
+    }
+
+    if (!inPlayerSection || nameCol===-1) continue;
+
     const rawName = String(row[nameCol]||'').trim();
     if (!rawName) continue;
     const nameLower = rawName.toLowerCase();
-    // Skip header-like or assembly rows
-    if (['actor name','actor id','name','assembley name','assembly name','font type'].includes(nameLower)) continue;
-    if (nameLower.includes('assembl') || nameLower.includes('roster')) continue;
+    if (['actor name','actor id','name','font type','assembley name','assembly name'].includes(nameLower)) continue;
 
-    const shirtName = shirtCol !== -1 ? String(row[shirtCol]||'').trim() : rawName.toUpperCase();
-    const number = numberCol !== -1 ? (parseInt(row[numberCol])||null) : null;
-    const mdmId = actorIdCol !== -1 ? String(row[actorIdCol]||'').trim() : '';
+    const shirtName = shirtCol!==-1 ? String(row[shirtCol]||'').trim()||rawName.toUpperCase() : rawName.toUpperCase();
+    const number = numberCol!==-1 ? (parseInt(row[numberCol])||null) : null;
+    const mdmId = actorIdCol!==-1 ? String(row[actorIdCol]||'').trim() : '';
     const isVariant = isVariantName(rawName);
     const type = isVariant ? 'variant' : 'player';
-    const status = 'active';
 
-    // Add player if not already queued
-    if (!importData.players.find(p => p.name === rawName && p.clubId === clubId && p.seasonId === seasonId)) {
-      importData.players.push({ name: rawName, shirtName: shirtName||rawName.toUpperCase(), number, type, clubId, seasonId, status, mdmId, goalkeeper: false, fontType });
+    if (!importData.players.find(p=>p.name===rawName&&p.clubId===clubId&&p.seasonId===seasonId)) {
+      importData.players.push({name:rawName, shirtName, number, type, clubId, seasonId, status:'active', mdmId, goalkeeper:false, fontType});
     }
 
-    // Add hero PIDs for each garment column
-    Object.entries(garmentCols).forEach(([col, garmentType]) => {
-      const v = row[col];
-      if (!v || !/^\d{9}$/.test(String(v))) return;
+    // Add hero PIDs
+    row.forEach((v, c) => {
+      if (!isPidVal(v)) return;
       const pid = String(v);
-      if (importData.heroes.find(h => h.pid === pid)) return;
-      // Find parent PID for this garment
-      const parentPid = parentRowIdx !== -1 ? String(rows[parentRowIdx][col]||'') : '';
-      importData.heroes.push({ pid, playerName: rawName, clubId, seasonId, fontType, garmentType, garmentRaw: garmentType, kitType, status: 'active', parentPid });
+      if (importData.heroes.find(h=>h.pid===pid)) return;
+      const garmentType = garmentCols[c] || 'other';
+      const parentPid = currentParentPids[c] || '';
+      importData.heroes.push({pid, playerName:rawName, clubId, seasonId, fontType, garmentType, garmentRaw:garmentType, kitType, status:'active', parentPid});
     });
   }
 }
