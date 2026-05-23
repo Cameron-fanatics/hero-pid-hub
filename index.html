@@ -2322,19 +2322,20 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
 
     const existingPlayer = importData.players.find(p=>p.name===rawName&&p.clubId===clubId&&p.seasonId===seasonId);
 
-    // If in GK section, check if this row's PID cols match the GK parent cols
-    // Outfield players have PIDs in many more cols than just the GK parent cols
+    // Determine GK status: player is a GK if ALL their PIDs fall within the GK parent cols
+    // This catches GKs that appear outside the immediate GK section (e.g. late additions)
+    const rowPidCols = row.reduce((acc, v, c) => { if (isPidVal(v)) acc.push(c); return acc; }, []);
+    const gkParentCols = new Set(Object.keys(currentParentPids).map(Number));
+    // A player is a GK if they have PIDs and all PIDs are in GK parent cols
+    // (sectionParentPids holds the main Blank row cols for reference)
+    const allPidColsAreGK = rowPidCols.length > 0 && rowPidCols.every(c => gkParentCols.has(c));
+    const isGK = inGKSection || allPidColsAreGK;
     if (inGKSection) {
-      const rowPidCols = new Set(row.reduce((acc, v, c) => { if (isPidVal(v)) acc.push(c); return acc; }, []));
-      const gkParentCols = new Set(Object.keys(currentParentPids).map(Number));
-      // If the player has PIDs outside the GK parent col range, they're outfield
-      const hasOnlyGKCols = [...rowPidCols].every(c => gkParentCols.has(c));
-      if (!hasOnlyGKCols) inGKSection = false;
+      if (!allPidColsAreGK) inGKSection = false;
     }
     if (!existingPlayer) {
-      importData.players.push({name:rawName, shirtName, number, type, clubId, seasonId, status:'active', mdmId, goalkeeper:inGKSection, fontType});
-    } else if (inGKSection && !existingPlayer.goalkeeper) {
-      // Player already added as outfield but is also in GK section — mark as GK
+      importData.players.push({name:rawName, shirtName, number, type, clubId, seasonId, status:'active', mdmId, goalkeeper:isGK, fontType});
+    } else if (isGK && !existingPlayer.goalkeeper) {
       existingPlayer.goalkeeper = true;
     }
 
