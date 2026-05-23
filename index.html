@@ -420,6 +420,9 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
   <div class="topbar"><div class="page-title">Data Clean-up</div></div>
   <div class="content">
 
+    <!-- DATA HEALTH BANNER -->
+    <div id="data-health-banner" style="display:none;border:1px solid;border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;margin-bottom:16px;"></div>
+
     <!-- CORRUPTED PLAYERS (moved from Manage) -->
     <div class="card" style="margin-bottom:16px;">
       <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Corrupted Player Names</div>
@@ -1276,7 +1279,9 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
     }
     const cardKey = key;
     const allCardPids = heroes.map(h=>h.PID).filter(Boolean);
-    html += `<div class="player-card" data-key="${cardKey}" data-pids="${allCardPids.join(',')}"><div class="player-header" onclick="togglePlayer(this)"><label class="pid-select-check" onclick="event.stopPropagation()" style="display:flex;align-items:center;padding:0 8px 0 4px;cursor:pointer;"><input type="checkbox" class="card-select-chk" data-key="${cardKey}" data-pids="${allCardPids.join(',')}" onchange="onCardSelectChange(this)" style="cursor:pointer;accent-color:var(--accent);width:14px;height:14px;"></label><div class="player-avatar">${initials}</div><div class="player-info"><div class="player-name">${player.Name}</div><div class="player-meta">${player.ShirtName||''}${player.SquadNumber?' · #'+player.SquadNumber:''}${club?' · '+(club.Name||club.name):''}${season?' · '+(season.Label||season.label):''}</div></div><div class="player-badges">${statusBadge}${typeBadge}${gkBadge}${club?`<span class="badge badge-club">${club.Name||club.name}</span>`:''}${season?`<span class="badge badge-season">${season.Label||season.label}</span>`:''}<span style="font-size:12px;color:var(--text3);margin-left:4px;">${heroes.length} PIDs</span>${allPids?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();copyAll('${allPids}',this)">⎘ Copy all</button>`:''}<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditPlayer('${player.id}')" style="margin-left:2px;">✎ Edit</button><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();deactivatePlayer('${player.id}').then(()=>runSearch())" style="margin-left:2px;">${player.Status==='archived'?'Activate':'Archive'}</button></div><span class="chevron">▶</span></div><div class="player-pids">${pidsHtml}</div></div>`;
+    const incompletePlayer = isEntryIncomplete('player', player.id);
+    const incompleteBadge = incompletePlayer ? `<span class="badge" style="background:rgba(252,129,129,0.15);color:#fc8181;border:1px solid rgba(252,129,129,0.3);" title="Missing data — see Data Clean-up">⚠ Incomplete</span>` : '';
+    html += `<div class="player-card" data-key="${cardKey}" data-pids="${allCardPids.join(',')}"><div class="player-header" onclick="togglePlayer(this)"><label class="pid-select-check" onclick="event.stopPropagation()" style="display:flex;align-items:center;padding:0 8px 0 4px;cursor:pointer;"><input type="checkbox" class="card-select-chk" data-key="${cardKey}" data-pids="${allCardPids.join(',')}" onchange="onCardSelectChange(this)" style="cursor:pointer;accent-color:var(--accent);width:14px;height:14px;"></label><div class="player-avatar">${initials}</div><div class="player-info"><div class="player-name">${player.Name}</div><div class="player-meta">${player.ShirtName||''}${player.SquadNumber?' · #'+player.SquadNumber:''}${club?' · '+(club.Name||club.name):''}${season?' · '+(season.Label||season.label):''}</div></div><div class="player-badges">${statusBadge}${typeBadge}${gkBadge}${incompleteBadge}${club?`<span class="badge badge-club">${club.Name||club.name}</span>`:''}${season?`<span class="badge badge-season">${season.Label||season.label}</span>`:''}<span style="font-size:12px;color:var(--text3);margin-left:4px;">${heroes.length} PIDs</span>${allPids?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();copyAll('${allPids}',this)">⎘ Copy all</button>`:''}<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditPlayer('${player.id}')" style="margin-left:2px;">✎ Edit</button><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();deactivatePlayer('${player.id}').then(()=>runSearch())" style="margin-left:2px;">${player.Status==='archived'?'Activate':'Archive'}</button></div><span class="chevron">▶</span></div><div class="player-pids">${pidsHtml}</div></div>`;
   });
   html += '</div>';
   document.getElementById('search-results').innerHTML = html;
@@ -1407,6 +1412,16 @@ function updateSelectionUI() {
 function exportSelectedPids() {
   const selected = window._selectedPids || new Set();
   if (selected.size === 0) { toast('No PIDs selected', 'error'); return; }
+  // Check for incomplete heroes in selection
+  const incompleteHeroes = [];
+  selected.forEach(pid => {
+    const hero = CACHE.heroes.find(h => h.PID === pid);
+    if (hero && isEntryIncomplete('hero', hero.id)) incompleteHeroes.push(pid);
+  });
+  if (incompleteHeroes.length > 0) {
+    toast(`${incompleteHeroes.length} selected hero PID${incompleteHeroes.length !== 1 ? 's have' : ' has'} missing data — run Export Incomplete on the Data Clean-up tab to fix before exporting.`, 'error');
+    return;
+  }
   const rows = [];
   selected.forEach(pid => {
     const hero = CACHE.heroes.find(h => h.PID === pid);
@@ -1848,6 +1863,12 @@ const FOOTBALL_SHEET_NAMES = {
 function exportFootballContent(playerIds) {
   if(typeof ExcelJS==='undefined'){toast('ExcelJS loading, try again','error');return;}
   const selected=playerIds||[...(window._selectedPids||new Set())];
+  // Check for incomplete players in selection
+  const incompleteSel = selected.filter(pid => isEntryIncomplete('player', pid));
+  if (incompleteSel.length > 0) {
+    toast(`${incompleteSel.length} selected player${incompleteSel.length !== 1 ? 's have' : ' has'} missing data — run Export Incomplete Players on the Data Clean-up tab to fix before exporting.`, 'error');
+    return;
+  }
   if(!selected.length){toast('No PIDs selected','error');return;}
   const heroList=selected.map(pid=>CACHE.heroes.find(h=>h.PID===pid)).filter(Boolean);
   if(!heroList.length){toast('No hero PIDs found','error');return;}
@@ -2040,10 +2061,62 @@ function refreshImportSelects() {
   fillSelect('creation-season', CACHE.seasons, s=>({v:s.id,l:s.Label||''}));
 }
 
+function calcDataHealth() {
+  const incompletePlayers = CACHE.players.filter(p => !p.SquadNumber || !p.ShirtName).length;
+  const incompleteParents = CACHE.parents.filter(p => !p.PID || (isUSSport(p.ClubID) && !p.CustomSKU)).length;
+  const incompleteHeroes = CACHE.heroes.filter(h => !h.ParentPIDID || !h.KitType || !h.GarmentType || (isUSSport(h.ClubID) && (!h.ProductTitle || !h.Gender || !h.JerseyColour))).length;
+  const total = CACHE.players.length + CACHE.parents.length + CACHE.heroes.length;
+  const totalIncomplete = incompletePlayers + incompleteParents + incompleteHeroes;
+  const pct = total > 0 ? (totalIncomplete / total) * 100 : 0;
+  const level = totalIncomplete === 0 ? 'green' : pct <= 2 ? 'amber' : 'red';
+  const colour = level === 'green' ? 'var(--green)' : level === 'amber' ? 'var(--amber)' : 'var(--red,#fc8181)';
+  // Update nav icon colour
+  const navCleanup = document.getElementById('nav-cleanup');
+  if (navCleanup) {
+    const icon = navCleanup.querySelector('.icon');
+    if (icon) icon.style.color = totalIncomplete === 0 ? '' : colour;
+  }
+  // Update cleanup page banner
+  const banner = document.getElementById('data-health-banner');
+  if (banner) {
+    if (totalIncomplete === 0) {
+      banner.style.display = 'none';
+    } else {
+      banner.style.display = 'block';
+      banner.style.borderColor = colour;
+      banner.style.background = level === 'red' ? 'rgba(252,129,129,0.08)' : level === 'amber' ? 'rgba(255,179,64,0.08)' : 'rgba(72,199,142,0.08)';
+      const icon = level === 'red' ? '🔴' : '🟡';
+      const parts = [];
+      if (incompletePlayers > 0) parts.push(`${incompletePlayers} player${incompletePlayers !== 1 ? 's' : ''}`);
+      if (incompleteParents > 0) parts.push(`${incompleteParents} parent PID${incompleteParents !== 1 ? 's' : ''}`);
+      if (incompleteHeroes > 0) parts.push(`${incompleteHeroes} hero PID${incompleteHeroes !== 1 ? 's' : ''}`);
+      banner.innerHTML = `<span style="color:${colour};font-weight:600;">${icon} ${totalIncomplete} incomplete entr${totalIncomplete !== 1 ? 'ies' : 'y'} (${pct.toFixed(1)}%)</span><span style="color:var(--text2);margin-left:8px;">— ${parts.join(', ')} need attention. Use the exports below to find and fix them.</span>`;
+    }
+  }
+  return { totalIncomplete, incompletePlayers, incompleteParents, incompleteHeroes, level };
+}
+
+function isEntryIncomplete(type, id) {
+  if (type === 'player') {
+    const p = CACHE.players.find(x => x.id === id);
+    return p && (!p.SquadNumber || !p.ShirtName);
+  }
+  if (type === 'parent') {
+    const p = CACHE.parents.find(x => x.id === id);
+    return p && (!p.PID || (isUSSport(p.ClubID) && !p.CustomSKU));
+  }
+  if (type === 'hero') {
+    const h = CACHE.heroes.find(x => x.id === id);
+    return h && (!h.ParentPIDID || !h.KitType || !h.GarmentType || (isUSSport(h.ClubID) && (!h.ProductTitle || !h.Gender || !h.JerseyColour)));
+  }
+  return false;
+}
+
 function updateStats() {
   document.getElementById('stat-hero').textContent = CACHE.heroes.length.toLocaleString();
   document.getElementById('stat-players').textContent = CACHE.players.length.toLocaleString();
   document.getElementById('stat-clubs').textContent = CACHE.clubs.length.toLocaleString();
+  calcDataHealth();
 }
 
 // ─── IMPORT ───────────────────────────────────────────────────────────────────
@@ -2217,7 +2290,7 @@ async function confirmImport() {
         const playerId=playerMap[h.playerName+'_'+h.clubId+'_'+h.seasonId];
         const parent=CACHE.parents.find(p=>p.PID===h.parentPid);
         return {PID:h.pid,PlayerID:playerId||'',ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.garmentRaw,KitType:h.kitType,Status:h.status,ParentPIDID:parent?parent.id:''};
-      }).filter(h=>h.PlayerID);
+      });
       // Write in batches of 10 with progress
       for (let i=0; i<heroFields.length; i+=10) {
         setProgress(done+i, total, `Writing hero PIDs ${done+i+1}–${Math.min(done+i+10,total)} of ${total}...`);
@@ -2232,7 +2305,20 @@ async function confirmImport() {
     updateStats(); refreshFilterSelects();
     const _importedPlayerList = d.players.map(p=>({name:p.name,clubId:p.clubId,seasonId:p.seasonId}));
     clearImport();
-    toast(`Import complete — ${newHeroes.length} hero PIDs, ${newPlayers.length} players added`);
+    // Check if import introduced any incomplete entries
+    const health = calcDataHealth();
+    if (health.totalIncomplete > 0) {
+      const parts = [];
+      if (health.incompletePlayers > 0) parts.push(`${health.incompletePlayers} player${health.incompletePlayers !== 1 ? 's' : ''}`);
+      if (health.incompleteParents > 0) parts.push(`${health.incompleteParents} parent PID${health.incompleteParents !== 1 ? 's' : ''}`);
+      if (health.incompleteHeroes > 0) parts.push(`${health.incompleteHeroes} hero PID${health.incompleteHeroes !== 1 ? 's' : ''}`);
+      const msg = `Import complete — ${newHeroes.length} hero PIDs, ${newPlayers.length} players added.\n\n⚠ ${parts.join(', ')} imported with missing data. Visit the Data Clean-up tab and run the relevant exports to fill in the gaps before using the tool.`;
+      setTimeout(() => {
+        if (confirm(msg + '\n\nGo to Data Clean-up now?')) showPage('cleanup');
+      }, 300);
+    } else {
+      toast(`Import complete — ${newHeroes.length} hero PIDs, ${newPlayers.length} players added`);
+    }
     // For storage sheets numbers come from file — just show modal to let user verify
     // Only show if any players are missing numbers
     const _missingNums = _importedPlayerList.filter(p => {
