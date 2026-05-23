@@ -2322,17 +2322,14 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
 
     const existingPlayer = importData.players.find(p=>p.name===rawName&&p.clubId===clubId&&p.seasonId===seasonId);
 
-    // Determine GK status: player is a GK if ALL their PIDs fall within the GK parent cols
-    // This catches GKs that appear outside the immediate GK section (e.g. late additions)
+    // Determine GK status by checking if ALL player's PID cols are within GK parent cols
     const rowPidCols = row.reduce((acc, v, c) => { if (isPidVal(v)) acc.push(c); return acc; }, []);
     const gkParentCols = new Set(Object.keys(currentParentPids).map(Number));
-    // A player is a GK if they have PIDs and all PIDs are in GK parent cols
-    // (sectionParentPids holds the main Blank row cols for reference)
     const allPidColsAreGK = rowPidCols.length > 0 && rowPidCols.every(c => gkParentCols.has(c));
-    const isGK = inGKSection || allPidColsAreGK;
-    if (inGKSection) {
-      if (!allPidColsAreGK) inGKSection = false;
-    }
+    // Reset inGKSection first if this player has outfield PIDs
+    if (inGKSection && !allPidColsAreGK) inGKSection = false;
+    // Player is GK if their PIDs exclusively match GK parent cols (works for scattered GKs like Chevalier)
+    const isGK = allPidColsAreGK && gkParentCols.size > 0;
     if (!existingPlayer) {
       importData.players.push({name:rawName, shirtName, number, type, clubId, seasonId, status:'active', mdmId, goalkeeper:isGK, fontType});
     } else if (isGK && !existingPlayer.goalkeeper) {
