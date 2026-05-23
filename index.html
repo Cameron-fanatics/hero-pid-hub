@@ -2292,6 +2292,8 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
         if (vl==='back of shirt name'||vl==='shirt name'||vl==='jerseyname') shirtCol=c;
         if (vl==='number'||vl==='jersey number'||vl===' number') numberCol=c;
       });
+      // Only stay in GK section if the immediately preceding parent row was GK Plain
+      // (inGKSection was set by the GK Plain row — keep it for this header's players only)
       inPlayerSection = true;
       continue;
     }
@@ -2319,6 +2321,16 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
     const type = isVariant ? 'variant' : 'player';
 
     const existingPlayer = importData.players.find(p=>p.name===rawName&&p.clubId===clubId&&p.seasonId===seasonId);
+
+    // If in GK section, check if this row's PID cols match the GK parent cols
+    // Outfield players have PIDs in many more cols than just the GK parent cols
+    if (inGKSection) {
+      const rowPidCols = new Set(row.reduce((acc, v, c) => { if (isPidVal(v)) acc.push(c); return acc; }, []));
+      const gkParentCols = new Set(Object.keys(currentParentPids).map(Number));
+      // If the player has PIDs outside the GK parent col range, they're outfield
+      const hasOnlyGKCols = [...rowPidCols].every(c => gkParentCols.has(c));
+      if (!hasOnlyGKCols) inGKSection = false;
+    }
     if (!existingPlayer) {
       importData.players.push({name:rawName, shirtName, number, type, clubId, seasonId, status:'active', mdmId, goalkeeper:inGKSection, fontType});
     } else if (inGKSection && !existingPlayer.goalkeeper) {
