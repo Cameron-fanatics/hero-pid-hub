@@ -2252,6 +2252,7 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
   let sectionParentPids = {}; // the main Blank row PIDs for this section (not GK Plain)
   let nameCol=-1, numberCol=-1, shirtCol=-1, actorIdCol=-1;
   let inPlayerSection = false;
+  let inGKSection = false; // true when last parent row was GK Plain
 
   for (let i = startRow; i < endRow; i++) {
     const row = rows[i];
@@ -2272,6 +2273,9 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
       const rowStr = row.map(v=>String(v||'').toLowerCase()).join('|');
       if (rowStr.includes('blank') || rowStr.includes('hp pid only')) {
         sectionParentPids = {...currentParentPids};
+        inGKSection = false;
+      } else if (rowStr.includes('gk plain') || rowStr.includes('plain gk')) {
+        inGKSection = true;
       }
       inPlayerSection = false;
       nameCol=-1; numberCol=-1; shirtCol=-1; actorIdCol=-1;
@@ -2314,8 +2318,12 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
     const isVariant = isVariantName(rawName);
     const type = isVariant ? 'variant' : 'player';
 
-    if (!importData.players.find(p=>p.name===rawName&&p.clubId===clubId&&p.seasonId===seasonId)) {
-      importData.players.push({name:rawName, shirtName, number, type, clubId, seasonId, status:'active', mdmId, goalkeeper:false, fontType});
+    const existingPlayer = importData.players.find(p=>p.name===rawName&&p.clubId===clubId&&p.seasonId===seasonId);
+    if (!existingPlayer) {
+      importData.players.push({name:rawName, shirtName, number, type, clubId, seasonId, status:'active', mdmId, goalkeeper:inGKSection, fontType});
+    } else if (inGKSection && !existingPlayer.goalkeeper) {
+      // Player already added as outfield but is also in GK section — mark as GK
+      existingPlayer.goalkeeper = true;
     }
 
     // Add hero PIDs
