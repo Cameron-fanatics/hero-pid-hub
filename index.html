@@ -2156,7 +2156,7 @@ function detectKitFromColA(val) {
 function parseImportWorkbook(wb, clubId, seasonId, filename) {
   const club = CACHE.clubs.find(c=>c.id===clubId);
   const season = CACHE.seasons.find(s=>s.id===seasonId);
-  importData = {clubId,seasonId,players:[],parents:[],heroes:[],sheets:[],sectionsFound:[]};
+  importData = {clubId,seasonId,filename,players:[],parents:[],heroes:[],sheets:[],sectionsFound:[]};
   const skipSheets = ['roster','data','ref','sheet2'];
   wb.SheetNames.forEach(sheetName => {
     if (skipSheets.includes(sheetName.toLowerCase())) return;
@@ -2250,6 +2250,7 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
   // Walk through all rows, handling multiple parent+header+player sections (outfield then GK)
   let currentParentPids = {}; // col -> pid string
   let sectionParentPids = {}; // the main Blank row PIDs for this section (not GK Plain)
+  let gkPlainCols = new Set(); // cols from the most recent GK Plain row — used for GK detection
   let nameCol=-1, numberCol=-1, shirtCol=-1, actorIdCol=-1;
   let inPlayerSection = false;
   let inGKSection = false; // true when last parent row was GK Plain
@@ -2275,6 +2276,7 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
         sectionParentPids = {...currentParentPids};
         inGKSection = false;
       } else if (rowStr.includes('gk plain') || rowStr.includes('plain gk')) {
+        gkPlainCols = new Set(Object.keys(currentParentPids).map(Number));
         inGKSection = true;
       }
       inPlayerSection = false;
@@ -2322,14 +2324,13 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
 
     const existingPlayer = importData.players.find(p=>p.name===rawName&&p.clubId===clubId&&p.seasonId===seasonId);
 
-    // Determine GK status by checking if ALL player's PID cols are within GK parent cols
+    // Determine GK status: player is a GK if their PID count matches the GK Plain parent col count
+    // GKs always have exactly as many PIDs as the GK Plain row has parent PIDs (e.g. 2 for CFC)
+    // Outfield players always have significantly more PIDs than the GK Plain count
     const rowPidCols = row.reduce((acc, v, c) => { if (isPidVal(v)) acc.push(c); return acc; }, []);
-    const gkParentCols = new Set(Object.keys(currentParentPids).map(Number));
-    const allPidColsAreGK = rowPidCols.length > 0 && rowPidCols.every(c => gkParentCols.has(c));
-    // Reset inGKSection first if this player has outfield PIDs
+    const allPidColsAreGK = rowPidCols.length > 0 && gkPlainCols.size > 0 && rowPidCols.length <= gkPlainCols.size;
     if (inGKSection && !allPidColsAreGK) inGKSection = false;
-    // Player is GK if their PIDs exclusively match GK parent cols (works for scattered GKs like Chevalier)
-    const isGK = allPidColsAreGK && gkParentCols.size > 0;
+    const isGK = allPidColsAreGK;
     if (!existingPlayer) {
       importData.players.push({name:rawName, shirtName, number, type, clubId, seasonId, status:'active', mdmId, goalkeeper:isGK, fontType});
     } else if (isGK && !existingPlayer.goalkeeper) {
@@ -2349,6 +2350,15 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
 }
 function normaliseGarment(label) { const k=label.toLowerCase().trim(); return GARMENT_ALIASES[k]||'other'; }
 
+function _previewToggleGK(playerIndex) {
+  if (!importData || !importData.players[playerIndex]) return;
+  importData.players[playerIndex].goalkeeper = !importData.players[playerIndex].goalkeeper;
+  // Re-render the preview table
+  const club = CACHE.clubs.find(c=>c.id===importData.clubId);
+  const season = CACHE.seasons.find(s=>s.id===importData.seasonId);
+  showImportPreview(club, season, importData.filename||'');
+}
+
 function showImportPreview(club, season, filename) {
   const d=importData;
   const newPlayers=d.players.filter(p=>!CACHE.players.find(e=>e.Name===p.name&&e.ClubID===p.clubId&&e.SeasonID===p.seasonId));
@@ -2364,7 +2374,7 @@ function showImportPreview(club, season, filename) {
   html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Sheets: ${d.sheets.join(', ')}</div>`;
   if (d.sectionsFound.length>0) html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Sections: ${d.sectionsFound.join(' · ')}</div>`;
 
-  html+=`<div style="max-height:200px;overflow-y:auto;margin-top:8px;"><table class="data-table" style="font-size:11px;"><thead><tr><th>Player</th><th>Font</th><th>PIDs</th><th>Status</th></tr></thead><tbody>${newPlayers.slice(0,50).map(p=>{const cnt=newHeroes.filter(h=>h.playerName===p.name&&h.fontType===p.fontType).length;const gkBadge=p.goalkeeper?'<span class="badge" style="background:rgba(99,179,237,0.15);color:#63b3ed;border:1px solid rgba(99,179,237,0.3);margin-left:4px;">GK</span>':'';return`<tr><td style="color:var(--text);">${p.name}${gkBadge}</td><td>${FONT_LABELS[p.fontType]||p.fontType}</td><td class="mono">${cnt}</td><td><span class="badge badge-active">New</span></td></tr>`;}).join('')}${newPlayers.length>50?`<tr><td colspan="4" style="color:var(--text3);">...and ${newPlayers.length-50} more</td></tr>`:''}</tbody></table></div>`;
+  html+=`<div style="max-height:200px;overflow-y:auto;margin-top:8px;"><table class="data-table" style="font-size:11px;"><thead><tr><th>Player</th><th>Font</th><th>PIDs</th><th>Status</th></tr></thead><tbody>${newPlayers.slice(0,50).map((p,pi)=>{const cnt=newHeroes.filter(h=>h.playerName===p.name&&h.fontType===p.fontType).length;const gkStyle=p.goalkeeper?'background:rgba(99,179,237,0.15);color:#63b3ed;border:1px solid rgba(99,179,237,0.3);':'background:transparent;color:var(--text3);border:1px solid var(--border);';const gkBtn=`<button onclick="window._previewToggleGK(${pi})" style="font-size:10px;padding:2px 6px;border-radius:4px;cursor:pointer;margin-left:6px;${gkStyle}">GK</button>`;return`<tr><td style="color:var(--text);">${p.name}${gkBtn}</td><td>${FONT_LABELS[p.fontType]||p.fontType}</td><td class="mono">${cnt}</td><td><span class="badge badge-active">New</span></td></tr>`;}).join('')}${newPlayers.length>50?`<tr><td colspan="4" style="color:var(--text3);">...and ${newPlayers.length-50} more</td></tr>`:''}</tbody></table></div>`;
   document.getElementById('import-preview-content').innerHTML=html;
 }
 
