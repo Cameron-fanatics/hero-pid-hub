@@ -2408,7 +2408,7 @@ async function confirmImport() {
     let done = 0;
     if (newParents.length>0) {
       setProgress(done, total, `Writing ${newParents.length} parent PIDs...`);
-      const recs=await atCreateBatch(TABLES.parents, newParents.map(p=>({PID:p.pid,ClubID:p.clubId,SeasonID:p.seasonId,KitType:p.kitType,GarmentType:p.garmentType})));
+      const recs=await atCreateBatch(TABLES.parents, newParents.map(p=>{const cl=CACHE.clubs.find(c=>c.id===p.clubId);const se=CACHE.seasons.find(s=>s.id===p.seasonId);return {PID:p.pid,ClubID:p.clubId,SeasonID:p.seasonId,KitType:p.kitType,GarmentType:p.garmentType,Club:cl?.(cl.Name||cl.name)||'',Season:se?.(se.Label||se.label)||''};}));
       recs.forEach(r=>CACHE.parents.push({id:r.id,...r.fields}));
       done += newParents.length;
     }
