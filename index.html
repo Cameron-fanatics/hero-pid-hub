@@ -2189,6 +2189,7 @@ function parseImportWorkbook(wb, clubId, seasonId, filename) {
               if (GARMENT_KEYWORDS.some(k=>vl.includes(k))) garmentHint.push({col:gc,label:val});
             }
             sectionStarts.push({rowIdx:i,kitType:kitName,garmentHint});
+            console.log(`[DEBUG] Section: ${sheetName} ${kitName}, garmentHint:`, garmentHint.map(g=>g.col+':'+g.label).join(', '));
             break;
           }
         }
