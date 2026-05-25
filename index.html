@@ -751,10 +751,11 @@ async function initTables() {
   const missing = required.filter(n => !tableMap[n]);
   if (missing.length > 0) throw new Error(`Missing tables: ${missing.join(', ')}. Please create them in Airtable first.`);
   TABLES = {clubs:tableMap['Clubs'],seasons:tableMap['Seasons'],players:tableMap['Players'],parents:tableMap['Parent PIDs'],heroes:tableMap['Hero PIDs']};
-  // Only run ensureFields once — skip if already done
-  if (!localStorage.getItem('at_fields_init')) {
+  // Only run ensureFields once per session — skip if already done
+  if (!localStorage.getItem('at_fields_init') && !window._fieldsInitDone) {
+    window._fieldsInitDone = true;
     await ensureFields();
-    localStorage.setItem('at_fields_init', '1');
+    try { localStorage.setItem('at_fields_init', '1'); } catch(e) {}
   }
 }
 
@@ -2189,7 +2190,6 @@ function parseImportWorkbook(wb, clubId, seasonId, filename) {
               if (GARMENT_KEYWORDS.some(k=>vl.includes(k))) garmentHint.push({col:gc,label:val});
             }
             sectionStarts.push({rowIdx:i,kitType:kitName,garmentHint});
-            console.log(`[DEBUG] Section: ${sheetName} ${kitName}, garmentHint:`, garmentHint.map(g=>g.col+':'+g.label).join(', '));
             break;
           }
         }
@@ -2266,12 +2266,17 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
       row.forEach((v, c) => { if (isPidVal(v)) currentParentPids[c] = String(parseInt(String(v))); });
       // Register parent PIDs
       Object.entries(currentParentPids).forEach(([col, pid]) => {
-        const garmentType = garmentCols[col];
-        if (!garmentType) { console.log(`[DEBUG] Parent PID ${pid} col${col} has no garmentType - garmentCols:`, JSON.stringify(garmentCols)); }
+        const garmentType = garmentCols[col] ||
+          // fallback: scan rows above current for a garment label in this col
+          (() => {
+            for (let k = startRow; k < i; k++) {
+              const v = rows[k][col];
+              if (v) { const gt = normaliseGarment(String(v)); if (gt !== 'other') return gt; }
+            }
+            return null;
+          })();
         if (garmentType && !importData.parents.find(p=>p.pid===pid)) {
           importData.parents.push({pid, clubId, seasonId, kitType, garmentType});
-        } else if (!garmentType) {
-          console.log(`[DEBUG] Skipping parent PID ${pid} - no garment for col${col}`);
         }
       });
       // Keep sectionParentPids as the main Blank row (not GK Plain)
