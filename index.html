@@ -2266,8 +2266,11 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
       // Register parent PIDs
       Object.entries(currentParentPids).forEach(([col, pid]) => {
         const garmentType = garmentCols[col];
+        if (!garmentType) { console.log(`[DEBUG] Parent PID ${pid} col${col} has no garmentType - garmentCols:`, JSON.stringify(garmentCols)); }
         if (garmentType && !importData.parents.find(p=>p.pid===pid)) {
           importData.parents.push({pid, clubId, seasonId, kitType, garmentType});
+        } else if (!garmentType) {
+          console.log(`[DEBUG] Skipping parent PID ${pid} - no garment for col${col}`);
         }
       });
       // Keep sectionParentPids as the main Blank row (not GK Plain)
