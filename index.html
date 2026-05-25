@@ -2426,7 +2426,7 @@ async function confirmImport() {
     if (newHeroes.length>0) {
       const heroFields=newHeroes.map(h=>{
         const playerId=playerMap[h.playerName+'_'+h.clubId+'_'+h.seasonId];
-        const parent=CACHE.parents.find(p=>p.PID===h.parentPid);
+        const parent=CACHE.parents.find(p=>String(p.PID)===String(h.parentPid));
         return {PID:h.pid,PlayerID:playerId||'',ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.garmentRaw,KitType:h.kitType,Status:h.status,ParentPIDID:parent?parent.id:''};
       });
       // Write in batches of 10 with progress
