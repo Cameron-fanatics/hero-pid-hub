@@ -2344,7 +2344,7 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
       const pid = String(v);
       if (importData.heroes.find(h=>h.pid===pid)) return;
       const garmentType = garmentCols[c] || 'other';
-      const parentPid = currentParentPids[c] || '';
+      const parentPid = currentParentPids[c] || sectionParentPids[c] || '';
       importData.heroes.push({pid, playerName:rawName, clubId, seasonId, fontType, garmentType, garmentRaw:garmentType, kitType, status:'active', parentPid});
     });
   }
