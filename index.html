@@ -310,6 +310,8 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       <div class="tab active" onclick="switchImportTab('storage')" id="import-tab-storage">Storage Sheet</div>
       <div class="tab" onclick="switchImportTab('creation')" id="import-tab-creation">Creation CSVs</div>
       <div class="tab" onclick="switchImportTab('homeplate')" id="import-tab-homeplate">Homeplate Resolver</div>
+      <div class="tab" onclick="switchImportTab('mdmroster')" id="import-tab-mdmroster">Import MDM Roster Member</div>
+      <div class="tab" onclick="switchImportTab('squadupdate')" id="import-tab-squadupdate">Squad Update</div>
     </div>
     <div id="import-content-storage" style="max-width:700px;">
       <div class="card" style="margin-bottom:20px;">
@@ -397,6 +399,75 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     </div>
   </div>
 </div>
+
+    <div id="import-content-mdmroster" class="hidden" style="max-width:700px;">
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-header"><span class="card-title">Import MDM Roster Member</span></div>
+        <div style="padding:16px;">
+          <p style="color:var(--text2);font-size:13px;margin-bottom:16px;">Upload a raw MDM RosterMember CSV export. All roster member entries will be saved to AT for the selected club.</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+            <div>
+              <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">Club</label>
+              <select id="mdm-roster-club" class="select" style="width:100%;" onchange="mdmRosterClubChanged()"></select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">Season</label>
+              <select id="mdm-roster-season" class="select" style="width:100%;"></select>
+            </div>
+          </div>
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer;display:inline-block;">
+            ↑ Upload MDM Roster Member CSV
+            <input type="file" accept=".csv" style="display:none;" onchange="parseMdmRosterUpload(this.files[0])">
+          </label>
+          <span id="mdm-roster-status" style="display:none;font-size:11px;margin-left:8px;"></span>
+        </div>
+      </div>
+      <div id="mdm-roster-preview" class="hidden card" style="margin-bottom:20px;">
+        <div style="padding:16px;">
+          <div id="mdm-roster-preview-stats" style="display:flex;gap:20px;margin-bottom:12px;"></div>
+          <div id="mdm-roster-preview-table" style="max-height:400px;overflow-y:auto;"></div>
+          <div style="margin-top:12px;display:flex;gap:8px;">
+            <button class="btn btn-primary btn-sm" onclick="importMdmRoster()">Import all</button>
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('mdm-roster-preview').classList.add('hidden')">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="import-content-squadupdate" class="hidden" style="max-width:700px;">
+      <div class="card" style="margin-bottom:20px;">
+        <div class="card-header"><span class="card-title">Squad Update</span></div>
+        <div style="padding:16px;">
+          <p style="color:var(--text2);font-size:13px;margin-bottom:16px;">Upload a squad list (Number, Name columns) to update squad numbers, activate/deactivate players in AT and generate the MDM upload CSV.</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+            <div>
+              <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">Club</label>
+              <select id="squad-update-club" class="select" style="width:100%;" onchange="squadUpdateClubChanged()"></select>
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;display:block;margin-bottom:6px;">Season</label>
+              <select id="squad-update-season" class="select" style="width:100%;"></select>
+            </div>
+          </div>
+          <label class="btn btn-ghost btn-sm" style="cursor:pointer;display:inline-block;">
+            ↑ Upload Squad List (CSV or XLSX)
+            <input type="file" accept=".csv,.xlsx" style="display:none;" onchange="parseSquadUpdateUpload(this.files[0])">
+          </label>
+          <span id="squad-update-status" style="display:none;font-size:11px;margin-left:8px;"></span>
+        </div>
+      </div>
+      <div id="squad-update-preview" class="hidden card" style="margin-bottom:20px;">
+        <div style="padding:16px;">
+          <div id="squad-update-preview-stats" style="margin-bottom:12px;font-size:13px;color:var(--text2);"></div>
+          <div id="squad-update-preview-table" style="max-height:480px;overflow-y:auto;margin-bottom:12px;"></div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn btn-primary btn-sm" onclick="applySquadUpdate()">Save to AT + Export MDM CSV</button>
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('squad-update-preview').classList.add('hidden')">Cancel</button>
+            <span id="squad-update-save-status" style="display:none;font-size:11px;margin-left:4px;"></span>
+          </div>
+        </div>
+      </div>
+    </div>
 
 <!-- CLUBS PAGE -->
 <div id="page-clubs" class="hidden">
@@ -603,7 +674,7 @@ const FED_MAP = {'FRNC':'FFF','FRANCE':'FFF','GERM':'DFB','GERMANY':'DFB','ENG':
 const BRAND_ANCHORS = ['FRANCE NIKE','FRANCE ADIDAS','FRANCE PUMA','DFB ADIDAS','DFB NIKE','DFB PUMA','ENGLAND NIKE','SPAIN ADIDAS','ITALY PUMA','PORTUGAL NIKE','NETHERLANDS NIKE'];
 
 // Local cache for search performance
-let CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[]};
+let CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null};
 
 // ─── NAME NORMALISATION ───────────────────────────────────────────────────────
 const toProperName = s => (s||'').trim().replace(/\s+/g,' ')
@@ -695,7 +766,7 @@ function disconnectAirtable() {
   localStorage.removeItem('at_tables');
   localStorage.removeItem('at_fields_init');
   AT_TOKEN = ''; AT_BASE = ''; TABLES = {};
-  CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[]};
+  CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null};
   updateStats();
   refreshSettingsStatus();
   toast('Disconnected from Airtable');
@@ -750,7 +821,7 @@ async function initTables() {
   const required = ['Clubs','Seasons','Players','Parent PIDs','Hero PIDs'];
   const missing = required.filter(n => !tableMap[n]);
   if (missing.length > 0) throw new Error(`Missing tables: ${missing.join(', ')}. Please create them in Airtable first.`);
-  TABLES = {clubs:tableMap['Clubs'],seasons:tableMap['Seasons'],players:tableMap['Players'],parents:tableMap['Parent PIDs'],heroes:tableMap['Hero PIDs']};
+  TABLES = {clubs:tableMap['Clubs'],seasons:tableMap['Seasons'],players:tableMap['Players'],parents:tableMap['Parent PIDs'],heroes:tableMap['Hero PIDs'],mdmRosterMembers:tableMap['MDM Roster Members']};
   // Only run ensureFields once per session — skip if already done
   if (!localStorage.getItem('at_fields_init') && !window._fieldsInitDone) {
     window._fieldsInitDone = true;
@@ -866,7 +937,7 @@ function switchTab(tab) {
 }
 
 function switchImportTab(tab) {
-  ['storage','creation','homeplate'].forEach(t => {
+  ['storage','creation','homeplate','mdmroster','squadupdate'].forEach(t => {
     document.getElementById('import-content-'+t)?.classList.add('hidden');
     document.getElementById('import-tab-'+t)?.classList.remove('active');
   });
@@ -2074,6 +2145,10 @@ function refreshImportSelects() {
   fillSelect('import-club', CACHE.clubs, c=>({v:c.id,l:c.Name||''}));
   fillSelect('import-season', CACHE.seasons, s=>({v:s.id,l:s.Label||''}));
   fillSelect('creation-season', CACHE.seasons, s=>({v:s.id,l:s.Label||''}));
+  fillSelect('mdm-roster-club', CACHE.clubs, c=>({v:c.id,l:c.Name||''}));
+  fillSelect('mdm-roster-season', CACHE.seasons, s=>({v:s.id,l:s.Label||''}));
+  fillSelect('squad-update-club', CACHE.clubs, c=>({v:c.id,l:c.Name||''}));
+  fillSelect('squad-update-season', CACHE.seasons, s=>({v:s.id,l:s.Label||''}));
 }
 
 function calcDataHealth() {
@@ -2871,6 +2946,396 @@ function processImportFile(file) {
     }
   };
   reader.readAsArrayBuffer(file);
+}
+
+// ─── MDM ROSTER MEMBER IMPORT ─────────────────────────────
+let mdmRosterData = null;
+
+function mdmRosterClubChanged() {}
+
+function parseMdmRosterUpload(file) {
+  if (!file) return;
+  const clubId = document.getElementById('mdm-roster-club').value;
+  const seasonId = document.getElementById('mdm-roster-season').value;
+  if (!clubId||!seasonId) { toast('Please select a club and season','error'); return; }
+  const setStatus = (msg,err) => {
+    const s=document.getElementById('mdm-roster-status');
+    s.style.display=msg?'inline':'none';
+    s.style.color=err?'var(--red)':'var(--text2)';
+    s.textContent=msg;
+  };
+  setStatus('Reading...');
+  const reader = new FileReader();
+  reader.onerror = () => setStatus('Could not read file',true);
+  reader.onload = e => {
+    try {
+      const text = e.target.result.replace(/^\uFEFF/,'');
+      const lines = text.split(/\r?\n/).filter(l=>l.trim());
+      if (lines.length<2) { setStatus('No data rows',true); return; }
+      const hdrs = parseCSVLine(lines[0]).map(h=>h.trim());
+      const required = ['id','rosterId','name','jerseyName','jerseyNumber','position','actorId','rosterStatus','displayStatus'];
+      const missing = required.filter(h=>!hdrs.includes(h));
+      if (missing.length) { setStatus('Missing columns: '+missing.join(', '),true); return; }
+      const rows = [];
+      for (let i=1;i<lines.length;i++) {
+        const cols = parseCSVLine(lines[i]);
+        if (!cols.length||!cols[0]) continue;
+        const row = {};
+        hdrs.forEach((h,ci)=>row[h]=(cols[ci]||'').trim());
+        rows.push(row);
+      }
+      const club = CACHE.clubs.find(c=>c.id===clubId);
+      const season = CACHE.seasons.find(s=>s.id===seasonId);
+      mdmRosterData = {rows, clubId, seasonId, clubName:club?.Name||'', seasonName:season?.Label||''};
+      // Check for existing entries for this club
+      const existing = CACHE.mdmRosterMembers||[];
+      const existingIds = new Set(existing.filter(r=>r.ClubID===clubId).map(r=>r.RosterMemberID));
+      const newCount = rows.filter(r=>!existingIds.has(r.id)).length;
+      const updateCount = rows.filter(r=>existingIds.has(r.id)).length;
+      // Show preview
+      const preview = document.getElementById('mdm-roster-preview');
+      preview.classList.remove('hidden');
+      document.getElementById('mdm-roster-preview-stats').innerHTML = `
+        <div style="background:var(--bg3);border-radius:6px;padding:8px 14px;text-align:center;">
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;">Total Rows</div>
+          <div style="font-size:22px;font-weight:700;color:var(--text);">${rows.length}</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:6px;padding:8px 14px;text-align:center;">
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;">New</div>
+          <div style="font-size:22px;font-weight:700;color:var(--green);">${newCount}</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:6px;padding:8px 14px;text-align:center;">
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;">Updates</div>
+          <div style="font-size:22px;font-weight:700;color:var(--amber);">${updateCount}</div>
+        </div>
+        <div style="font-size:12px;color:var(--text2);padding:8px;">${mdmRosterData.clubName} · ${mdmRosterData.seasonName}</div>`;
+      // Unique rosters
+      const rosterNames = [...new Set(rows.map(r=>r.rosterId))];
+      document.getElementById('mdm-roster-preview-table').innerHTML = `
+        <table class="data-table" style="font-size:11px;">
+          <thead><tr><th>ID</th><th>Roster</th><th>Jersey Name</th><th>Name</th><th>#</th><th>Pos</th><th>Status</th></tr></thead>
+          <tbody>${rows.slice(0,80).map(r=>`<tr>
+            <td class="mono">${r.id}</td>
+            <td class="mono">${r.rosterId}</td>
+            <td style="color:var(--text);">${r.jerseyName}</td>
+            <td style="color:var(--text2);">${r.name}</td>
+            <td class="mono">${r.jerseyNumber}</td>
+            <td>${r.position}</td>
+            <td><span class="badge ${r.rosterStatus==='A'?'badge-active':'badge-inactive'}">${r.rosterStatus}/${r.displayStatus}</span></td>
+          </tr>`).join('')}${rows.length>80?`<tr><td colspan="7" style="color:var(--text3);">...and ${rows.length-80} more</td></tr>`:''}
+          </tbody>
+        </table>`;
+      setStatus(`${rows.length} rows ready`);
+    } catch(err) { setStatus('Error: '+err.message,true); }
+  };
+  reader.readAsText(file,'utf-8');
+}
+
+async function importMdmRoster() {
+  if (!mdmRosterData) return;
+  const {rows, clubId, clubName, seasonId} = mdmRosterData;
+  const setStatus = (msg,err) => {
+    const s=document.getElementById('mdm-roster-status');
+    s.style.display=msg?'inline':'none';
+    s.style.color=err?'var(--red)':'var(--text2)';
+    s.textContent=msg;
+  };
+  // Load existing MDM roster members for this club
+  if (!CACHE.mdmRosterMembers) {
+    setStatus('Loading existing entries...');
+    const existing = await atGetAll(TABLES.mdmRosterMembers);
+    CACHE.mdmRosterMembers = existing.map(x=>({id:x.id,...x.fields}));
+  }
+  const existingByRMID = {};
+  CACHE.mdmRosterMembers.filter(r=>r.ClubID===clubId).forEach(r=>existingByRMID[r.RosterMemberID]=r);
+  const toCreate = [];
+  const toUpdate = [];
+  rows.forEach(r => {
+    const fields = {
+      RosterMemberID: r.id,
+      RosterID: r.rosterId,
+      RosterName: r.rosterName||'',
+      ActorID: r.actorId,
+      PlayerName: r.name,
+      JerseyName: r.jerseyName,
+      JerseyNumber: r.jerseyNumber,
+      Position: r.position,
+      RosterStatus: r.rosterStatus,
+      DisplayStatus: r.displayStatus,
+      ClubID: clubId,
+      Club: clubName
+    };
+    if (existingByRMID[r.id]) {
+      toUpdate.push({atId: existingByRMID[r.id].id, fields});
+    } else {
+      toCreate.push(fields);
+    }
+  });
+  let done=0, total=toCreate.length+toUpdate.length;
+  setStatus(`Saving 0 of ${total}...`);
+  // Create in batches of 10
+  for (let i=0;i<toCreate.length;i+=10) {
+    const batch = toCreate.slice(i,i+10);
+    const recs = await atCreateBatch(TABLES.mdmRosterMembers, batch);
+    recs.forEach(r=>CACHE.mdmRosterMembers.push({id:r.id,...r.fields}));
+    done+=batch.length;
+    setStatus(`Saving ${done} of ${total}...`);
+  }
+  // Update in batches of 5
+  for (let i=0;i<toUpdate.length;i+=5) {
+    const batch = toUpdate.slice(i,i+5);
+    await Promise.all(batch.map(({atId,fields})=>atUpdate(TABLES.mdmRosterMembers,atId,fields)));
+    done+=batch.length;
+    setStatus(`Saving ${done} of ${total}...`);
+  }
+  document.getElementById('mdm-roster-preview').classList.add('hidden');
+  toast(`MDM Roster: ${toCreate.length} created, ${toUpdate.length} updated`,'success');
+  setStatus('');
+  mdmRosterData = null;
+}
+
+// ─── SQUAD UPDATE ──────────────────────────────────────────
+let squadUpdateData = null;
+
+function squadUpdateClubChanged() {}
+
+function parseSquadUpdateUpload(file) {
+  if (!file) return;
+  const clubId = document.getElementById('squad-update-club').value;
+  const seasonId = document.getElementById('squad-update-season').value;
+  if (!clubId||!seasonId) { toast('Please select a club and season','error'); return; }
+  const setStatus = (msg,err) => {
+    const s=document.getElementById('squad-update-status');
+    s.style.display=msg?'inline':'none';
+    s.style.color=err?'var(--red)':'var(--text2)';
+    s.textContent=msg;
+  };
+  setStatus('Reading...');
+  const reader = new FileReader();
+  reader.onerror = () => setStatus('Could not read file',true);
+  reader.onload = e => {
+    try {
+      let newSquad = []; // [{number, name}]
+      if (file.name.endsWith('.xlsx')||file.name.endsWith('.xls')) {
+        const wb = XLSX.read(e.target.result, {type:'array'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+        // Find number and name columns
+        const hdrs = (rows[0]||[]).map(v=>String(v||'').toLowerCase());
+        const numIdx = hdrs.findIndex(h=>h.includes('number')||h==='num'||h==='#');
+        const nameIdx = hdrs.findIndex(h=>h.includes('name'));
+        if (numIdx===-1||nameIdx===-1) { setStatus('Cannot find Number and Name columns',true); return; }
+        for (let i=1;i<rows.length;i++) {
+          const num=rows[i][numIdx], name=rows[i][nameIdx];
+          if (!name||String(name).trim()==='') continue;
+          newSquad.push({number:String(num||'').trim(), name:String(name).trim().toUpperCase()});
+        }
+      } else {
+        const text = e.target.result.replace(/^\uFEFF/,'');
+        const lines = text.split(/\r?\n/).filter(l=>l.trim());
+        const hdrs = parseCSVLine(lines[0]).map(h=>h.toLowerCase().trim());
+        const numIdx = hdrs.findIndex(h=>h.includes('number')||h==='num'||h==='#');
+        const nameIdx = hdrs.findIndex(h=>h.includes('name'));
+        if (numIdx===-1||nameIdx===-1) { setStatus('Cannot find Number and Name columns',true); return; }
+        for (let i=1;i<lines.length;i++) {
+          const cols=parseCSVLine(lines[i]);
+          const num=(cols[numIdx]||'').trim(), name=(cols[nameIdx]||'').trim().toUpperCase();
+          if (!name) continue;
+          newSquad.push({number:num, name});
+        }
+      }
+      if (!newSquad.length) { setStatus('No players found in file',true); return; }
+      buildSquadUpdatePreview(clubId, seasonId, newSquad, setStatus);
+    } catch(err) { setStatus('Error: '+err.message,true); }
+  };
+  if (file.name.endsWith('.xlsx')||file.name.endsWith('.xls')) {
+    reader.readAsArrayBuffer(file);
+  } else {
+    reader.readAsText(file,'utf-8');
+  }
+}
+
+async function buildSquadUpdatePreview(clubId, seasonId, newSquad, setStatus) {
+  setStatus('Loading roster data...');
+  // Load MDM roster members for this club
+  if (!CACHE.mdmRosterMembers) {
+    const existing = await atGetAll(TABLES.mdmRosterMembers);
+    CACHE.mdmRosterMembers = existing.map(x=>({id:x.id,...x.fields}));
+  }
+  const clubMembers = CACHE.mdmRosterMembers.filter(r=>r.ClubID===clubId);
+  if (!clubMembers.length) {
+    setStatus('No MDM Roster Members found for this club. Import the MDM export first.',true);
+    return;
+  }
+  // Build new squad lookup by jersey name
+  const newSquadMap = {};
+  newSquad.forEach(p=>newSquadMap[p.name]=p.number);
+  // Build changes per unique roster member entry
+  // Group by actorId to detect number changes (same player across rosters)
+  const changes = [];
+  const seenActors = {}; // actorId -> {newNumber, jerseyName}
+  // First pass: determine new state for each unique actor
+  clubMembers.forEach(m=>{
+    const jerseyName = (m.JerseyName||'').toUpperCase().trim();
+    const inNewSquad = jerseyName in newSquadMap;
+    const newNumber = inNewSquad ? newSquadMap[jerseyName] : m.JerseyNumber;
+    const newStatus = inNewSquad ? 'A' : 'I';
+    const newDisplay = inNewSquad ? 'V' : 'H';
+    const numberChanged = inNewSquad && String(newNumber)!==String(m.JerseyNumber);
+    const statusChanged = newStatus!==m.RosterStatus || newDisplay!==m.DisplayStatus;
+    // Skip if already correct and inactive (not in squad, already hidden)
+    if (!inNewSquad && m.RosterStatus==='I' && m.DisplayStatus==='H') return;
+    // Skip if no changes needed
+    if (!numberChanged && !statusChanged) return;
+    changes.push({
+      atId: m.id,
+      rosterMemberID: m.RosterMemberID,
+      rosterId: m.RosterID,
+      rosterName: m.RosterName||m.RosterID,
+      actorId: m.ActorID,
+      jerseyName: m.JerseyName,
+      playerName: m.PlayerName,
+      oldNumber: m.JerseyNumber,
+      newNumber: String(newNumber),
+      oldStatus: m.RosterStatus+'/'+m.DisplayStatus,
+      newStatus: newStatus+'/'+newDisplay,
+      newRosterStatus: newStatus,
+      newDisplayStatus: newDisplay,
+      position: m.Position,
+      inNewSquad,
+      numberChanged,
+      statusChanged,
+      isNew: false
+    });
+  });
+  // Check for players in new squad not found in any roster member
+  const allJerseyNames = new Set(clubMembers.map(m=>(m.JerseyName||'').toUpperCase().trim()));
+  const notFound = newSquad.filter(p=>!allJerseyNames.has(p.name.toUpperCase().trim()));
+  // Store for apply
+  const club = CACHE.clubs.find(c=>c.id===clubId);
+  const season = CACHE.seasons.find(s=>s.id===seasonId);
+  squadUpdateData = {changes, notFound, clubId, seasonId, clubName:club?.Name||'', seasonName:season?.Label||'', newSquad, clubMembers};
+  // Render preview
+  const preview = document.getElementById('squad-update-preview');
+  preview.classList.remove('hidden');
+  const numChanges = changes.filter(c=>c.numberChanged).length;
+  const statusChanges = changes.filter(c=>c.statusChanged&&!c.numberChanged).length;
+  const activations = changes.filter(c=>c.inNewSquad&&c.newRosterStatus==='A').length;
+  const deactivations = changes.filter(c=>!c.inNewSquad&&c.newRosterStatus==='I').length;
+  document.getElementById('squad-update-preview-stats').innerHTML = `
+    <strong style="color:var(--text);">${club?.Name||''} · ${season?.Label||''}</strong><br>
+    <span style="color:var(--green);">${activations} activations</span> · 
+    <span style="color:var(--red);">${deactivations} deactivations</span> · 
+    <span style="color:var(--amber);">${numChanges} number changes</span> · 
+    <span style="color:var(--text2);">${changes.length} total rows in MDM export</span>
+    ${notFound.length?`<br><span style="color:var(--amber);">⚠ ${notFound.length} players not found in roster: ${notFound.map(p=>p.name).join(', ')}</span>`:''}`;
+  document.getElementById('squad-update-preview-table').innerHTML = `
+    <table class="data-table" style="font-size:11px;">
+      <thead><tr><th>Jersey Name</th><th>Player</th><th>Roster</th><th>Old #</th><th>New #</th><th>Old Status</th><th>New Status</th><th>Change</th></tr></thead>
+      <tbody>${changes.map(c=>{
+        const tags = [];
+        if (c.numberChanged) tags.push(`<span class="badge" style="background:rgba(255,179,64,.15);color:var(--amber);border:1px solid rgba(255,179,64,.3);">#</span>`);
+        if (c.inNewSquad&&c.newRosterStatus==='A'&&c.oldStatus.startsWith('I')) tags.push(`<span class="badge badge-active">Activate</span>`);
+        if (!c.inNewSquad&&c.newRosterStatus==='I') tags.push(`<span class="badge badge-inactive">Deactivate</span>`);
+        return `<tr>
+          <td style="color:var(--text);font-weight:500;">${c.jerseyName}</td>
+          <td style="color:var(--text2);">${c.playerName}</td>
+          <td class="mono" style="font-size:10px;">${c.rosterId}</td>
+          <td class="mono">${c.oldNumber}</td>
+          <td class="mono" style="color:${c.numberChanged?'var(--amber)':'var(--text2)'};">${c.newNumber}</td>
+          <td class="mono">${c.oldStatus}</td>
+          <td class="mono" style="color:${c.inNewSquad?'var(--green)':'var(--red)'};">${c.newRosterStatus}/${c.newDisplayStatus}</td>
+          <td style="display:flex;gap:4px;flex-wrap:wrap;">${tags.join('')}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>`;
+  setStatus(`${changes.length} changes ready`);
+}
+
+async function applySquadUpdate() {
+  if (!squadUpdateData) return;
+  const {changes, clubMembers, newSquad, clubId, seasonId, clubName} = squadUpdateData;
+  const setStatus = (msg,err) => {
+    const s=document.getElementById('squad-update-save-status');
+    s.style.display=msg?'inline':'none';
+    s.style.color=err?'var(--red)':'var(--text2)';
+    s.textContent=msg;
+  };
+  if (!changes.length) { toast('No changes to apply','error'); return; }
+  setStatus(`Saving 0 of ${changes.length}...`);
+  let done=0;
+  // Update AT in batches of 5
+  for (let i=0;i<changes.length;i+=5) {
+    const batch=changes.slice(i,i+5);
+    await Promise.all(batch.map(c=>atUpdate(TABLES.mdmRosterMembers,c.atId,{
+      JerseyNumber:c.newNumber,
+      RosterStatus:c.newRosterStatus,
+      DisplayStatus:c.newDisplayStatus
+    })));
+    // Update cache
+    batch.forEach(c=>{
+      const rec=CACHE.mdmRosterMembers.find(r=>r.id===c.atId);
+      if (rec){rec.JerseyNumber=c.newNumber;rec.RosterStatus=c.newRosterStatus;rec.DisplayStatus=c.newDisplayStatus;}
+    });
+    done+=batch.length;
+    setStatus(`Saving ${done} of ${changes.length}...`);
+  }
+  // Also update squad numbers on Players table
+  const newSquadMap={};
+  newSquad.forEach(p=>newSquadMap[p.name.toUpperCase()]=p.number);
+  const clubPlayers = CACHE.players.filter(p=>p.ClubID===clubId&&p.SeasonID===seasonId);
+  for (const player of clubPlayers) {
+    const jerseyName=(player.ShirtName||player.Name||'').toUpperCase().trim();
+    if (jerseyName in newSquadMap) {
+      const newNum=parseInt(newSquadMap[jerseyName])||null;
+      if (newNum && String(player.SquadNumber)!==String(newNum)) {
+        await atUpdate(TABLES.players, player.id, {SquadNumber:newNum});
+        player.SquadNumber=newNum;
+      }
+    }
+  }
+  // Generate MDM export CSV
+  exportSquadUpdateCSV();
+  setStatus('');
+  toast(`Squad updated: ${changes.length} roster entries updated`,'success');
+  document.getElementById('squad-update-preview').classList.add('hidden');
+  squadUpdateData=null;
+}
+
+function exportSquadUpdateCSV() {
+  if (!squadUpdateData) return;
+  const {changes, clubMembers, clubName} = squadUpdateData;
+  const newSquadMap={};
+  squadUpdateData.newSquad.forEach(p=>newSquadMap[p.name.toUpperCase()]=p.number);
+  // Build the MDM upload rows - only rows with changes
+  const headers = ['id','rosterId','name','jerseyName','jerseyNumber','jerseyNumberString','position','actorId','rosterStatus','displayStatus','startDate','endDate','nickname','playerTier'];
+  const rows = changes.map(c=>[
+    c.rosterMemberID,
+    c.rosterId,
+    c.playerName,
+    c.jerseyName,
+    c.newNumber,
+    c.newNumber,
+    c.position,
+    c.actorId,
+    c.newRosterStatus,
+    c.newDisplayStatus,
+    '','','','5'
+  ]);
+  const csv = [headers, ...rows].map(r=>r.map(v=>{
+    const s=String(v??'');
+    return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s;
+  }).join(',')).join('\n');
+  // Download as UTF-8 with BOM
+  const bom = '\uFEFF';
+  const blob = new Blob([bom+csv],{type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url;
+  a.download=`MDM_SquadUpdate_${clubName.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 init();
