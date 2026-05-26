@@ -2374,10 +2374,11 @@ function _previewToggleGK(playerIndex) {
 
 function showImportPreview(club, season, filename) {
   const d=importData;
+  console.log('[DEBUG] importData.parents count:', d.parents.length, 'PIDs:', d.parents.map(p=>p.pid).join(','));
   const newPlayers=d.players.filter(p=>!CACHE.players.find(e=>e.Name===p.name&&e.ClubID===p.clubId&&e.SeasonID===p.seasonId));
   const existingPlayers=d.players.filter(p=>CACHE.players.find(e=>e.Name===p.name&&e.ClubID!==p.clubId));
   const newHeroes=d.heroes.filter(h=>!CACHE.heroes.find(e=>e.PID===h.pid));
-  const newParents=d.parents.filter(p=>!CACHE.parents.find(e=>e.PID===p.pid));
+  const newParents=d.parents.filter(p=>!CACHE.parents.find(e=>String(e.PID)===String(p.pid)));
   const dupHeroes=d.heroes.length-newHeroes.length;
   document.getElementById('import-preview-title').textContent=`Preview — ${filename}`;
   document.getElementById('import-preview').classList.remove('hidden');
@@ -2413,7 +2414,7 @@ async function confirmImport() {
     if (pctEl) pctEl.textContent = pct + '%';
   };
   const d=importData;
-  const newParents=d.parents.filter(p=>!CACHE.parents.find(e=>e.PID===p.pid));
+  const newParents=d.parents.filter(p=>!CACHE.parents.find(e=>String(e.PID)===String(p.pid)));
   const newHeroes=d.heroes.filter(h=>!CACHE.heroes.find(e=>e.PID===h.pid));
   const newPlayers=d.players.filter(p=>!CACHE.players.find(e=>e.Name===p.name&&e.ClubID===p.clubId&&e.SeasonID===p.seasonId));
   try {
