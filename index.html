@@ -2168,11 +2168,6 @@ function parseImportWorkbook(wb, clubId, seasonId, filename) {
       const row=[];
       for (let c=0;c<=range.e.c;c++) { const cell=ws[XLSX.utils.encode_cell({r,c})]; row.push(cell?(cell.v!==undefined?cell.v:''):''); }
       rows.push(row);
-      // Debug: log rows that look like blank/parent rows
-      const rs=row.slice(0,20).join('|').toLowerCase();
-      if ((rs.includes('blank')||rs.includes('hp pid only'))&&sheetName==='League') {
-        console.log(`[ROW DEBUG] ${sheetName} r=${r} range.e.c=${range.e.c}:`, row.slice(0,20));
-      }
     }
     const fontType = detectFontType(sheetName);
     const sectionStarts = [];
@@ -2207,7 +2202,6 @@ function parseImportWorkbook(wb, clubId, seasonId, filename) {
     }
     sectionStarts.forEach((section,idx) => {
       const endRow=idx+1<sectionStarts.length?sectionStarts[idx+1].rowIdx:rows.length;
-      if (sheetName==='League'&&section.kitType==='Away') console.log('[AWAY SECTION] rowIdx='+section.rowIdx+' endRow='+endRow+' rows[rowIdx]='+JSON.stringify(rows[section.rowIdx]&&rows[section.rowIdx].slice(0,14))+' rows[rowIdx+1]='+JSON.stringify(rows[section.rowIdx+1]&&rows[section.rowIdx+1].slice(0,14)));
       parseSingleSection(rows,section.rowIdx,endRow,fontType,section.kitType,clubId,seasonId,section.garmentHint||[]);
       importData.sectionsFound.push(`${sheetName} → ${section.kitType}`);
     });
@@ -2233,7 +2227,7 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
   const isPidVal = v => { try { const n=parseInt(String(v)); return n>=200000000&&n<=299999999; } catch(e){return false;} };
   const isParentRowVal = row => { const s=row.map(v=>String(v||'').toLowerCase()).join('|'); return s.includes('blank')||s.includes('hp pid only')||s.includes('gk plain')||s.includes('plain gk'); };
   const isHeaderRowVal = row => { const s=row.map(v=>String(v||'').toLowerCase()).join('|'); return s.includes('actor name')||s.includes('back of shirt')||s.includes('actor id'); };
-  const isSkipRow = row => { const s=row.map(v=>String(v||'').toLowerCase()).join('|'); return s.includes('assembl')||s.includes('roster name')||s.includes('shorts'); };
+  const isSkipRow = row => { if (row.some(v=>isPidVal(v))) return false; const s=row.map(v=>String(v||'').toLowerCase()).join('|'); return s.includes('assembl')||s.includes('roster name')||s.includes('shorts'); };
 
   // Build garment column map from rows above first header
   const garmentCols = {}; // 0-based col index -> garmentType
@@ -2270,7 +2264,6 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
       // Capture parent PIDs for this section (Blank row or GK Plain row)
       currentParentPids = {};
       row.forEach((v, c) => { if (isPidVal(v)) currentParentPids[c] = String(parseInt(String(v))); });
-      if (kitType==='Away') console.log(`[BLANK ROW] kitType=${kitType} startRow=${startRow} row index=${i} currentParentPids=`, JSON.stringify(currentParentPids), 'raw cols 9-12:', row.slice(9,13));
       // Register parent PIDs - always scan rows above for garment labels directly
       // (garmentCols from garmentHint may be incomplete for edge columns)
       Object.entries(currentParentPids).forEach(([colStr, pid]) => {
@@ -2286,11 +2279,8 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
             }
           }
         }
-        if (!garmentType) console.warn(`[PARENT SKIP] PID=${pid} col=${col} kitType=${kitType}`);
         if (garmentType && !importData.parents.find(p=>p.pid===pid)) {
           importData.parents.push({pid, clubId, seasonId, kitType, garmentType});
-        } else if (garmentType) {
-          console.log(`[DEDUP SKIP] PID=${pid} col=${col} kitType=${kitType} garmentType=${garmentType} - already in parents as:`, importData.parents.find(p=>String(p.pid)===String(pid)));
         }
       });
       // Keep sectionParentPids as the main Blank row (not GK Plain)
@@ -2385,7 +2375,6 @@ function _previewToggleGK(playerIndex) {
 
 function showImportPreview(club, season, filename) {
   const d=importData;
-  console.log('[DEBUG] importData.parents count:', d.parents.length, 'PIDs:', d.parents.map(p=>p.pid).join(','));
   const newPlayers=d.players.filter(p=>!CACHE.players.find(e=>e.Name===p.name&&e.ClubID===p.clubId&&e.SeasonID===p.seasonId));
   const existingPlayers=d.players.filter(p=>CACHE.players.find(e=>e.Name===p.name&&e.ClubID!==p.clubId));
   const newHeroes=d.heroes.filter(h=>!CACHE.heroes.find(e=>e.PID===h.pid));
