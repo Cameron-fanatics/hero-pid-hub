@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- HEROPID-BUILD-v96 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -117,11 +118,11 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 .data-table tr:last-child td{border-bottom:none}
 .data-table tr:hover td{background:rgba(255,255,255,0.02)}
 .data-table td.mono{font-family:'DM Mono',monospace;color:var(--text)}
-.drop-zone{border:2px dashed var(--border2);border-radius:var(--radius);padding:40px 20px;text-align:center;cursor:pointer;transition:all 0.2s;color:var(--text3)}
-.drop-zone:hover,.drop-zone.drag-over{border-color:var(--accent);color:var(--text2);background:var(--accent-glow)}
-.drop-zone-icon{font-size:28px;margin-bottom:10px}
-.drop-zone-text{font-size:13px;margin-bottom:4px;color:var(--text2)}
-.drop-zone-sub{font-size:11px}
+.drop-zone,.dropzone{border:2px dashed var(--border2);border-radius:var(--radius);padding:40px 20px;text-align:center;cursor:pointer;transition:all 0.2s;color:var(--text3)}
+.drop-zone:hover,.drop-zone.drag-over,.dropzone:hover,.dropzone.drag-over{border-color:var(--accent);color:var(--text2);background:var(--accent-glow)}
+.drop-zone-icon,.dropzone-icon{font-size:28px;margin-bottom:10px}
+.drop-zone-text,.dropzone-text{font-size:13px;margin-bottom:4px;color:var(--text2)}
+.drop-zone-sub,.dropzone-sub{font-size:11px}
 .toast-container{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px}
 .toast{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius);padding:12px 16px;font-size:12px;color:var(--text);display:flex;align-items:center;gap:10px;min-width:240px;animation:slideIn 0.2s ease;box-shadow:0 4px 20px rgba(0,0,0,0.4)}
 .toast.success{border-color:rgba(61,214,140,0.3)}
@@ -1134,6 +1135,37 @@ async function deleteHero(id) {
 
 // ─── SEARCH ───────────────────────────────────────────────────────────────────
 function normaliseAccents(str) { return str.normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+
+// Repair mojibake in a string: MDM exports UTF-8 files but some rows contain windows-1252
+// characters that were mis-encoded. Fix by re-encoding each char as its windows-1252 byte
+// value, then decoding the resulting bytes as UTF-8. Safe on already-correct strings.
+// Uses a windows-1252 → codepoint map for the 0x80–0x9F range (where latin-1 differs).
+// Windows-1252 reverse map: unicode codepoint → byte value, for the 0x80–0x9F special range
+const W1252_MAP_R = {0x20AC:0x80,0x201A:0x82,0x0192:0x83,0x201E:0x84,0x2026:0x85,0x2020:0x86,
+  0x2021:0x87,0x02C6:0x88,0x2030:0x89,0x0160:0x8A,0x2039:0x8B,0x0152:0x8C,0x017D:0x8E,
+  0x2018:0x91,0x2019:0x92,0x201C:0x93,0x201D:0x94,0x2022:0x95,0x2013:0x96,0x2014:0x97,
+  0x02DC:0x98,0x2122:0x99,0x0161:0x9A,0x203A:0x9B,0x0153:0x9C,0x017E:0x9E,0x0178:0x9F};
+function repairMojibake(s) {
+  if (!s) return s;
+  try {
+    const bytes = [];
+    for (let i = 0; i < s.length; i++) {
+      const cp = s.charCodeAt(i);
+      if (cp in W1252_MAP_R) {
+        // W1252 special char (0x80–0x9F range) — map back to its byte value
+        bytes.push(W1252_MAP_R[cp]);
+      } else if (cp > 0xFF) {
+        // Genuine unicode char above latin range and not a W1252 special — already correct, bail
+        return s;
+      } else {
+        bytes.push(cp);
+      }
+    }
+    return new TextDecoder('utf-8', {fatal: true}).decode(new Uint8Array(bytes));
+  } catch (e) {
+    return s; // bytes don't form valid UTF-8 — string was already correct
+  }
+}
 function searchMatch(h,n) { return normaliseAccents(h.toLowerCase()).includes(normaliseAccents(n.toLowerCase())); }
 
 let searchTimer = null;
@@ -1319,7 +1351,23 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
     const season = CACHE.seasons.find(s=>s.id===seasonId);
     const heroes = grouped[key].heroes;
     const initials = (player.Name||'?').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
-    const statusBadge = player.Status==='archived'?'<span class="badge badge-archived">Archived</span>':'<span class="badge badge-active">Active</span>';
+    // Determine MDM roster status for this player
+    const playerMdmEntries = (CACHE.mdmRosterMembers||[]).filter(m=>m.PlayerID===player.id||(m.ActorID&&player.MDMActorID&&m.ActorID===player.MDMActorID));
+    let mdmStatusBadge = '';
+    if (playerMdmEntries.length > 0) {
+      const activeEntry = playerMdmEntries.find(m=>m.RosterStatus==='A' && m.DisplayStatus==='V');
+      const hiddenEntry = playerMdmEntries.find(m=>m.RosterStatus==='A' && m.DisplayStatus==='H');
+      if (activeEntry) {
+        mdmStatusBadge = '<span class="badge badge-active" title="MDM: A/V">Active</span>';
+      } else if (hiddenEntry) {
+        mdmStatusBadge = '<span class="badge" style="background:rgba(255,179,64,0.15);color:var(--amber);" title="MDM: A/H">Hidden</span>';
+      } else {
+        mdmStatusBadge = '<span class="badge badge-inactive" title="MDM: I/H">Inactive</span>';
+      }
+    }
+    const statusBadge = player.Status==='archived'
+      ? '<span class="badge badge-archived">Archived</span>'
+      : (mdmStatusBadge || '<span class="badge badge-active">Active</span>');
     const typeBadge = player.Type==='variant'?'<span class="badge badge-variant">Variant</span>':''; const gkBadge = player.Goalkeeper?'<span class="badge" style="background:rgba(99,179,237,0.15);color:#63b3ed;">GK</span>':'';
     const byFont = {};
     heroes.forEach(h => { if(!byFont[h.FontType])byFont[h.FontType]=[]; byFont[h.FontType].push(h); });
@@ -1881,13 +1929,17 @@ async function importCleanup(tableKey, file) {
               else if (atField === '_ParentPID') {
                 // Resolve parent PID number to AT record ID
                 const parentRec = CACHE.parents.find(p => String(p.PID) === String(val));
-                if (parentRec) fields['ParentPIDID'] = parentRec.id;
+                if (parentRec) {
+                  fields['ParentPIDID'] = parentRec.id;
+                } else {
+                  console.warn('[Cleanup:heroes] Could not resolve ParentPID:', val, '— check it exists in Parent PIDs table');
+                }
               }
               else fields[atField] = val;
             }
           }
         });
-        if (!Object.keys(fields).length) { skipped++; continue; }
+        if (!Object.keys(fields).length) { console.warn('[Cleanup:'+tableKey+'] Row skipped (no updatable fields):', id); skipped++; continue; }
         updates.push({id, fields});
       }
 
@@ -1914,6 +1966,9 @@ async function importCleanup(tableKey, file) {
       if (tableKey === 'clubs') { refreshClubs(); refreshFilterSelects(); }
       else if (tableKey === 'seasons') { refreshSeasons(); refreshFilterSelects(); }
       else if (tableKey === 'players') { refreshManage(); }
+      else if (tableKey === 'heroes') { refreshManage(); }
+      // Always recompute the health banner so it reflects the fixes just applied
+      calcDataHealth();
 
       setStatus(`Done — ${updates.length} updated${skipped?' ('+skipped+' skipped)':''}`);
       setTimeout(() => setStatus(''), 5000);
@@ -2979,7 +3034,13 @@ function parseMdmRosterUpload(file) {
   reader.onerror = () => setStatus('Could not read file',true);
   reader.onload = e => {
     try {
-      const text = e.target.result.replace(/^\uFEFF/,'');
+      // Decode as UTF-8 (MDM exports are UTF-8, with or without BOM)
+      // Some rows may contain mojibake (windows-1252 chars saved inside a UTF-8 file by MDM)
+      // We fix these per-field after parsing using repairMojibake()
+      const bytes = new Uint8Array(e.target.result);
+      const hasBOM = bytes[0]===0xEF && bytes[1]===0xBB && bytes[2]===0xBF;
+      let text = new TextDecoder('utf-8', {fatal:false}).decode(hasBOM ? bytes.slice(3) : bytes);
+      text = text.replace(/^\uFEFF/,'');
       const lines = text.split(/\r?\n/).filter(l=>l.trim());
       if (lines.length<2) { setStatus('No data rows',true); return; }
       const hdrs = parseCSVLine(lines[0]).map(h=>h.trim());
@@ -2991,7 +3052,7 @@ function parseMdmRosterUpload(file) {
         const cols = parseCSVLine(lines[i]);
         if (!cols.length||!cols[0]) continue;
         const row = {};
-        hdrs.forEach((h,ci)=>row[h]=(cols[ci]||'').trim());
+        hdrs.forEach((h,ci)=>row[h]=repairMojibake((cols[ci]||'').trim()));
         rows.push(row);
       }
       const club = CACHE.clubs.find(c=>c.id===clubId);
@@ -3038,7 +3099,7 @@ function parseMdmRosterUpload(file) {
       setStatus(`${rows.length} rows ready`);
     } catch(err) { setStatus('Error: '+err.message,true); }
   };
-  reader.readAsText(file,'utf-8');
+  reader.readAsArrayBuffer(file);
 }
 
 async function importMdmRoster() {
@@ -3098,8 +3159,31 @@ async function importMdmRoster() {
     done+=batch.length;
     setStatus(`Saving ${done} of ${total}...`);
   }
+  // Sync AT player Status based on MDM RosterStatus
+  setStatus('Syncing player statuses...');
+  const actorToStatus = {};
+  rows.forEach(r => {
+    // A = active, I = inactive/archived; if a player has any A entry, treat as active
+    if (!actorToStatus[r.actorId] || r.rosterStatus === 'A') {
+      actorToStatus[r.actorId] = r.rosterStatus === 'A' ? 'active' : 'archived';
+    }
+  });
+  const playerUpdates = [];
+  CACHE.players.filter(p => p.ClubID === clubId).forEach(p => {
+    if (!p.MDMActorID) return;
+    const desired = actorToStatus[p.MDMActorID];
+    if (desired && p.Status !== desired) {
+      playerUpdates.push({player: p, desired});
+    }
+  });
+  for (let i = 0; i < playerUpdates.length; i += 5) {
+    const batch = playerUpdates.slice(i, i + 5);
+    await Promise.all(batch.map(({player, desired}) =>
+      atUpdate(TABLES.players, player.id, {Status: desired}).then(() => { player.Status = desired; })
+    ));
+  }
   document.getElementById('mdm-roster-preview').classList.add('hidden');
-  toast(`MDM Roster: ${toCreate.length} created, ${toUpdate.length} updated`,'success');
+  toast(`MDM Roster: ${toCreate.length} created, ${toUpdate.length} updated${playerUpdates.length ? `, ${playerUpdates.length} player statuses synced` : ''}`,'success');
   setStatus('');
   mdmRosterData = null;
 }
@@ -3305,10 +3389,31 @@ async function applySquadUpdate() {
       }
     }
   }
+  // Sync AT player Status based on new roster status from squad update
+  const squadActorStatus = {};
+  changes.forEach(c => {
+    if (!squadActorStatus[c.actorId] || c.newRosterStatus === 'A') {
+      squadActorStatus[c.actorId] = c.newRosterStatus === 'A' ? 'active' : 'archived';
+    }
+  });
+  const squadPlayerUpdates = [];
+  CACHE.players.filter(p => p.ClubID === clubId).forEach(p => {
+    if (!p.MDMActorID) return;
+    const desired = squadActorStatus[p.MDMActorID];
+    if (desired && p.Status !== desired) {
+      squadPlayerUpdates.push({player: p, desired});
+    }
+  });
+  for (let i = 0; i < squadPlayerUpdates.length; i += 5) {
+    const batch = squadPlayerUpdates.slice(i, i + 5);
+    await Promise.all(batch.map(({player, desired}) =>
+      atUpdate(TABLES.players, player.id, {Status: desired}).then(() => { player.Status = desired; })
+    ));
+  }
   // Generate MDM export CSV
   exportSquadUpdateCSV();
   setStatus('');
-  toast(`Squad updated: ${changes.length} roster entries updated`,'success');
+  toast(`Squad updated: ${changes.length} roster entries updated${squadPlayerUpdates.length ? `, ${squadPlayerUpdates.length} player statuses synced` : ''}`,'success');
   document.getElementById('squad-update-preview').classList.add('hidden');
   squadUpdateData=null;
 }
