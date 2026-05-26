@@ -2265,7 +2265,8 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
       currentParentPids = {};
       row.forEach((v, c) => { if (isPidVal(v)) currentParentPids[c] = String(parseInt(String(v))); });
       // Register parent PIDs
-      Object.entries(currentParentPids).forEach(([col, pid]) => {
+      Object.entries(currentParentPids).forEach(([colStr, pid]) => {
+        const col = Number(colStr);
         const garmentType = garmentCols[col] ||
           // fallback: scan rows above current for a garment label in this col
           (() => {
