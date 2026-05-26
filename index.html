@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v96 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3085,7 +3084,7 @@ function parseMdmRosterUpload(file) {
       document.getElementById('mdm-roster-preview-table').innerHTML = `
         <table class="data-table" style="font-size:11px;">
           <thead><tr><th>ID</th><th>Roster</th><th>Jersey Name</th><th>Name</th><th>#</th><th>Pos</th><th>Status</th></tr></thead>
-          <tbody>${rows.slice(0,80).map(r=>`<tr>
+          <tbody>${rows.map(r=>`<tr>
             <td class="mono">${r.id}</td>
             <td class="mono">${r.rosterId}</td>
             <td style="color:var(--text);">${r.jerseyName}</td>
@@ -3093,7 +3092,7 @@ function parseMdmRosterUpload(file) {
             <td class="mono">${r.jerseyNumber}</td>
             <td>${r.position}</td>
             <td><span class="badge ${r.rosterStatus==='A'?'badge-active':'badge-inactive'}">${r.rosterStatus}/${r.displayStatus}</span></td>
-          </tr>`).join('')}${rows.length>80?`<tr><td colspan="7" style="color:var(--text3);">...and ${rows.length-80} more</td></tr>`:''}
+          </tr>`).join('')}
           </tbody>
         </table>`;
       setStatus(`${rows.length} rows ready`);
@@ -3113,7 +3112,7 @@ async function importMdmRoster() {
   };
   // Load existing MDM roster members for this club
   if (!CACHE.mdmRosterMembers) {
-    setStatus('Loading existing entries...');
+    setStatus('⟳ Loading existing entries from Airtable...');
     const existing = await atGetAll(TABLES.mdmRosterMembers);
     CACHE.mdmRosterMembers = existing.map(x=>({id:x.id,...x.fields}));
   }
@@ -3143,24 +3142,29 @@ async function importMdmRoster() {
     }
   });
   let done=0, total=toCreate.length+toUpdate.length;
-  setStatus(`Saving 0 of ${total}...`);
+  const setProgress = (done, total, phase) => {
+    const pct = total > 0 ? Math.round((done/total)*100) : 0;
+    const bar = '█'.repeat(Math.floor(pct/5)) + '░'.repeat(20-Math.floor(pct/5));
+    setStatus(`${phase} [${bar}] ${done}/${total} (${pct}%)`);
+  };
+  setProgress(0, total, toCreate.length ? '↑ Creating' : '↻ Updating');
   // Create in batches of 10
   for (let i=0;i<toCreate.length;i+=10) {
     const batch = toCreate.slice(i,i+10);
     const recs = await atCreateBatch(TABLES.mdmRosterMembers, batch);
     recs.forEach(r=>CACHE.mdmRosterMembers.push({id:r.id,...r.fields}));
     done+=batch.length;
-    setStatus(`Saving ${done} of ${total}...`);
+    setProgress(done, total, '↑ Creating');
   }
   // Update in batches of 5
   for (let i=0;i<toUpdate.length;i+=5) {
     const batch = toUpdate.slice(i,i+5);
     await Promise.all(batch.map(({atId,fields})=>atUpdate(TABLES.mdmRosterMembers,atId,fields)));
     done+=batch.length;
-    setStatus(`Saving ${done} of ${total}...`);
+    setProgress(done, total, '↻ Updating');
   }
   // Sync AT player Status based on MDM RosterStatus
-  setStatus('Syncing player statuses...');
+  setStatus('⟳ Syncing player statuses...');
   const actorToStatus = {};
   rows.forEach(r => {
     // A = active, I = inactive/archived; if a player has any A entry, treat as active
@@ -3181,6 +3185,7 @@ async function importMdmRoster() {
     await Promise.all(batch.map(({player, desired}) =>
       atUpdate(TABLES.players, player.id, {Status: desired}).then(() => { player.Status = desired; })
     ));
+    setStatus(`⟳ Syncing player statuses... ${Math.min(i+5, playerUpdates.length)}/${playerUpdates.length}`);
   }
   document.getElementById('mdm-roster-preview').classList.add('hidden');
   toast(`MDM Roster: ${toCreate.length} created, ${toUpdate.length} updated${playerUpdates.length ? `, ${playerUpdates.length} player statuses synced` : ''}`,'success');
