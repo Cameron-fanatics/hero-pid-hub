@@ -1779,8 +1779,7 @@ function importCorrectedPlayers(file){
         if(p){if(fields.Name)p.Name=fields.Name;if(fields.ShirtName)p.ShirtName=fields.ShirtName;}
       }));
       invalidateCache();refreshManage();
-      const unresolvedMsg = unresolvedParents ? ` — ⚠ ${unresolvedParents} ParentPID(s) not found` : '';
-      setStatus(`Done — ${updates.length} updated${skipped?' ('+skipped+' skipped)':''}${unresolvedMsg}`);
+      setStatus(`Done — ${updates.length} updated${skipped?' ('+skipped+' skipped)':''}`);
       updateStats();
       setTimeout(()=>setStatus(''),5000);
     }catch(err){console.error('[FixUpload]',err);setStatus('Error: '+err.message,true);}
