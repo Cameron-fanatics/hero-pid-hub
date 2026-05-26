@@ -2207,6 +2207,7 @@ function parseImportWorkbook(wb, clubId, seasonId, filename) {
     }
     sectionStarts.forEach((section,idx) => {
       const endRow=idx+1<sectionStarts.length?sectionStarts[idx+1].rowIdx:rows.length;
+      if (sheetName==='League'&&section.kitType==='Away') console.log('[AWAY SECTION] rowIdx='+section.rowIdx+' endRow='+endRow+' rows[rowIdx]='+JSON.stringify(rows[section.rowIdx]&&rows[section.rowIdx].slice(0,14))+' rows[rowIdx+1]='+JSON.stringify(rows[section.rowIdx+1]&&rows[section.rowIdx+1].slice(0,14)));
       parseSingleSection(rows,section.rowIdx,endRow,fontType,section.kitType,clubId,seasonId,section.garmentHint||[]);
       importData.sectionsFound.push(`${sheetName} → ${section.kitType}`);
     });
@@ -2269,7 +2270,7 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
       // Capture parent PIDs for this section (Blank row or GK Plain row)
       currentParentPids = {};
       row.forEach((v, c) => { if (isPidVal(v)) currentParentPids[c] = String(parseInt(String(v))); });
-      if (kitType==='Away') console.log(`[BLANK ROW] kitType=${kitType} row index=${i} currentParentPids=`, JSON.stringify(currentParentPids), 'raw cols 9-12:', row.slice(9,13));
+      if (kitType==='Away') console.log(`[BLANK ROW] kitType=${kitType} startRow=${startRow} row index=${i} currentParentPids=`, JSON.stringify(currentParentPids), 'raw cols 9-12:', row.slice(9,13));
       // Register parent PIDs - always scan rows above for garment labels directly
       // (garmentCols from garmentHint may be incomplete for edge columns)
       Object.entries(currentParentPids).forEach(([colStr, pid]) => {
