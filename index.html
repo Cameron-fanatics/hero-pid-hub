@@ -1624,6 +1624,7 @@ function importCorrectedPlayers(file){
       }));
       invalidateCache();refreshManage();
       setStatus(`Done — ${updates.length} updated${skipped?' ('+skipped+' skipped)':''}`);
+      updateStats();
       setTimeout(()=>setStatus(''),5000);
     }catch(err){console.error('[FixUpload]',err);setStatus('Error: '+err.message,true);}
   };
@@ -1776,7 +1777,7 @@ async function importCleanup(tableKey, file) {
         seasons: {Label:'Label'},
         players: {Name:'Name', ShirtName:'ShirtName', SquadNumber:'SquadNumber'},
         parents: {PID:'PID', GarmentType:'GarmentType', CustomSKU:'CustomSKU'},
-        heroes: {GarmentType:'GarmentType', KitType:'KitType', ProductTitle:'ProductTitle', Gender:'Gender', JerseyColour:'JerseyColour'},
+        heroes: {GarmentType:'GarmentType', KitType:'KitType', ProductTitle:'ProductTitle', Gender:'Gender', JerseyColour:'JerseyColour', ParentPID:'_ParentPID'},
       };
       const fieldMap = fieldMaps[tableKey] || {};
       const tableId = TABLES[tableKey === 'parents' ? 'parents' : tableKey === 'heroes' ? 'heroes' : tableKey];
@@ -1796,6 +1797,11 @@ async function importCleanup(tableKey, file) {
               if (atField === 'Name') fields[atField] = toProperName(val);
               else if (atField === 'ShirtName') fields[atField] = toShirtName(val);
               else if (atField === 'SquadNumber') fields[atField] = parseInt(val)||null;
+              else if (atField === '_ParentPID') {
+                // Resolve parent PID number to AT record ID
+                const parentRec = CACHE.parents.find(p => String(p.PID) === String(val));
+                if (parentRec) fields['ParentPIDID'] = parentRec.id;
+              }
               else fields[atField] = val;
             }
           }
@@ -1805,16 +1811,23 @@ async function importCleanup(tableKey, file) {
       }
 
       if (!updates.length) { setStatus('Nothing to update', true); return; }
-      setStatus(`Saving ${updates.length}...`);
+      setStatus(`Saving 0 of ${updates.length}...`);
 
-      // Batch parallel updates
+      // Batch updates with progress
       const cacheMap = { clubs: CACHE.clubs, seasons: CACHE.seasons, players: CACHE.players, parents: CACHE.parents, heroes: CACHE.heroes };
       const tableRef = TABLES[tableKey === 'parents' ? 'parents' : tableKey === 'heroes' ? 'heroes' : tableKey];
-      await Promise.all(updates.map(async ({id, fields}) => {
-        await atUpdate(tableRef, id, fields);
-        const rec = (cacheMap[tableKey]||[]).find(r => r.id === id);
-        if (rec) Object.assign(rec, fields);
-      }));
+      const BATCH = 5;
+      let done = 0;
+      for (let i = 0; i < updates.length; i += BATCH) {
+        const batch = updates.slice(i, i + BATCH);
+        await Promise.all(batch.map(async ({id, fields}) => {
+          await atUpdate(tableRef, id, fields);
+          const rec = (cacheMap[tableKey]||[]).find(r => r.id === id);
+          if (rec) Object.assign(rec, fields);
+          done++;
+        }));
+        setStatus(`Saving ${done} of ${updates.length}...`);
+      }
 
       invalidateCache();
       if (tableKey === 'clubs') { refreshClubs(); refreshFilterSelects(); }
