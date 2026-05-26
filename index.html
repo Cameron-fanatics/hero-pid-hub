@@ -424,7 +424,12 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
             <div class="dropzone-sub">Raw export from MDM — CSV format</div>
             <input type="file" id="mdm-roster-file" accept=".csv" style="display:none;" onchange="parseMdmRosterUpload(this.files[0])">
           </div>
-          <span id="mdm-roster-status" style="display:none;font-size:11px;margin-top:8px;display:block;"></span>
+          <div id="mdm-roster-status" style="display:none;margin-top:10px;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);">
+            <div id="mdm-roster-status-text" style="font-size:11px;color:var(--text2);margin-bottom:6px;"></div>
+            <div id="mdm-roster-progress-bar" style="height:4px;background:var(--border2);border-radius:2px;overflow:hidden;display:none;">
+              <div id="mdm-roster-progress-fill" style="height:100%;background:var(--accent);width:0%;transition:width 0.2s;"></div>
+            </div>
+          </div>
         </div>
       </div>
       <div id="mdm-roster-preview" class="hidden card" style="margin-bottom:20px;">
@@ -463,7 +468,12 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
             <div class="dropzone-sub">CSV or XLSX — Number and Name columns required</div>
             <input type="file" id="squad-update-file" accept=".csv,.xlsx" style="display:none;" onchange="parseSquadUpdateUpload(this.files[0])">
           </div>
-          <span id="squad-update-status" style="display:none;font-size:11px;margin-top:8px;display:block;"></span>
+          <div id="squad-update-status" style="display:none;margin-top:10px;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);">
+            <div id="squad-update-status-text" style="font-size:11px;color:var(--text2);margin-bottom:6px;"></div>
+            <div id="squad-update-progress-bar" style="height:4px;background:var(--border2);border-radius:2px;overflow:hidden;display:none;">
+              <div id="squad-update-progress-fill" style="height:100%;background:var(--accent);width:0%;transition:width 0.2s;"></div>
+            </div>
+          </div>
         </div>
       </div>
       <div id="squad-update-preview" class="hidden card" style="margin-bottom:20px;">
@@ -478,6 +488,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         </div>
       </div>
     </div>
+</div>
 
 <!-- CLUBS PAGE -->
 <div id="page-clubs" class="hidden">
@@ -700,9 +711,26 @@ async function atFetch(path, options={}) {
   });
   if (!res.ok) {
     const err = await res.json().catch(()=>({}));
-    throw new Error(err.error?.message || `HTTP ${res.status}`);
+    const msg = err.error?.message || `HTTP ${res.status}`;
+    // Detect auth/permission errors and prompt user to re-enter token
+    if (res.status === 401 || res.status === 403 || msg.toLowerCase().includes('invalid permissions') || msg.toLowerCase().includes('not found')) {
+      toast('Airtable token expired or invalid — please reconnect in Settings', 'error');
+      showPage('settings');
+      document.getElementById('at-token').focus();
+    }
+    throw new Error(msg);
   }
   return res.json();
+}
+
+// Validate AT token is present before starting any import operation
+function checkAuthBeforeImport() {
+  if (!AT_TOKEN) {
+    toast('No Airtable token — please connect in Settings first', 'error');
+    showPage('settings');
+    return false;
+  }
+  return true;
 }
 
 async function atGetAll(table, filterFormula='') {
@@ -1751,7 +1779,8 @@ function importCorrectedPlayers(file){
         if(p){if(fields.Name)p.Name=fields.Name;if(fields.ShirtName)p.ShirtName=fields.ShirtName;}
       }));
       invalidateCache();refreshManage();
-      setStatus(`Done — ${updates.length} updated${skipped?' ('+skipped+' skipped)':''}`);
+      const unresolvedMsg = unresolvedParents ? ` — ⚠ ${unresolvedParents} ParentPID(s) not found` : '';
+      setStatus(`Done — ${updates.length} updated${skipped?' ('+skipped+' skipped)':''}${unresolvedMsg}`);
       updateStats();
       setTimeout(()=>setStatus(''),5000);
     }catch(err){console.error('[FixUpload]',err);setStatus('Error: '+err.message,true);}
@@ -1910,7 +1939,14 @@ async function importCleanup(tableKey, file) {
       const fieldMap = fieldMaps[tableKey] || {};
       const tableId = TABLES[tableKey === 'parents' ? 'parents' : tableKey === 'heroes' ? 'heroes' : tableKey];
 
-      const updates = []; let skipped = 0;
+      // For heroes, ensure parent PIDs are cached so ParentPID lookup works
+      if (tableKey === 'heroes' && (!CACHE.parents || CACHE.parents.length === 0)) {
+        setStatus('Loading parent PIDs...');
+        const parentRecs = await atGetAll(TABLES.parents);
+        CACHE.parents = parentRecs.map(x=>({id:x.id,...x.fields}));
+      }
+
+      const updates = []; let skipped = 0; let unresolvedParents = 0;
       for (let i = 1; i < lines.length; i++) {
         const cols = parseCSVLine(lines[i]);
         const id = (cols[idIdx]||'').trim();
@@ -1931,7 +1967,8 @@ async function importCleanup(tableKey, file) {
                 if (parentRec) {
                   fields['ParentPIDID'] = parentRec.id;
                 } else {
-                  console.warn('[Cleanup:heroes] Could not resolve ParentPID:', val, '— check it exists in Parent PIDs table');
+                  unresolvedParents++;
+                  console.warn('[Cleanup:heroes] Could not resolve ParentPID:', val, '— not found in Parent PIDs table');
                 }
               }
               else fields[atField] = val;
@@ -1969,7 +2006,8 @@ async function importCleanup(tableKey, file) {
       // Always recompute the health banner so it reflects the fixes just applied
       calcDataHealth();
 
-      setStatus(`Done — ${updates.length} updated${skipped?' ('+skipped+' skipped)':''}`);
+      const unresolvedMsg = unresolvedParents ? ` — ⚠ ${unresolvedParents} ParentPID(s) not found` : '';
+      setStatus(`Done — ${updates.length} updated${skipped?' ('+skipped+' skipped)':''}${unresolvedMsg}`);
       setTimeout(() => setStatus(''), 5000);
     } catch(err) {
       console.error('[Cleanup:'+tableKey+']', err);
@@ -3023,10 +3061,12 @@ function parseMdmRosterUpload(file) {
   const seasonId = document.getElementById('mdm-roster-season').value;
   if (!clubId||!seasonId) { toast('Please select a club and season','error'); return; }
   const setStatus = (msg,err) => {
-    const s=document.getElementById('mdm-roster-status');
-    s.style.display=msg?'inline':'none';
-    s.style.color=err?'var(--red)':'var(--text2)';
-    s.textContent=msg;
+    const wrap=document.getElementById('mdm-roster-status');
+    const txt=document.getElementById('mdm-roster-status-text');
+    wrap.style.display=msg?'block':'none';
+    txt.style.color=err?'var(--red)':'var(--text2)';
+    txt.textContent=msg;
+    if(!msg) document.getElementById('mdm-roster-progress-bar').style.display='none';
   };
   setStatus('Reading...');
   const reader = new FileReader();
@@ -3103,12 +3143,27 @@ function parseMdmRosterUpload(file) {
 
 async function importMdmRoster() {
   if (!mdmRosterData) return;
+  if (!checkAuthBeforeImport()) return;
   const {rows, clubId, clubName, seasonId} = mdmRosterData;
   const setStatus = (msg,err) => {
-    const s=document.getElementById('mdm-roster-status');
-    s.style.display=msg?'inline':'none';
-    s.style.color=err?'var(--red)':'var(--text2)';
-    s.textContent=msg;
+    const wrap=document.getElementById('mdm-roster-status');
+    const txt=document.getElementById('mdm-roster-status-text');
+    wrap.style.display=msg?'block':'none';
+    txt.style.color=err?'var(--red)':'var(--text2)';
+    txt.textContent=msg;
+    if(!msg) document.getElementById('mdm-roster-progress-bar').style.display='none';
+  };
+  const setProgress = (done, total, phase) => {
+    const pct = total > 0 ? Math.round((done/total)*100) : 0;
+    const wrap=document.getElementById('mdm-roster-status');
+    const txt=document.getElementById('mdm-roster-status-text');
+    const bar=document.getElementById('mdm-roster-progress-bar');
+    const fill=document.getElementById('mdm-roster-progress-fill');
+    wrap.style.display='block';
+    txt.style.color='var(--text2)';
+    txt.textContent=`${phase} — ${done} of ${total} (${pct}%)`;
+    bar.style.display='block';
+    fill.style.width=pct+'%';
   };
   // Load existing MDM roster members for this club
   if (!CACHE.mdmRosterMembers) {
@@ -3142,11 +3197,7 @@ async function importMdmRoster() {
     }
   });
   let done=0, total=toCreate.length+toUpdate.length;
-  const setProgress = (done, total, phase) => {
-    const pct = total > 0 ? Math.round((done/total)*100) : 0;
-    const bar = '█'.repeat(Math.floor(pct/5)) + '░'.repeat(20-Math.floor(pct/5));
-    setStatus(`${phase} [${bar}] ${done}/${total} (${pct}%)`);
-  };
+
   setProgress(0, total, toCreate.length ? '↑ Creating' : '↻ Updating');
   // Create in batches of 10
   for (let i=0;i<toCreate.length;i+=10) {
@@ -3354,6 +3405,7 @@ async function buildSquadUpdatePreview(clubId, seasonId, newSquad, setStatus) {
 
 async function applySquadUpdate() {
   if (!squadUpdateData) return;
+  if (!checkAuthBeforeImport()) return;
   const {changes, clubMembers, newSquad, clubId, seasonId, clubName} = squadUpdateData;
   const setStatus = (msg,err) => {
     const s=document.getElementById('squad-update-save-status');
