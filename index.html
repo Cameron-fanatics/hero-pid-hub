@@ -2267,7 +2267,8 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
       // Register parent PIDs
       Object.entries(currentParentPids).forEach(([colStr, pid]) => {
         const col = Number(colStr);
-        const garmentType = garmentCols[col] ||
+        const gt1 = garmentCols[col];
+        const garmentType = gt1 ||
           // fallback: scan rows above current for a garment label in this col
           (() => {
             for (let k = startRow; k < i; k++) {
@@ -2276,6 +2277,7 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
             }
             return null;
           })();
+        if (!garmentType) console.warn(`[PARENT SKIP] PID=${pid} col=${col} kitType=${kitType} garmentCols=`, JSON.stringify(garmentCols), 'startRow=', startRow, 'i=', i);
         if (garmentType && !importData.parents.find(p=>p.pid===pid)) {
           importData.parents.push({pid, clubId, seasonId, kitType, garmentType});
         }
