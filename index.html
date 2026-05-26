@@ -2269,6 +2269,7 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
       // Capture parent PIDs for this section (Blank row or GK Plain row)
       currentParentPids = {};
       row.forEach((v, c) => { if (isPidVal(v)) currentParentPids[c] = String(parseInt(String(v))); });
+      if (kitType==='Away') console.log(`[BLANK ROW] kitType=${kitType} row index=${i} currentParentPids=`, JSON.stringify(currentParentPids), 'raw cols 9-12:', row.slice(9,13));
       // Register parent PIDs - always scan rows above for garment labels directly
       // (garmentCols from garmentHint may be incomplete for edge columns)
       Object.entries(currentParentPids).forEach(([colStr, pid]) => {
