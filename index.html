@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v106 -->
+<!-- HEROPID-BUILD-v108 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1778,7 +1778,7 @@ function importCorrectedPlayers(file){
         const p=CACHE.players.find(x=>x.id===id);
         if(p){if(fields.Name)p.Name=fields.Name;if(fields.ShirtName)p.ShirtName=fields.ShirtName;}
       }));
-      invalidateCache();refreshManage();
+      await loadCache(true);
       setStatus(`Done — ${updates.length} updated${skipped?' ('+skipped+' skipped)':''}`);
       updateStats();
       setTimeout(()=>setStatus(''),5000);
@@ -1939,10 +1939,13 @@ async function importCleanup(tableKey, file) {
       const tableId = TABLES[tableKey === 'parents' ? 'parents' : tableKey === 'heroes' ? 'heroes' : tableKey];
 
       // For heroes, ensure parent PIDs are cached so ParentPID lookup works
-      if (tableKey === 'heroes' && (!CACHE.parents || CACHE.parents.length === 0)) {
+      if (tableKey === 'heroes') {
         setStatus('Loading parent PIDs...');
         const parentRecs = await atGetAll(TABLES.parents);
         CACHE.parents = parentRecs.map(x=>({id:x.id,...x.fields}));
+        console.log('[Cleanup:heroes] Loaded', CACHE.parents.length, 'parent PIDs');
+        const samplePIDs = CACHE.parents.slice(0,3).map(p=>p.PID);
+        console.log('[Cleanup:heroes] Sample PIDs:', samplePIDs);
       }
 
       const updates = []; let skipped = 0; let unresolvedParents = 0;
@@ -1997,7 +2000,7 @@ async function importCleanup(tableKey, file) {
         setStatus(`Saving ${done} of ${updates.length}...`);
       }
 
-      invalidateCache();
+      await loadCache(true);
       if (tableKey === 'clubs') { refreshClubs(); refreshFilterSelects(); }
       else if (tableKey === 'seasons') { refreshSeasons(); refreshFilterSelects(); }
       else if (tableKey === 'players') { refreshManage(); }
@@ -2641,7 +2644,7 @@ async function confirmImport() {
       done += newHeroes.length;
     }
     setProgress(total, total, 'Complete!');
-    invalidateCache();
+    await loadCache(true);
     updateStats(); refreshFilterSelects();
     const _importedPlayerList = d.players.map(p=>({name:p.name,clubId:p.clubId,seasonId:p.seasonId}));
     clearImport();
@@ -2873,7 +2876,7 @@ async function confirmCreationImport() {
         recs.forEach(r => CACHE.heroes.push({id:r.id,...r.fields}));
       }
     }
-    invalidateCache();
+    await loadCache(true);
     updateStats();refreshFilterSelects();
     const _csvPlayerList = (d.allParsedPlayers||[]);
     const _heroCount = d.heroes.length, _provCount = d.provisional.length;
@@ -3224,8 +3227,14 @@ async function importMdmRoster() {
   });
   const playerUpdates = [];
   CACHE.players.filter(p => p.ClubID === clubId).forEach(p => {
-    if (!p.MDMActorID) return;
-    const desired = actorToStatus[p.MDMActorID];
+    // Match by MDMActorID first, fall back to jersey name match
+    let desired = p.MDMActorID ? actorToStatus[p.MDMActorID] : null;
+    if (!desired) {
+      // Fallback: find MDM entry by jersey name matching shirt name
+      const shirtName = (p.ShirtName||'').toUpperCase().trim();
+      const mdmEntry = rows.find(r => (r.jerseyName||'').toUpperCase().trim() === shirtName);
+      if (mdmEntry) desired = mdmEntry.rosterStatus === 'A' ? 'active' : 'archived';
+    }
     if (desired && p.Status !== desired) {
       playerUpdates.push({player: p, desired});
     }
@@ -3241,6 +3250,8 @@ async function importMdmRoster() {
   toast(`MDM Roster: ${toCreate.length} created, ${toUpdate.length} updated${playerUpdates.length ? `, ${playerUpdates.length} player statuses synced` : ''}`,'success');
   setStatus('');
   mdmRosterData = null;
+  // Auto-refresh so search/manage reflect latest data without manual sync
+  await loadCache(true);
 }
 
 // ─── SQUAD UPDATE ──────────────────────────────────────────
@@ -3471,6 +3482,8 @@ async function applySquadUpdate() {
   toast(`Squad updated: ${changes.length} roster entries updated${squadPlayerUpdates.length ? `, ${squadPlayerUpdates.length} player statuses synced` : ''}`,'success');
   document.getElementById('squad-update-preview').classList.add('hidden');
   squadUpdateData=null;
+  // Auto-refresh so search/manage reflect latest data without manual sync
+  await loadCache(true);
 }
 
 function exportSquadUpdateCSV() {
