@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v116 -->
+<!-- HEROPID-BUILD-v117 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -796,7 +796,20 @@ function refreshSettingsStatus() {
   }
 }
 
-function refreshData(){loadCache(true).then(()=>toast("Data refreshed"));}
+function refreshData(){
+  const btn = document.querySelector('[onclick="refreshData()"]');
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.textContent = '↻ Syncing...'; btn.disabled = true; }
+  loadCache(true)
+    .then(() => {
+      toast('Data synced successfully ✓');
+      if (btn) { btn.textContent = orig; btn.disabled = false; }
+    })
+    .catch(err => {
+      toast('Sync failed: ' + err.message, 'error');
+      if (btn) { btn.textContent = orig; btn.disabled = false; }
+    });
+}
 function disconnectAirtable() {
   if (!confirm('Disconnect from Airtable? Your data in Airtable will not be affected.')) return;
   localStorage.removeItem('at_token');
