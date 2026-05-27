@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v117 -->
+<!-- HEROPID-BUILD-v119 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -156,6 +156,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <div class="nav-item active" onclick="showPage('search')" id="nav-search"><span class="icon">⌕</span> Search</div>
     <div class="nav-item" onclick="showPage('manage')" id="nav-manage"><span class="icon">⊞</span> Manage</div>
     <div class="nav-item" onclick="showPage('import')" id="nav-import"><span class="icon">↑</span> Import</div>
+    <div class="nav-item" onclick="showPage('bulkexport')" id="nav-bulkexport"><span class="icon">⬇</span> Export</div>
     <div class="nav-section" style="margin-top:8px;">Data</div>
     <div class="nav-item" onclick="showPage('clubs')" id="nav-clubs"><span class="icon">◈</span> Clubs</div>
     <div class="nav-item" onclick="showPage('seasons')" id="nav-seasons"><span class="icon">◷</span> Seasons</div>
@@ -256,7 +257,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         </label>
         <div id="export-actions" style="display:none;align-items:center;gap:6px;">
           <span style="font-size:11px;color:var(--accent);" id="selected-count-label"></span>
-          <button class="btn btn-primary btn-sm" onclick="exportSelectedPids()">⬇ Export PIDs</button><button class="btn btn-ghost btn-sm" id="btn-exclusions" onclick="runExclusionsExport(this)" style="margin-left:4px;">⬇ Exclusions</button><button class="btn btn-ghost btn-sm" onclick="exportFootballContent()" style="margin-left:4px;">⬇ Content</button>
+          <button class="btn btn-primary btn-sm" onclick="exportSelectedPids()">⬇ Export PIDs</button><button class="btn btn-ghost btn-sm" onclick="openCataloguesWithPids([...(window._selectedPids||new Set())])" style="margin-left:4px;">📋 Catalogues</button><button class="btn btn-ghost btn-sm" id="btn-exclusions" onclick="runExclusionsExport(this)" style="margin-left:4px;">⬇ Exclusions</button><button class="btn btn-ghost btn-sm" onclick="exportFootballContent()" style="margin-left:4px;">⬇ Content</button>
         </div>
       </div>
     </div>
@@ -587,6 +588,89 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 </main>
 </div><!-- end .app -->
 
+<!-- BULK EXPORT PAGE -->
+<div id="page-bulkexport" class="hidden">
+  <div class="topbar"><div class="page-title">Export</div></div>
+  <div class="content">
+
+    <!-- CATALOGUES SECTION -->
+    <div class="card" style="margin-bottom:20px;">
+      <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:600;margin-bottom:4px;">Catalogues Export</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Select PIDs, choose sites and action, then export the completed catalogue template.</div>
+
+      <!-- PID INPUT -->
+      <div style="margin-bottom:16px;">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">PIDs</div>
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <button class="btn btn-ghost btn-sm" onclick="switchCatalogueInput('paste')" id="cat-input-btn-paste" style="border-color:var(--accent);color:var(--accent);">Paste PIDs</button>
+          <button class="btn btn-ghost btn-sm" onclick="switchCatalogueInput('upload')" id="cat-input-btn-upload">Upload Excel</button>
+        </div>
+        <div id="cat-input-paste" style="display:block;">
+          <textarea id="cat-pid-input" placeholder="Paste PIDs here, one per line or comma separated..." 
+            style="width:100%;height:80px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;color:var(--text);font-family:'DM Mono',monospace;font-size:12px;resize:vertical;"
+            oninput="parseCataloguePids()"></textarea>
+        </div>
+        <div id="cat-input-upload" style="display:none;">
+          <div class="dropzone" id="cat-pid-dropzone" onclick="document.getElementById('cat-pid-file').click()"
+            ondragover="event.preventDefault();this.classList.add('drag-over')"
+            ondragleave="this.classList.remove('drag-over')"
+            ondrop="event.preventDefault();this.classList.remove('drag-over');parseCataloguePidFile(event.dataTransfer.files[0])">
+            <div class="dropzone-icon">↑</div>
+            <div class="dropzone-text">Drop Excel file here</div>
+            <div class="dropzone-sub">Single column of PIDs, no header required</div>
+            <input type="file" id="cat-pid-file" accept=".xlsx,.xls,.csv" style="display:none;" onchange="parseCataloguePidFile(this.files[0])">
+          </div>
+        </div>
+        <div id="cat-pid-count" style="font-size:11px;color:var(--text3);margin-top:6px;"></div>
+      </div>
+
+      <!-- SITE SELECTION -->
+      <div style="margin-bottom:16px;">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Sites</div>
+        <input type="text" id="cat-site-search" placeholder="Search sites..." oninput="filterCatalogueSites()"
+          style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:7px 10px;color:var(--text);font-size:12px;margin-bottom:8px;">
+        <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+          <button class="btn btn-ghost btn-sm" onclick="selectCatalogueSiteGroup('all')">Select All</button>
+          <button class="btn btn-ghost btn-sm" onclick="selectCatalogueSiteGroup('none')">Clear</button>
+          <button class="btn btn-ghost btn-sm" onclick="selectCatalogueSiteGroup('Own Sites')" id="cat-grp-own">Own Sites</button>
+          <button class="btn btn-ghost btn-sm" onclick="selectCatalogueSiteGroup('Connected Commerce')" id="cat-grp-cc">Connected Commerce</button>
+          <button class="btn btn-ghost btn-sm" onclick="selectCatalogueSiteGroup('Club')" id="cat-grp-club">Club</button>
+        </div>
+        <div id="cat-site-list" style="max-height:240px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg3);padding:4px;"></div>
+      </div>
+
+      <!-- SELECTED SITES CHIPS -->
+      <div id="cat-selected-chips" style="display:none;margin-bottom:16px;">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Selected Sites <span id="cat-selected-count" style="color:var(--accent);"></span></div>
+        <div id="cat-chips-wrap" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+      </div>
+
+      <!-- ACTION PER SITE -->
+      <div id="cat-action-section" style="display:none;margin-bottom:16px;">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;">Action</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <select id="cat-global-action" class="form-select" style="width:260px;" onchange="applyGlobalCatalogueAction()">
+            <option value="">— Set action for all sites —</option>
+            <option value="ADD">ADD</option>
+            <option value="REMOVE">REMOVE</option>
+            <option value="EXCLUSIVE">EXCLUSIVE</option>
+            <option value="REMOVE FROM EXCLUSIVE">REMOVE FROM EXCLUSIVE</option>
+          </select>
+          <span style="font-size:11px;color:var(--text3);">or set per site below</span>
+        </div>
+        <div id="cat-action-per-site" style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;"></div>
+      </div>
+
+      <!-- EXPORT BUTTON -->
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button class="btn btn-primary" onclick="exportCatalogues()" id="cat-export-btn">⬇ Export Catalogue XLSX</button>
+        <span id="cat-export-status" style="font-size:11px;color:var(--text3);"></span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <!-- MODALS -->
 <div class="modal-overlay" id="modal-add-club">
   <div class="modal">
@@ -695,7 +779,7 @@ const FED_MAP = {'FRNC':'FFF','FRANCE':'FFF','GERM':'DFB','GERMANY':'DFB','ENG':
 const BRAND_ANCHORS = ['FRANCE NIKE','FRANCE ADIDAS','FRANCE PUMA','DFB ADIDAS','DFB NIKE','DFB PUMA','ENGLAND NIKE','SPAIN ADIDAS','ITALY PUMA','PORTUGAL NIKE','NETHERLANDS NIKE'];
 
 // Local cache for search performance
-let CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null};
+let CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null,catalogues:[]};
 
 // ─── NAME NORMALISATION ───────────────────────────────────────────────────────
 const toProperName = s => (s||'').trim().replace(/\s+/g,' ')
@@ -872,7 +956,7 @@ async function initTables() {
   const required = ['Clubs','Seasons','Players','Parent PIDs','Hero PIDs'];
   const missing = required.filter(n => !tableMap[n]);
   if (missing.length > 0) throw new Error(`Missing tables: ${missing.join(', ')}. Please create them in Airtable first.`);
-  TABLES = {clubs:tableMap['Clubs'],seasons:tableMap['Seasons'],players:tableMap['Players'],parents:tableMap['Parent PIDs'],heroes:tableMap['Hero PIDs'],mdmRosterMembers:tableMap['MDM Roster Members']};
+  TABLES = {clubs:tableMap['Clubs'],seasons:tableMap['Seasons'],players:tableMap['Players'],parents:tableMap['Parent PIDs'],heroes:tableMap['Hero PIDs'],mdmRosterMembers:tableMap['MDM Roster Members'],catalogues:'tblH92885JmpxxBIM'};
   // Only run ensureFields once per session — skip if already done
   if (!localStorage.getItem('at_fields_init') && !window._fieldsInitDone) {
     window._fieldsInitDone = true;
@@ -951,21 +1035,22 @@ async function loadCachedOrFetch(key,tid){const c=getCachedTable(key);if(c)retur
 async function loadCache(force){
   if(force)invalidateCache();
   try{
-    const[clubs,seasons,players,parents,heroes]=await Promise.all([
+    const[clubs,seasons,players,parents,heroes,catalogues]=await Promise.all([
       atGetAll(TABLES.clubs).then(r=>r.map(x=>({id:x.id,...x.fields}))),
       atGetAll(TABLES.seasons).then(r=>r.map(x=>({id:x.id,...x.fields}))),
       loadCachedOrFetch(CACHE_KEYS.players,TABLES.players),
       loadCachedOrFetch(CACHE_KEYS.parents,TABLES.parents),
       loadCachedOrFetch(CACHE_KEYS.heroes,TABLES.heroes),
+    atGetAll(TABLES.catalogues).then(r=>r.map(x=>({id:x.id,...x.fields}))),
     ]);
-    CACHE.clubs=clubs;CACHE.seasons=seasons;CACHE.players=players;CACHE.parents=parents;CACHE.heroes=heroes;
+    CACHE.clubs=clubs;CACHE.seasons=seasons;CACHE.players=players;CACHE.parents=parents;CACHE.heroes=heroes;;CACHE.catalogues=catalogues||[];
     cacheLoaded=true;updateStats();refreshFilterSelects();refreshClubs();refreshSeasons();
   }catch(e){toast('Failed to load data: '+e.message,'error');}
 }
 
 // ─── PAGES ────────────────────────────────────────────────────────────────────
 function showPage(page) {
-  ['search','manage','import','clubs','seasons','settings','cleanup'].forEach(p => {
+  ['search','manage','import','clubs','seasons','settings','cleanup','bulkexport'].forEach(p => {
     document.getElementById('page-'+p)?.classList.add('hidden');
     document.getElementById('nav-'+p)?.classList.remove('active');
   });
@@ -976,6 +1061,7 @@ function showPage(page) {
   if (page==='seasons') refreshSeasons();
   if (page==='import') { refreshImportSelects(); initDropZones(); }
   if (page==='settings') refreshSettingsStatus();
+  if (page==='bulkexport') initBulkExport();
 }
 
 function switchTab(tab) {
@@ -3619,6 +3705,213 @@ function exportSquadUpdateCSV() {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+
+// ─── BULK EXPORT — CATALOGUES ─────────────────────────────────────────────────
+let _cataloguePids = [];
+let _catalogueSelectedSites = {}; // catalogueId -> {name, catalogueId, type, action}
+
+function initBulkExport() {
+  renderCatalogueSiteList();
+}
+
+function switchCatalogueInput(mode) {
+  document.getElementById('cat-input-paste').style.display = mode==='paste' ? 'block' : 'none';
+  document.getElementById('cat-input-upload').style.display = mode==='upload' ? 'block' : 'none';
+  document.getElementById('cat-input-btn-paste').style.cssText = mode==='paste' ? 'border-color:var(--accent);color:var(--accent);' : '';
+  document.getElementById('cat-input-btn-upload').style.cssText = mode==='upload' ? 'border-color:var(--accent);color:var(--accent);' : '';
+}
+
+function parseCataloguePids() {
+  const raw = document.getElementById('cat-pid-input').value;
+  const pids = raw.split(/[\n,\s]+/).map(p=>p.trim()).filter(p=>/^\d{7,12}$/.test(p));
+  _cataloguePids = [...new Set(pids)];
+  document.getElementById('cat-pid-count').textContent = _cataloguePids.length ? `${_cataloguePids.length} PID${_cataloguePids.length!==1?'s':''} ready` : '';
+}
+
+function parseCataloguePidFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      const pids = [];
+      rows.forEach(row => row.forEach(cell => {
+        const s = String(cell||'').trim();
+        if (/^\d{7,12}$/.test(s)) pids.push(s);
+      }));
+      _cataloguePids = [...new Set(pids)];
+      document.getElementById('cat-pid-count').textContent = `${_cataloguePids.length} PID${_cataloguePids.length!==1?'s':''} ready from ${file.name}`;
+    } catch(e) { document.getElementById('cat-pid-count').textContent = 'Error reading file: '+e.message; }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function renderCatalogueSiteList(filter='') {
+  const list = document.getElementById('cat-site-list');
+  if (!list) return;
+  const cats = CACHE.catalogues || [];
+  const groups = ['Own Sites','Connected Commerce','Club'];
+  let html = '';
+  groups.forEach(grp => {
+    const items = cats.filter(c => (c.Type||'Club')===grp && (!filter || (c.Name||'').toLowerCase().includes(filter.toLowerCase())));
+    if (!items.length) return;
+    html += `<div style="padding:4px 6px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;border-top:1px solid var(--border);margin-top:2px;">${grp}</div>`;
+    items.forEach(c => {
+      const sel = !!_catalogueSelectedSites[c.CatalogueID];
+      html += `<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;border-radius:3px;${sel?'background:var(--accent-glow);':''}">
+        <input type="checkbox" ${sel?'checked':''} style="accent-color:var(--accent);" onchange="toggleCatalogueSite(${c.CatalogueID},'${(c.Name||'').replace(/'/g,"\'")}','${grp}',this.checked)">
+        <span style="font-size:12px;color:var(--text);">${c.Name}</span>
+        <span style="font-size:10px;color:var(--text3);margin-left:auto;">${c.CatalogueID}</span>
+      </label>`;
+    });
+  });
+  list.innerHTML = html || '<div style="padding:12px;color:var(--text3);font-size:12px;">No sites found</div>';
+  updateCatalogueChips();
+}
+
+function filterCatalogueSites() {
+  renderCatalogueSiteList(document.getElementById('cat-site-search').value);
+}
+
+function toggleCatalogueSite(catalogueId, name, type, checked) {
+  if (checked) {
+    _catalogueSelectedSites[catalogueId] = {name, catalogueId, type, action:''};
+  } else {
+    delete _catalogueSelectedSites[catalogueId];
+  }
+  renderCatalogueSiteList(document.getElementById('cat-site-search').value);
+}
+
+function selectCatalogueSiteGroup(group) {
+  const cats = CACHE.catalogues || [];
+  if (group==='all') {
+    cats.forEach(c => { _catalogueSelectedSites[c.CatalogueID] = {name:c.Name, catalogueId:c.CatalogueID, type:c.Type||'Club', action:''}; });
+  } else if (group==='none') {
+    _catalogueSelectedSites = {};
+  } else {
+    cats.filter(c=>(c.Type||'Club')===group).forEach(c => {
+      _catalogueSelectedSites[c.CatalogueID] = {name:c.Name, catalogueId:c.CatalogueID, type:c.Type||'Club', action:''};
+    });
+  }
+  renderCatalogueSiteList(document.getElementById('cat-site-search').value);
+}
+
+function updateCatalogueChips() {
+  const selected = Object.values(_catalogueSelectedSites);
+  const chipsWrap = document.getElementById('cat-chips-wrap');
+  const chipsSection = document.getElementById('cat-selected-chips');
+  const actionSection = document.getElementById('cat-action-section');
+  const countEl = document.getElementById('cat-selected-count');
+  if (!selected.length) {
+    chipsSection.style.display = 'none';
+    actionSection.style.display = 'none';
+    return;
+  }
+  chipsSection.style.display = 'block';
+  actionSection.style.display = 'block';
+  countEl.textContent = `(${selected.length})`;
+  chipsWrap.innerHTML = selected.map(s => `
+    <span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:11px;">
+      ${s.name}
+      <button onclick="toggleCatalogueSite(${s.catalogueId},'','',false)" style="background:none;border:none;color:var(--text3);cursor:pointer;padding:0;line-height:1;">✕</button>
+    </span>`).join('');
+  // Render per-site action selects
+  const perSite = document.getElementById('cat-action-per-site');
+  perSite.innerHTML = selected.map(s => `
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:12px;color:var(--text);min-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${s.name}</span>
+      <select style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px 8px;color:var(--text);font-size:12px;"
+        onchange="_catalogueSelectedSites[${s.catalogueId}].action=this.value">
+        <option value="">— Select action —</option>
+        <option value="ADD" ${s.action==='ADD'?'selected':''}>ADD</option>
+        <option value="REMOVE" ${s.action==='REMOVE'?'selected':''}>REMOVE</option>
+        <option value="EXCLUSIVE" ${s.action==='EXCLUSIVE'?'selected':''}>EXCLUSIVE</option>
+        <option value="REMOVE FROM EXCLUSIVE" ${s.action==='REMOVE FROM EXCLUSIVE'?'selected':''}>REMOVE FROM EXCLUSIVE</option>
+      </select>
+    </div>`).join('');
+}
+
+function applyGlobalCatalogueAction() {
+  const action = document.getElementById('cat-global-action').value;
+  if (!action) return;
+  Object.keys(_catalogueSelectedSites).forEach(k => { _catalogueSelectedSites[k].action = action; });
+  updateCatalogueChips();
+  // Reset global dropdown
+  document.getElementById('cat-global-action').value = '';
+}
+
+async function exportCatalogues() {
+  if (typeof ExcelJS === 'undefined') { toast('ExcelJS loading, try again','error'); return; }
+  if (!_cataloguePids.length) { toast('No PIDs entered','error'); return; }
+  const selected = Object.values(_catalogueSelectedSites);
+  if (!selected.length) { toast('No sites selected','error'); return; }
+  const missing = selected.filter(s=>!s.action);
+  if (missing.length) { toast(`${missing.length} site${missing.length!==1?'s':''} missing an action`,'error'); return; }
+
+  const btn = document.getElementById('cat-export-btn');
+  const status = document.getElementById('cat-export-status');
+  btn.disabled = true; btn.textContent = '⌛ Generating...';
+  status.textContent = '';
+
+  try {
+    // Build Sheet1 rows: one row per PID per site
+    const sheet1Rows = [];
+    _cataloguePids.forEach(pid => {
+      selected.forEach(site => {
+        sheet1Rows.push([pid, site.name, site.catalogueId, site.action]);
+      });
+    });
+
+    // Build Ecom Catalogs sheet from AT data
+    const ecomRows = (CACHE.catalogues||[]).map(c => [c.Name||'', c.CatalogueID||'', null, null]);
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'HeroPID Hub';
+
+    // Sheet1
+    const ws1 = wb.addWorksheet('Sheet1');
+    ws1.columns = [{width:16},{width:40},{width:12},{width:30}];
+    ws1.addRow(['PID','Site','SiteID','ADD/REMOVE/EXCLUSIVE/REMOVE FROM EXCLUSIVE']);
+    const hdr = ws1.getRow(1);
+    hdr.font = {bold:true};
+    hdr.fill = {type:'pattern',pattern:'solid',fgColor:{argb:'FFE0E0E0'}};
+    sheet1Rows.forEach(r => ws1.addRow(r));
+
+    // Ecom Catalogs sheet
+    const ws2 = wb.addWorksheet('Ecom Catalogs');
+    ws2.columns = [{width:40},{width:12},{width:12},{width:30}];
+    ecomRows.forEach(r => ws2.addRow(r));
+
+    const today = new Date();
+    const d = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+    const fname = `Catalog_Request_Ecom_${d}.xlsx`;
+
+    wb.xlsx.writeBuffer().then(buf => {
+      const blob = new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href=url; a.download=fname; a.click(); URL.revokeObjectURL(url);
+      toast(`Exported ${sheet1Rows.length} rows (${_cataloguePids.length} PIDs × ${selected.length} sites)`);
+      status.textContent = `${sheet1Rows.length} rows exported`;
+    });
+  } catch(e) {
+    toast('Export error: '+e.message,'error');
+  } finally {
+    btn.disabled = false; btn.textContent = '⬇ Export Catalogue XLSX';
+  }
+}
+
+// Allow Search page to pre-populate catalogues with selected PIDs
+function openCataloguesWithPids(pids) {
+  _cataloguePids = pids;
+  document.getElementById('cat-pid-input').value = pids.join('\n');
+  document.getElementById('cat-pid-count').textContent = `${pids.length} PID${pids.length!==1?'s':''} ready`;
+  switchCatalogueInput('paste');
+  showPage('bulkexport');
+}
+
 
 init();
 </script>
