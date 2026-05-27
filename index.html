@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v108 -->
+<!-- HEROPID-BUILD-v109 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1965,7 +1965,7 @@ async function importCleanup(tableKey, file) {
               else if (atField === 'SquadNumber') fields[atField] = parseInt(val)||null;
               else if (atField === '_ParentPID') {
                 // Resolve parent PID number to AT record ID
-                const parentRec = CACHE.parents.find(p => String(p.PID) === String(val));
+                const parentRec = CACHE.parents.find(p => String(p.PID||'').trim() === String(val).trim());
                 if (parentRec) {
                   fields['ParentPIDID'] = parentRec.id;
                 } else {
@@ -3327,17 +3327,17 @@ async function buildSquadUpdatePreview(clubId, seasonId, newSquad, setStatus) {
     return;
   }
   // Build new squad lookup by jersey name
+  // Normalise accents for matching (e.g. PAVLOVIĆ matches PAVLOVIC)
+  const normName = s => s.toUpperCase().trim().normalize('NFD').replace(/[̀-ͯ]/g,'');
   const newSquadMap = {};
-  newSquad.forEach(p=>newSquadMap[p.name]=p.number);
+  newSquad.forEach(p=>newSquadMap[normName(p.name)]=p.number);
   // Build changes per unique roster member entry
-  // Group by actorId to detect number changes (same player across rosters)
   const changes = [];
-  const seenActors = {}; // actorId -> {newNumber, jerseyName}
-  // First pass: determine new state for each unique actor
   clubMembers.forEach(m=>{
     const jerseyName = (m.JerseyName||'').toUpperCase().trim();
-    const inNewSquad = jerseyName in newSquadMap;
-    const newNumber = inNewSquad ? newSquadMap[jerseyName] : m.JerseyNumber;
+    const jerseyNorm = normName(jerseyName);
+    const inNewSquad = jerseyNorm in newSquadMap;
+    const newNumber = inNewSquad ? newSquadMap[jerseyNorm] : m.JerseyNumber;
     const newStatus = inNewSquad ? 'A' : 'I';
     const newDisplay = inNewSquad ? 'V' : 'H';
     const numberChanged = inNewSquad && String(newNumber)!==String(m.JerseyNumber);
@@ -3368,8 +3368,8 @@ async function buildSquadUpdatePreview(clubId, seasonId, newSquad, setStatus) {
     });
   });
   // Check for players in new squad not found in any roster member
-  const allJerseyNames = new Set(clubMembers.map(m=>(m.JerseyName||'').toUpperCase().trim()));
-  const notFound = newSquad.filter(p=>!allJerseyNames.has(p.name.toUpperCase().trim()));
+  const allJerseyNamesNorm = new Set(clubMembers.map(m=>normName(m.JerseyName||'')));
+  const notFound = newSquad.filter(p=>!allJerseyNamesNorm.has(normName(p.name)));
   // Store for apply
   const club = CACHE.clubs.find(c=>c.id===clubId);
   const season = CACHE.seasons.find(s=>s.id===seasonId);
@@ -3388,10 +3388,22 @@ async function buildSquadUpdatePreview(clubId, seasonId, newSquad, setStatus) {
     <span style="color:var(--amber);">${numChanges} number changes</span> · 
     <span style="color:var(--text2);">${changes.length} total rows in MDM export</span>
     ${notFound.length?`<br><span style="color:var(--amber);">⚠ ${notFound.length} players not found in roster: ${notFound.map(p=>p.name).join(', ')}</span>`:''}`;
+  // Sort: A/V first (descending number), then A/H (descending number), then rest
+  const sortedChanges = [...changes].sort((a,b) => {
+    const aAV = a.newRosterStatus==='A' && a.newDisplayStatus==='V';
+    const bAV = b.newRosterStatus==='A' && b.newDisplayStatus==='V';
+    const aAH = a.newRosterStatus==='A' && a.newDisplayStatus==='H';
+    const bAH = b.newRosterStatus==='A' && b.newDisplayStatus==='H';
+    if (aAV && !bAV) return -1;
+    if (!aAV && bAV) return 1;
+    if (aAH && !bAH) return -1;
+    if (!aAH && bAH) return 1;
+    return parseInt(b.newNumber||0) - parseInt(a.newNumber||0);
+  });
   document.getElementById('squad-update-preview-table').innerHTML = `
     <table class="data-table" style="font-size:11px;">
       <thead><tr><th>Jersey Name</th><th>Player</th><th>Roster</th><th>Old #</th><th>New #</th><th>Old Status</th><th>New Status</th><th>Change</th></tr></thead>
-      <tbody>${changes.map(c=>{
+      <tbody>${sortedChanges.map(c=>{
         const tags = [];
         if (c.numberChanged) tags.push(`<span class="badge" style="background:rgba(255,179,64,.15);color:var(--amber);border:1px solid rgba(255,179,64,.3);">#</span>`);
         if (c.inNewSquad&&c.newRosterStatus==='A'&&c.oldStatus.startsWith('I')) tags.push(`<span class="badge badge-active">Activate</span>`);
