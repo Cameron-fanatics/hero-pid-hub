@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v115 -->
+<!-- HEROPID-BUILD-v116 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3469,7 +3469,7 @@ async function buildSquadUpdatePreview(clubId, seasonId, newSquad, setStatus) {
   document.getElementById('squad-update-preview-table').innerHTML = `
     <table class="data-table" style="font-size:11px;">
       <thead><tr><th>Jersey Name</th><th>Player</th><th>Roster</th><th>Old #</th><th>New #</th><th>Old Status</th><th>New Status</th><th>Change</th></tr></thead>
-      <tbody>${sortedChanges.map(c=>{
+      <tbody>${sortedChanges.map((c,ci)=>{
         const tags = [];
         if (c.numberChanged) tags.push(`<span class="badge" style="background:rgba(255,179,64,.15);color:var(--amber);border:1px solid rgba(255,179,64,.3);">#</span>`);
         if (c.inNewSquad&&c.newRosterStatus==='A'&&c.oldStatus.startsWith('I')) tags.push(`<span class="badge badge-active">Activate</span>`);
