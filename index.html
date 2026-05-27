@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v109 -->
+<!-- HEROPID-BUILD-v110 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3398,7 +3398,7 @@ async function buildSquadUpdatePreview(clubId, seasonId, newSquad, setStatus) {
     if (!aAV && bAV) return 1;
     if (aAH && !bAH) return -1;
     if (!aAH && bAH) return 1;
-    return parseInt(b.newNumber||0) - parseInt(a.newNumber||0);
+    return parseInt(a.newNumber||0) - parseInt(b.newNumber||0);
   });
   document.getElementById('squad-update-preview-table').innerHTML = `
     <table class="data-table" style="font-size:11px;">
