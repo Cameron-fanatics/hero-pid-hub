@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v111 -->
+<!-- HEROPID-BUILD-v112 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2954,6 +2954,34 @@ async function confirmHomeplateResolve() {
 function clearHomeplateImport(){homeplateData=null;document.getElementById('homeplate-preview').classList.add('hidden');document.getElementById('file-input-homeplate').value='';}
 
 // ─── UI HELPERS ───────────────────────────────────────────────────────────────
+// ─── INLINE EDIT ─────────────────────────────────────────────────────────────
+// Makes a table cell double-click editable. onChange(newVal, rowIdx, field) is called on commit.
+function makeEditable(cell, rowIdx, field, onChange) {
+  cell.title = 'Double-click to edit';
+  cell.style.cursor = 'pointer';
+  cell.addEventListener('dblclick', function() {
+    if (cell.querySelector('input')) return;
+    const current = cell.textContent.trim();
+    const input = document.createElement('input');
+    input.value = current;
+    input.style.cssText = 'width:100%;background:var(--bg3);border:1px solid var(--accent);border-radius:3px;color:var(--text);padding:2px 4px;font-size:11px;font-family:inherit;';
+    cell.textContent = '';
+    cell.appendChild(input);
+    input.focus();
+    input.select();
+    const commit = () => {
+      const val = input.value.trim();
+      cell.textContent = val || current;
+      if (val !== current) onChange(val, rowIdx, field);
+    };
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      if (e.key === 'Escape') { cell.textContent = current; }
+    });
+  });
+}
+
 function togglePlayer(header){const pids=header.nextElementSibling;const chevron=header.querySelector('.chevron');pids.classList.toggle('open');chevron.classList.toggle('open');}
 function toggleSection(titleEl){const content=titleEl.nextElementSibling;const isOpen=content.style.display!=='none';content.style.display=isOpen?'none':'block';}
 function copyPid(pid,btn){navigator.clipboard.writeText(pid).then(()=>{const orig=btn.textContent;btn.textContent='✓';btn.style.color='var(--green)';setTimeout(()=>{btn.textContent=orig;btn.style.color='';},1200);toast(`Copied ${pid}`);});}
@@ -3094,6 +3122,17 @@ function parseMdmRosterUpload(file) {
         if (!cols.length||!cols[0]) continue;
         const row = {};
         hdrs.forEach((h,ci)=>row[h]=repairMojibake((cols[ci]||'').trim()));
+        // Smart number: use whichever of jerseyNumber/jerseyNumberString is populated
+        // If both present and different, flag for manual entry
+        const numA = row['jerseyNumber']||'';
+        const numB = row['jerseyNumberString']||'';
+        if (numA && numB && numA !== numB) {
+          row._numberConflict = true;
+          row.jerseyNumber = ''; // force manual entry
+        } else {
+          row.jerseyNumber = numA || numB;
+          row._numberConflict = false;
+        }
         rows.push(row);
       }
       const club = CACHE.clubs.find(c=>c.id===clubId);
@@ -3123,20 +3162,31 @@ function parseMdmRosterUpload(file) {
         <div style="font-size:12px;color:var(--text2);padding:8px;">${mdmRosterData.clubName} · ${mdmRosterData.seasonName}</div>`;
       // Unique rosters
       const rosterNames = [...new Set(rows.map(r=>r.rosterId))];
-      document.getElementById('mdm-roster-preview-table').innerHTML = `
+      // Sort by jersey number ascending
+      rows.sort((a,b) => parseInt(a.jerseyNumber||999) - parseInt(b.jerseyNumber||999));
+      const mdmTbl = document.createElement('div');
+      mdmTbl.innerHTML = `
         <table class="data-table" style="font-size:11px;">
-          <thead><tr><th>ID</th><th>Roster</th><th>Jersey Name</th><th>Name</th><th>#</th><th>Pos</th><th>Status</th></tr></thead>
-          <tbody>${rows.map(r=>`<tr>
+          <thead><tr><th>ID</th><th>Roster</th><th>Jersey Name</th><th>Name</th><th title="Double-click to edit"># ✎</th><th>Pos</th><th>Status</th></tr></thead>
+          <tbody>${rows.map((r,ri)=>`<tr>
             <td class="mono">${r.id}</td>
             <td class="mono">${r.rosterId}</td>
-            <td style="color:var(--text);">${r.jerseyName}</td>
+            <td style="color:var(--text);" data-field="jerseyName" data-ri="${ri}">${r.jerseyName}</td>
             <td style="color:var(--text2);">${r.name}</td>
-            <td class="mono">${r.jerseyNumber}</td>
+            <td class="mono" data-field="jerseyNumber" data-ri="${ri}" style="${r._numberConflict?'background:rgba(255,179,64,0.15);color:var(--amber);cursor:pointer;':''}">${r._numberConflict?'⚠ conflict':r.jerseyNumber}</td>
             <td>${r.position}</td>
             <td><span class="badge ${r.rosterStatus==='A'?'badge-active':'badge-inactive'}">${r.rosterStatus}/${r.displayStatus}</span></td>
           </tr>`).join('')}
           </tbody>
         </table>`;
+      const tblWrap = document.getElementById('mdm-roster-preview-table');
+      tblWrap.innerHTML = '';
+      tblWrap.appendChild(mdmTbl);
+      mdmTbl.querySelectorAll('td[data-field]').forEach(cell => {
+        const ri = parseInt(cell.dataset.ri);
+        const field = cell.dataset.field;
+        makeEditable(cell, ri, field, (val) => { rows[ri][field] = val; });
+      });
       setStatus(`${rows.length} rows ready`);
     } catch(err) { setStatus('Error: '+err.message,true); }
   };
@@ -3413,7 +3463,7 @@ async function buildSquadUpdatePreview(clubId, seasonId, newSquad, setStatus) {
           <td style="color:var(--text2);">${c.playerName}</td>
           <td class="mono" style="font-size:10px;">${c.rosterId}</td>
           <td class="mono">${c.oldNumber}</td>
-          <td class="mono" style="color:${c.numberChanged?'var(--amber)':'var(--text2)'};">${c.newNumber}</td>
+          <td class="mono" data-field="newNumber" data-ci="${ci}" style="color:${c.numberChanged?'var(--amber)':'var(--text2)'};">${c.newNumber}</td>
           <td class="mono">${c.oldStatus}</td>
           <td class="mono" style="color:${c.inNewSquad?'var(--green)':'var(--red)'};">${c.newRosterStatus}/${c.newDisplayStatus}</td>
           <td style="display:flex;gap:4px;flex-wrap:wrap;">${tags.join('')}</td>
@@ -3422,6 +3472,14 @@ async function buildSquadUpdatePreview(clubId, seasonId, newSquad, setStatus) {
       </tbody>
     </table>`;
   setStatus(`${changes.length} changes ready`);
+  // Wire inline edit for newNumber cells in squad update preview
+  document.querySelectorAll('#squad-update-preview-table td[data-field="newNumber"]').forEach(cell => {
+    const ci = parseInt(cell.dataset.ci);
+    makeEditable(cell, ci, 'newNumber', (val) => {
+      changes[ci].newNumber = val;
+      changes[ci].numberChanged = val !== changes[ci].oldNumber;
+    });
+  });
 }
 
 async function applySquadUpdate() {
