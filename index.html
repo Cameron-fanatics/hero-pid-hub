@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v122 -->
+<!-- HEROPID-BUILD-v123 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -776,7 +776,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <div class="modal-header"><span class="modal-title">Add Player</span><button class="modal-close" onclick="closeModal('modal-add-player')">✕</button></div>
     <div class="modal-body">
       <div class="form-row"><div class="form-group"><label class="form-label">Full Name *</label><input class="form-input" id="player-name" placeholder="e.g. Cole Palmer" /></div><div class="form-group"><label class="form-label">Shirt Name *</label><input class="form-input" id="player-shirt" placeholder="e.g. PALMER" /></div></div>
-      <div class="form-row"><div class="form-group"><label class="form-label">Squad Number</label><input class="form-input" id="player-number" type="number" /></div><div class="form-group"><label class="form-label">Player Type</label><select class="form-select" id="player-type"><option value="player">Player</option><option value="variant">Variant</option></select></div></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Squad Number</label><input class="form-input" id="player-number" type="number" /></div><div class="form-group"><label class="form-label">Player Type</label><select class="form-select" id="player-type"><option value="player">Player</option><option value="variant">Specials</option></select></div></div>
       <div class="form-row"><div class="form-group"><label class="form-label">Club *</label><select class="form-select" id="player-club"></select></div><div class="form-group"><label class="form-label">Season *</label><select class="form-select" id="player-season"></select></div></div>
       <div class="form-row"><div class="form-group"><label class="form-label">Status</label><select class="form-select" id="player-status"><option value="active">Active</option><option value="archived">Archived</option></select></div><div class="form-group"><label class="form-label">MDM Actor ID</label><input class="form-input" id="player-mdm" placeholder="e.g. 17009" /></div></div>
     </div>
@@ -1124,6 +1124,10 @@ function showPage(page) {
   if (page==='import') { refreshImportSelects(); initDropZones(); }
   if (page==='settings') refreshSettingsStatus();
   if (page==='bulkexport') initBulkExport();
+  if (page==='search') {
+    const sf = document.getElementById('filter-status');
+    if (sf && sf.value === '') sf.value = 'active';
+  }
 }
 
 function switchTab(tab) {
@@ -1471,6 +1475,7 @@ function localParseAndSearch(query, filterClub, filterSeason, filterFont, filter
     if (/\bwsl\b/.test(q)) font='womens';
     else if (/womens.?cup/.test(q)) font='womens_cup';
     else if (/\bcup\b/.test(q)) font='cup';
+    else if (/\bspecials?\b|\bvariant\b/.test(q)) font='specials';
     else if (/\bleague\b/.test(q)) font='league';
   }
   const kitMatch = q.match(/\b(home|away|third|fourth|gk|goalkeeper)\b/);
@@ -1556,7 +1561,7 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
     const statusBadge = player.Status==='archived'
       ? '<span class="badge badge-archived">Archived</span>'
       : (mdmStatusBadge || '<span class="badge badge-active">Active</span>');
-    const typeBadge = player.Type==='variant'?'<span class="badge badge-variant">Variant</span>':''; const gkBadge = player.Goalkeeper?'<span class="badge" style="background:rgba(99,179,237,0.15);color:#63b3ed;">GK</span>':'';
+    const typeBadge = player.Type==='variant'?'<span class="badge badge-variant">Specials</span>':''; const gkBadge = player.Goalkeeper?'<span class="badge" style="background:rgba(99,179,237,0.15);color:#63b3ed;">GK</span>':'';
     const byFont = {};
     heroes.forEach(h => { if(!byFont[h.FontType])byFont[h.FontType]=[]; byFont[h.FontType].push(h); });
     const allPids = heroes.map(h=>h.PID).join('|');
@@ -4090,6 +4095,7 @@ function exportExclusionsFromFilters() {
     rows.push([parent?parent.PID:'', pid]);
   });
   if (!rows.length) { toast('No PIDs found','error'); return; }
+  rows.sort((a,b) => String(a[0]).localeCompare(String(b[0])));
   const ws = XLSX.utils.aoa_to_sheet([['Parent PID','Hero PID'],...rows]);
   ws['!cols'] = [{wch:14},{wch:14}];
   const wb = XLSX.utils.book_new();
@@ -4136,7 +4142,7 @@ init();
     <div class="modal-body">
       <input type="hidden" id="edit-player-id">
       <div class="form-row"><div class="form-group"><label class="form-label">Full Name *</label><input class="form-input" id="edit-player-name" /></div><div class="form-group"><label class="form-label">Shirt Name *</label><input class="form-input" id="edit-player-shirt" /></div></div>
-      <div class="form-row"><div class="form-group"><label class="form-label">Squad Number</label><input class="form-input" id="edit-player-number" type="number" /></div><div class="form-group"><label class="form-label">Player Type</label><select class="form-select" id="edit-player-type"><option value="player">Player</option><option value="variant">Variant</option></select></div></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Squad Number</label><input class="form-input" id="edit-player-number" type="number" /></div><div class="form-group"><label class="form-label">Player Type</label><select class="form-select" id="edit-player-type"><option value="player">Player</option><option value="variant">Specials</option></select></div></div>
       <div class="form-row"><div class="form-group"><label class="form-label">Club</label><select class="form-select" id="edit-player-club"></select></div><div class="form-group"><label class="form-label">Season</label><select class="form-select" id="edit-player-season"></select></div></div>
       <div class="form-row"><div class="form-group"><label class="form-label">Goalkeeper</label><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><input type="checkbox" id="edit-player-goalkeeper" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;"><label style="font-size:13px;color:var(--text2);cursor:pointer;" for="edit-player-goalkeeper">This player is a goalkeeper</label></div></div></div><div class="form-row"><div class="form-group"><label class="form-label">Status</label><select class="form-select" id="edit-player-status"><option value="active">Active</option><option value="archived">Archived</option></select></div></div>
     </div>
