@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v125 -->
+<!-- HEROPID-BUILD-v127 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1488,14 +1488,15 @@ function localParseAndSearch(query, filterClub, filterSeason, filterFont, filter
     let _stripped = _qLow;
     (_clubHit.Name||'').toLowerCase().split(' ').forEach(w => { if(w.length>1) _stripped = _stripped.replace(w,''); });
     if (_seasonHit) (_seasonHit.Label||'').toLowerCase().split(' ').forEach(w => { if(w.length>1) _stripped = _stripped.replace(w,''); });
-    _stripped = _stripped.replace(/home|away|third|fourth|gk|league|cup|wsl|womens|mens/g,'').replace(/[-\/\s]/g,'').trim();
+    _stripped = _stripped.replace(/home|away|third|fourth|gk|league|cup|wsl|womens|mens|specials?|variants?/g,'').replace(/[-\/\s]/g,'').trim();
+    // Check font/kit from original query even when club is found
+    const _kitM2 = _qLow.match(/\b(home|away|third|fourth|gk)\b/);
+    const _fontM2 = /\bspecials?\b|\bvariant\b/.test(_qLow)?'specials':/\bwsl\b/.test(_qLow)?'womens':/womens.?cup/.test(_qLow)?'womens_cup':/\bcup\b/.test(_qLow)?'cup':null;
     if (!_stripped) {
-      const _kitM = _qLow.match(/\b(home|away|third|fourth|gk)\b/);
       const _fClub = _clubHit.id;
       const _fSeason = _seasonHit ? _seasonHit.id : (filterSeason || '');
-      const _fKit = _kitM ? _kitM[1] : (filterKit || null);
-      // Use empty nameQ so all players for this club are returned
-      executeSearch('', null, null, _fKit, _fClub, _fSeason, filterFont || null, filterStatus || null, true);
+      const _fKit = _kitM2 ? _kitM2[1] : (filterKit || null);
+      executeSearch('', null, _fontM2, _fKit, _fClub, _fSeason, _fontM2||filterFont||null, filterStatus || null, true);
       return;
     }
   }
@@ -2389,12 +2390,25 @@ function updateSearchChips() {
     return;
   }
   container.style.display = 'flex';
+  const nonStatusChips = chips.filter(c=>c.type!=='status');
   container.innerHTML = chips.map(chip => `
     <span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--accent);border-radius:20px;padding:3px 10px 3px 12px;font-size:11px;color:var(--accent);font-weight:500;">
       ${chip.label}
-      <button onclick="removeChip('${chip.type}')" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:13px;line-height:1;padding:0;opacity:0.7;" title="Remove">×</button>
+      <button onclick="removeChip('${chip.type}')" style="background:none;border:none;color:var(--red,#ff5c5c);cursor:pointer;font-size:13px;line-height:1;padding:0;opacity:0.8;" title="Remove">×</button>
     </span>
-  `).join('');
+  `).join('') + (nonStatusChips.length > 1 ? `
+    <button onclick="clearAllSearchFilters()" style="background:none;border:1px solid rgba(255,92,92,0.4);border-radius:20px;padding:3px 12px;font-size:11px;color:var(--red,#ff5c5c);cursor:pointer;">✕ Clear all</button>` : '');
+}
+
+function clearAllSearchFilters() {
+  const inp = document.getElementById('search-q'); if (inp) inp.value = '';
+  const club = document.getElementById('filter-club'); if (club) club.value = '';
+  const season = document.getElementById('filter-season'); if (season) season.value = '';
+  const font = document.getElementById('filter-font'); if (font) font.value = '';
+  const kit = document.getElementById('filter-kit'); if (kit) kit.value = '';
+  // Keep status on Active
+  const status = document.getElementById('filter-status'); if (status) status.value = 'active';
+  onClubFilterChange();
 }
 
 function removeChip(type) {
@@ -2415,7 +2429,7 @@ function removeChip(type) {
     if (sel) sel.value = '';
   } else if (type === 'status') {
     const sel = document.getElementById('filter-status');
-    if (sel) sel.value = '';
+    if (sel) sel.value = 'active'; // default back to Active, not blank
   }
   runSearch();
 }
@@ -2862,6 +2876,24 @@ async function confirmImport() {
       done += newHeroes.length;
     }
     setProgress(total, total, 'Complete!');
+    // Green completion state
+    const bar = document.getElementById('import-progress-bar');
+    const wrap = document.getElementById('import-progress-wrap');
+    if (bar) bar.style.background = 'var(--green)';
+    if (wrap) wrap.style.borderColor = 'rgba(72,199,142,0.4)';
+    const confirmBtn = document.getElementById('import-confirm-btn');
+    const cancelBtn = confirmBtn?.closest('.card-header')?.querySelector('.btn-ghost');
+    if (confirmBtn) { confirmBtn.textContent = '✓ Done'; confirmBtn.disabled = true; confirmBtn.style.background = 'var(--green)'; }
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    // Auto-hide preview after 2.5 seconds
+    setTimeout(() => {
+      const preview = document.getElementById('import-preview');
+      if (preview) preview.classList.add('hidden');
+      if (bar) bar.style.background = 'var(--accent)';
+      if (wrap) wrap.style.borderColor = '';
+      if (confirmBtn) { confirmBtn.textContent = 'Import all'; confirmBtn.disabled = false; confirmBtn.style.background = ''; }
+      if (cancelBtn) cancelBtn.style.display = '';
+    }, 2500);
     await loadCache(true);
     updateStats(); refreshFilterSelects();
     const _importedPlayerList = d.players.map(p=>({name:p.name,clubId:p.clubId,seasonId:p.seasonId}));
