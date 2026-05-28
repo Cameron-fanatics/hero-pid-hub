@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v132 -->
+<!-- HEROPID-BUILD-v133 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2807,7 +2807,7 @@ function _previewToggleGK(playerIndex) {
 
 function showImportPreview(club, season, filename) {
   const d=importData;
-  const newPlayers=d.players.filter(p=>!CACHE.players.find(e=>e.Name===p.name&&e.ClubID===p.clubId&&e.SeasonID===p.seasonId));
+  const _seenPK=new Set();const newPlayers=d.players.filter(p=>{const k=p.name+'|'+p.clubId+'|'+p.seasonId+'|'+p.fontType;if(_seenPK.has(k))return false;_seenPK.add(k);return !CACHE.players.find(e=>e.Name===p.name&&e.ClubID===p.clubId&&e.SeasonID===p.seasonId);});
   const existingPlayers=d.players.filter(p=>CACHE.players.find(e=>e.Name===p.name&&e.ClubID!==p.clubId));
   const newHeroes=d.heroes.filter(h=>!CACHE.heroes.find(e=>e.PID===h.pid));
   const newParents=d.parents.filter(p=>!CACHE.parents.find(e=>String(e.PID)===String(p.pid)));
@@ -2848,7 +2848,7 @@ async function confirmImport() {
   const d=importData;
   const newParents=d.parents.filter(p=>!CACHE.parents.find(e=>String(e.PID)===String(p.pid)));
   const newHeroes=d.heroes.filter(h=>!CACHE.heroes.find(e=>e.PID===h.pid));
-  const newPlayers=d.players.filter(p=>!CACHE.players.find(e=>e.Name===p.name&&e.ClubID===p.clubId&&e.SeasonID===p.seasonId));
+  const _seenPK=new Set();const newPlayers=d.players.filter(p=>{const k=p.name+'|'+p.clubId+'|'+p.seasonId+'|'+p.fontType;if(_seenPK.has(k))return false;_seenPK.add(k);return !CACHE.players.find(e=>e.Name===p.name&&e.ClubID===p.clubId&&e.SeasonID===p.seasonId);});
   try {
     const total = newParents.length + newPlayers.length + newHeroes.length;
     let done = 0;
