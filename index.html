@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v134 -->
+<!-- HEROPID-BUILD-v135 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2757,7 +2757,7 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
       inPlayerSection = true;
     }
 
-    const rawName = String(row[nameCol]||'').trim();
+    const rawName = repairMojibake(String(row[nameCol]||'').trim());
     if (!rawName) continue;
     const nameLower = rawName.toLowerCase();
     if (['actor name','actor id','name','font type','assembley name','assembly name'].includes(nameLower)) continue;
@@ -2774,9 +2774,9 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
     // GKs always have exactly as many PIDs as the GK Plain row has parent PIDs (e.g. 2 for CFC)
     // Outfield players always have significantly more PIDs than the GK Plain count
     const rowPidCols = row.reduce((acc, v, c) => { if (isPidVal(v)) acc.push(c); return acc; }, []);
-    const allPidColsAreGK = rowPidCols.length > 0 && gkPlainCols.size > 0 && rowPidCols.length <= gkPlainCols.size;
+    const allPidColsAreGK = rowPidCols.length > 0 && gkPlainCols.size > 0 && rowPidCols.every(c=>gkPlainCols.has(c));
     if (inGKSection && !allPidColsAreGK) inGKSection = false;
-    const isGK = allPidColsAreGK;
+    const isGK = inGKSection && allPidColsAreGK;
     if (!existingPlayer) {
       importData.players.push({name:rawName, shirtName, number, type, clubId, seasonId, status:'active', mdmId, goalkeeper:isGK, fontType});
     } else if (isGK && !existingPlayer.goalkeeper) {
