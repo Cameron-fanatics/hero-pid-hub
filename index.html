@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v123 -->
+<!-- HEROPID-BUILD-v125 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1367,9 +1367,55 @@ async function onClubFilterChange() {
   const clubVal = document.getElementById('filter-club').value;
   const extra = document.getElementById('filter-extra');
   if (extra) extra.style.display = clubVal ? 'flex' : 'none';
+
+  // Cascade-filter season, font type and kit type based on what exists for this club
+  const heroesForClub = clubVal ? CACHE.heroes.filter(h=>h.ClubID===clubVal) : CACHE.heroes;
+
+  // Seasons that have heroes for this club
+  const seasonSel = document.getElementById('filter-season');
+  if (seasonSel) {
+    const sv = seasonSel.value;
+    const validSeasons = clubVal ? new Set(heroesForClub.map(h=>h.SeasonID).filter(Boolean)) : null;
+    const sortedSeasons = [...CACHE.seasons].sort((a,b)=>(a.Label||'').localeCompare(b.Label||''));
+    seasonSel.innerHTML = '<option value="">All seasons</option>' +
+      sortedSeasons
+        .filter(s => !validSeasons || validSeasons.has(s.id))
+        .map(s=>`<option value="${s.id}"${s.id===sv?' selected':''}>${s.Label||''}</option>`)
+        .join('');
+    if (sv && !seasonSel.querySelector(`option[value="${sv}"]`)) seasonSel.value='';
+  }
+
+  // Font types that exist for this club
+  const fontSel = document.getElementById('filter-font');
+  if (fontSel) {
+    const fv = fontSel.value;
+    const validFonts = clubVal ? new Set(heroesForClub.map(h=>h.FontType).filter(Boolean)) : null;
+    const allFonts = [{v:'league',l:'League'},{v:'cup',l:'Cup'},{v:'womens',l:'Womens League'},{v:'womens_cup',l:'Womens Cup'},{v:'specials',l:'Specials'},{v:'other',l:'Other'}];
+    fontSel.innerHTML = '<option value="">All font types</option>' +
+      allFonts
+        .filter(f => !validFonts || validFonts.has(f.v))
+        .map(f=>`<option value="${f.v}"${f.v===fv?' selected':''}>${f.l}</option>`)
+        .join('');
+    if (fv && !fontSel.querySelector(`option[value="${fv}"]`)) fontSel.value='';
+  }
+
+  // Kit types that exist for this club
+  const kitSel = document.getElementById('filter-kit');
+  if (kitSel) {
+    const kv = kitSel.value;
+    const validKits = clubVal ? new Set(heroesForClub.map(h=>(h.KitType||'').toLowerCase()).filter(Boolean)) : null;
+    const allKits = [{v:'home',l:'Home'},{v:'away',l:'Away'},{v:'third',l:'Third'},{v:'fourth',l:'Fourth'},{v:'gk home',l:'GK Home'},{v:'gk away',l:'GK Away'},{v:'gk third',l:'GK Third'}];
+    kitSel.innerHTML = '<option value="">All kit types</option>' +
+      allKits
+        .filter(k => !validKits || validKits.has(k.v))
+        .map(k=>`<option value="${k.v}"${k.v===kv?' selected':''}>${k.l}</option>`)
+        .join('');
+    if (kv && !kitSel.querySelector(`option[value="${kv}"]`)) kitSel.value='';
+  }
+
   if (!clubVal) {
-    const fk = document.getElementById('filter-kit'); if(fk) fk.value='';
-    const ff = document.getElementById('filter-font'); if(ff) ff.value='';
+    // Reset to full lists when club is cleared
+    refreshFilterSelects();
   }
   runSearch();
 }
@@ -2679,10 +2725,12 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
     if (!inPlayerSection && nameCol===-1) {
       // Headerless section: if we have section parent PIDs set and this row has a name + PIDs, treat as player
       const hasPids = row.some(v => isPidVal(v));
-      const hasName = row[0] && String(row[0]).trim().length > 1;
+      // Name can be at col 0 or col 1 (some sheets have a leading blank column)
+      const nameAtCol = row[0]&&String(row[0]).trim().length>1 ? 0 : (row[1]&&String(row[1]).trim().length>1 ? 1 : -1);
+      const hasName = nameAtCol !== -1;
       if (!hasPids || !hasName || Object.keys(sectionParentPids).length === 0) continue;
-      // Infer column positions from first such row
-      nameCol=0; shirtCol=2; numberCol=3; actorIdCol=-1;
+      // Infer column positions — offset by nameAtCol
+      nameCol=nameAtCol; shirtCol=nameAtCol+2; numberCol=nameAtCol+3; actorIdCol=-1;
       currentParentPids = sectionParentPids;
       inPlayerSection = true;
     }
