@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v128 -->
+<!-- HEROPID-BUILD-v129 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2686,6 +2686,14 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
       // Capture parent PIDs for this section (Blank row or GK Plain row)
       currentParentPids = {};
       row.forEach((v, c) => { if (isPidVal(v)) currentParentPids[c] = String(parseInt(String(v))); });
+      // Some sheets split GK Plain label and PIDs across two rows — check next row
+      if (Object.keys(currentParentPids).length === 0 && i + 1 < endRow) {
+        const nextRow = rows[i + 1];
+        if (nextRow && !isParentRowVal(nextRow) && !isHeaderRowVal(nextRow)) {
+          nextRow.forEach((v, c) => { if (isPidVal(v)) currentParentPids[c] = String(parseInt(String(v))); });
+          if (Object.keys(currentParentPids).length > 0) i++; // skip the PID row
+        }
+      }
       // Register parent PIDs - always scan rows above for garment labels directly
       // (garmentCols from garmentHint may be incomplete for edge columns)
       Object.entries(currentParentPids).forEach(([colStr, pid]) => {
