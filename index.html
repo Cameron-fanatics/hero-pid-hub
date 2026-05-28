@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v121 -->
+<!-- HEROPID-BUILD-v122 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -222,6 +222,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         <select class="filter-select" id="filter-club" onchange="onClubFilterChange()"><option value="">All clubs</option></select>
         <select class="filter-select" id="filter-season" onchange="runSearch()"><option value="">All seasons</option></select>
         <select class="filter-select" id="filter-status" onchange="runSearch()">
+          <option value="active" selected>Active</option>
           <option value="">Active + Archived</option>
           <option value="active">Active only</option>
           <option value="archived">Archived only</option>
@@ -232,6 +233,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         <select class="filter-select" id="filter-font" onchange="runSearch()">
           <option value="">All font types</option>
           <option value="league">League</option>
+          <option value="specials">Specials</option>
           <option value="cup">Cup</option>
           <option value="womens">Womens League</option>
           <option value="womens_cup">Womens Cup</option>
@@ -323,6 +325,12 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
             <div class="form-group" style="margin:0;"><label class="form-label">Club</label><select class="form-select" id="import-club"><option value="">Select club...</option></select></div>
             <div class="form-group" style="margin:0;"><label class="form-label">Season</label><select class="form-select" id="import-season"><option value="">Select season...</option></select></div>
           </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text2);">
+              <input type="checkbox" id="import-specials-toggle" style="accent-color:var(--accent);width:14px;height:14px;" onchange="window._importForceSpecials=this.checked">
+              These are <strong style="color:var(--accent);">Specials</strong> — override font type to Specials for all imported PIDs
+            </label>
+          </div>
           <div class="drop-zone" id="drop-zone-storage" onclick="document.getElementById('file-input-storage').click()">
             <input type="file" id="file-input-storage" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleStorageFileSelect(event)" />
             <div class="drop-zone-icon">↑</div>
@@ -350,7 +358,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         <div style="padding:20px;">
           <div class="form-row" style="margin-bottom:16px;">
             <div class="form-group" style="margin:0;"><label class="form-label">Season</label><select class="form-select" id="creation-season"><option value="">Select season...</option></select></div>
-            <div class="form-group" style="margin:0;"><label class="form-label">Font Type</label><select class="form-select" id="creation-font"><option value="league">League</option><option value="cup">Cup</option><option value="womens">Womens League</option><option value="womens_cup">Womens Cup</option></select></div>
+            <div class="form-group" style="margin:0;"><label class="form-label">Font Type</label><select class="form-select" id="creation-font"><option value="league">League</option><option value="cup">Cup</option><option value="womens">Womens League</option><option value="womens_cup">Womens Cup</option><option value="specials">Specials</option></select></div>
           </div>
           <div class="drop-zone" id="drop-zone-creation" onclick="document.getElementById('file-input-creation').click()">
             <input type="file" id="file-input-creation" accept=".csv" multiple style="display:none" onchange="handleCreationFilesSelect(event)" />
@@ -590,9 +598,45 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
   <div class="topbar"><div class="page-title">Export</div></div>
   <div class="content">
 
-    <div style="max-width:860px;">
+    <!-- EXPORT TABS -->
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:20px;max-width:900px;">
+      <div class="tab active" onclick="switchExportTab('content')" id="export-tab-content" style="flex:none;padding:8px 20px;">Content</div>
+      <div class="tab" onclick="switchExportTab('exclusions')" id="export-tab-exclusions" style="flex:none;padding:8px 20px;">Exclusions</div>
+      <div class="tab" onclick="switchExportTab('catalogues')" id="export-tab-catalogues" style="flex:none;padding:8px 20px;">Catalogues</div>
+      <div class="tab" onclick="switchExportTab('images')" id="export-tab-images" style="flex:none;padding:8px 20px;opacity:0.5;cursor:not-allowed;">Images <span style="font-size:10px;color:var(--text3);">coming soon</span></div>
+    </div>
 
-      <!-- STEP 1: PIDs -->
+    <!-- CONTENT EXPORT -->
+    <div id="export-content-content" style="max-width:860px;">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Filter by club, season, kit type and font type — exports the content format for the selected PIDs.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div><label class="form-label">Club</label><select class="form-select" id="exp-content-club"><option value="">All clubs</option></select></div>
+        <div><label class="form-label">Season</label><select class="form-select" id="exp-content-season"><option value="">All seasons</option></select></div>
+        <div><label class="form-label">Status</label><select class="form-select" id="exp-content-status"><option value="active" selected>Active</option><option value="">Active + Archived</option><option value="archived">Archived</option></select></div>
+        <div><label class="form-label">Kit Type</label><select class="form-select" id="exp-content-kit"><option value="">All kit types</option><option value="Home">Home</option><option value="Away">Away</option><option value="Third">Third</option><option value="Fourth">Fourth</option><option value="GK Home">GK Home</option><option value="GK Away">GK Away</option></select></div>
+        <div><label class="form-label">Font Type</label><select class="form-select" id="exp-content-font"><option value="">All font types</option><option value="league">League</option><option value="cup">Cup</option><option value="womens">Womens League</option><option value="womens_cup">Womens Cup</option><option value="specials">Specials</option></select></div>
+      </div>
+      <div id="exp-content-count" style="font-size:12px;color:var(--text3);margin-bottom:16px;"></div>
+      <button class="btn btn-primary" onclick="exportContentFromFilters()" id="exp-content-btn">⬇ Export Content</button>
+    </div>
+
+    <!-- EXCLUSIONS EXPORT -->
+    <div id="export-content-exclusions" class="hidden" style="max-width:860px;">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Filter by club, season, kit type and font type — exports Parent PID + Hero PID format.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div><label class="form-label">Club</label><select class="form-select" id="exp-excl-club"><option value="">All clubs</option></select></div>
+        <div><label class="form-label">Season</label><select class="form-select" id="exp-excl-season"><option value="">All seasons</option></select></div>
+        <div><label class="form-label">Status</label><select class="form-select" id="exp-excl-status"><option value="active" selected>Active</option><option value="">Active + Archived</option><option value="archived">Archived</option></select></div>
+        <div><label class="form-label">Kit Type</label><select class="form-select" id="exp-excl-kit"><option value="">All kit types</option><option value="Home">Home</option><option value="Away">Away</option><option value="Third">Third</option><option value="Fourth">Fourth</option><option value="GK Home">GK Home</option><option value="GK Away">GK Away</option></select></div>
+        <div><label class="form-label">Font Type</label><select class="form-select" id="exp-excl-font"><option value="">All font types</option><option value="league">League</option><option value="cup">Cup</option><option value="womens">Womens League</option><option value="womens_cup">Womens Cup</option><option value="specials">Specials</option></select></div>
+      </div>
+      <div id="exp-excl-count" style="font-size:12px;color:var(--text3);margin-bottom:16px;"></div>
+      <button class="btn btn-primary" onclick="exportExclusionsFromFilters()" id="exp-excl-btn">⬇ Export Exclusions</button>
+    </div>
+
+    <!-- CATALOGUES EXPORT -->
+    <div id="export-content-catalogues" class="hidden" style="max-width:860px;">
+
       <div style="margin-bottom:16px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
         <div style="padding:12px 16px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
           <span style="background:var(--accent);color:#fff;font-size:11px;font-weight:700;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</span>
@@ -623,7 +667,6 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         </div>
       </div>
 
-      <!-- STEP 2: SITES -->
       <div style="margin-bottom:16px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
         <div style="padding:12px 16px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
           <span style="background:var(--accent);color:#fff;font-size:11px;font-weight:700;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</span>
@@ -641,7 +684,6 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
             <button class="btn btn-ghost btn-sm" onclick="selectCatalogueSiteGroup('Club')" style="border-color:rgba(255,179,64,0.4);color:var(--amber);">Club</button>
           </div>
           <div id="cat-site-list" style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg2);"></div>
-          <!-- Selected chips -->
           <div id="cat-selected-chips" style="display:none;margin-top:12px;">
             <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">Selected:</div>
             <div id="cat-chips-wrap" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
@@ -649,7 +691,6 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         </div>
       </div>
 
-      <!-- STEP 3: ACTION -->
       <div id="cat-action-section" style="display:none;margin-bottom:16px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;">
         <div style="padding:12px 16px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
           <span style="background:var(--accent);color:#fff;font-size:11px;font-weight:700;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">3</span>
@@ -671,12 +712,19 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         </div>
       </div>
 
-      <!-- EXPORT -->
       <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);">
         <button class="btn btn-primary" onclick="exportCatalogues()" id="cat-export-btn">⬇ Export Catalogue XLSX</button>
         <span id="cat-export-status" style="font-size:12px;color:var(--text2);"></span>
       </div>
+    </div>
 
+    <!-- IMAGES (COMING SOON) -->
+    <div id="export-content-images" class="hidden" style="max-width:860px;">
+      <div style="padding:40px;text-align:center;border:2px dashed var(--border);border-radius:var(--radius);color:var(--text3);">
+        <div style="font-size:24px;margin-bottom:10px;">🖼</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:4px;">Images Export</div>
+        <div style="font-size:12px;">Coming soon — this export will be available in a future update.</div>
+      </div>
     </div>
 
   </div>
@@ -755,7 +803,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       <div class="form-group"><label class="form-label">PID Number *</label><input class="form-input" id="hero-pid" placeholder="e.g. 203072419" /></div>
       <div class="form-row"><div class="form-group"><label class="form-label">Club *</label><select class="form-select" id="hero-club" onchange="updateHeroPlayerOptions()"></select></div><div class="form-group"><label class="form-label">Season *</label><select class="form-select" id="hero-season" onchange="updateHeroPlayerOptions()"></select></div></div>
       <div class="form-group"><label class="form-label">Player *</label><select class="form-select" id="hero-player"><option value="">Select club & season first</option></select></div>
-      <div class="form-row"><div class="form-group"><label class="form-label">Font Type</label><select class="form-select" id="hero-font"><option value="league">League</option><option value="cup">Cup</option><option value="womens">Womens League</option><option value="womens_cup">Womens Cup</option><option value="other">Other</option></select></div><div class="form-group"><label class="form-label">Kit Type</label><input class="form-input" id="hero-kit" placeholder="e.g. Home, Away" /></div></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Font Type</label><select class="form-select" id="hero-font"><option value="league">League</option><option value="cup">Cup</option><option value="womens">Womens League</option><option value="womens_cup">Womens Cup</option><option value="specials">Specials</option><option value="other">Other</option></select></div><div class="form-group"><label class="form-label">Kit Type</label><input class="form-input" id="hero-kit" placeholder="e.g. Home, Away" /></div></div>
       <div class="form-row"><div class="form-group"><label class="form-label">Garment Type</label><select class="form-select" id="hero-garment"><option value="mens_ss">Mens S/S</option><option value="mens_ls">Mens L/S</option><option value="pro_shirt">Pro Shirt</option><option value="womens">Womens</option><option value="womens_pro">Womens Pro</option><option value="womens_cropped">Womens Cropped</option><option value="pro_kids">Pro Kids</option><option value="kids_ss">Kids S/S</option><option value="little_kids">Little Kids</option><option value="infants">Infants</option><option value="other">Other</option></select></div><div class="form-group"><label class="form-label">Status</label><select class="form-select" id="hero-status"><option value="active">Active</option><option value="archived">Archived</option></select></div>
       </div>
     </div>
@@ -783,7 +831,7 @@ let AT_BASE = localStorage.getItem('at_base') || '';
 let TABLES = JSON.parse(localStorage.getItem('at_tables') || '{}');
 
 const GARMENT_LABELS = {pro_shirt:'Pro Shirt',pro_shirt_ls:'Pro Shirt L/S',mens_ss:'Mens S/S',mens_ls:'Mens L/S',womens_pro:'Womens Pro',womens_pro_ls:'Womens Pro L/S',womens:'Womens',womens_ls:'Womens L/S',womens_cropped:'Womens Cropped',pro_kids:'Pro Kids',pro_kids_ls:'Pro Kids L/S',kids_ss:'Kids S/S',kids_ls:'Kids L/S',little_kids:'Little Kids',infants:'Infants',other:'Other'};
-const FONT_LABELS = {league:'League',cup:'Cup',womens:'Womens League',womens_cup:'Womens Cup',other:'Other'};
+const FONT_LABELS = {league:'League',cup:'Cup',womens:'Womens League',womens_cup:'Womens Cup',specials:'Specials',other:'Other'};
 const GARMENT_ORDER = ['pro_shirt','pro_shirt_ls','mens_ss','mens_ls','womens_pro','womens_pro_ls','womens','womens_ls','womens_cropped','pro_kids','pro_kids_ls','kids_ss','kids_ls','little_kids','infants','other'];
 const KIT_ORDER = ['Home','Away','Third','GK','GK Plain'];
 const KIT_WORDS_DETECT = ['home','away','third','gk','fourth','fifth'];
@@ -2161,6 +2209,7 @@ const FOOTBALL_SHEET_NAMES = {
   'cup_gk home':'Cup GK Home','cup_gk away':'Cup GK Away','cup_gk third':'Cup GK Third',
   'womens_home':'Womens Home','womens_away':'Womens Away','womens_third':'Womens Third',
   'womens_cup_home':'Womens Cup Home','womens_cup_away':'Womens Cup Away','womens_cup_third':'Womens Cup Third',
+  'specials_home':'Specials Home','specials_away':'Specials Away','specials_third':'Specials Third','specials_':'Specials',
 };
 
 function exportFootballContent(playerIds) {
@@ -2424,6 +2473,7 @@ function updateStats() {
   document.getElementById('stat-players').textContent = CACHE.players.length.toLocaleString();
   document.getElementById('stat-clubs').textContent = CACHE.clubs.length.toLocaleString();
   calcDataHealth();
+  populateExportFilters();
 }
 
 // ─── IMPORT ───────────────────────────────────────────────────────────────────
@@ -2474,7 +2524,7 @@ function parseImportWorkbook(wb, clubId, seasonId, filename) {
       for (let c=0;c<=range.e.c;c++) { const cell=ws[XLSX.utils.encode_cell({r,c})]; row.push(cell?(cell.v!==undefined?cell.v:''):''); }
       rows.push(row);
     }
-    const fontType = detectFontType(sheetName);
+    const fontType = detectFontType(sheetName, window._importForceSpecials||false);
     const sectionStarts = [];
     for (let i=0;i<rows.length;i++) {
       const row=rows[i];
@@ -2518,8 +2568,10 @@ function parseImportWorkbook(wb, clubId, seasonId, filename) {
   showImportPreview(club,season,filename);
 }
 
-function detectFontType(sheetName) {
+function detectFontType(sheetName, forceSpecials) {
+  if (forceSpecials) return 'specials';
   const s=sheetName.toLowerCase().trim();
+  if (s.includes('special')||s.includes('variant')) return 'specials';
   if (s.includes('womens cup')||s.includes("women's cup")||s==='wsl cup') return 'womens_cup';
   if (s==='wsl'||s.startsWith('wsl ')||s.includes(' wsl')||s.includes('womens')||s.includes("women's")) return 'womens';
   if (s.includes('cup')) return 'cup';
@@ -3951,6 +4003,102 @@ function openCataloguesWithPids(pids) {
   document.getElementById('cat-pid-count').textContent = `${pids.length} PID${pids.length!==1?'s':''} ready`;
   switchCatalogueInput('paste');
   showPage('bulkexport');
+}
+
+
+
+// ─── EXPORT TAB ───────────────────────────────────────────────────────────────
+function switchExportTab(tab) {
+  ['content','exclusions','catalogues','images'].forEach(t => {
+    document.getElementById('export-tab-'+t).classList.toggle('active', t===tab);
+    document.getElementById('export-content-'+t).classList.toggle('hidden', t!==tab);
+  });
+  if (tab==='catalogues') renderCatalogueSiteList();
+}
+
+function initBulkExport() {
+  populateExportFilters();
+  renderCatalogueSiteList();
+  // Wire up filter change listeners
+  ['exp-content-club','exp-content-season','exp-content-status','exp-content-kit','exp-content-font',
+   'exp-excl-club','exp-excl-season','exp-excl-status','exp-excl-kit','exp-excl-font'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', updateExportCounts);
+  });
+}
+
+function populateExportFilters() {
+  ['content','excl'].forEach(prefix => {
+    const clubSel = document.getElementById('exp-'+prefix+'-club');
+    const seasonSel = document.getElementById('exp-'+prefix+'-season');
+    if (!clubSel || !seasonSel) return;
+    // Clubs
+    const currentClub = clubSel.value;
+    clubSel.innerHTML = '<option value="">All clubs</option>' +
+      (CACHE.clubs||[]).map(c=>`<option value="${c.id}" ${c.id===currentClub?'selected':''}>${c.Name}</option>`).join('');
+    // Seasons
+    const currentSeason = seasonSel.value;
+    seasonSel.innerHTML = '<option value="">All seasons</option>' +
+      (CACHE.seasons||[]).map(s=>`<option value="${s.id}" ${s.id===currentSeason?'selected':''}>${s.Label||s.id}</option>`).join('');
+  });
+  updateExportCounts();
+}
+
+function updateExportCounts() {
+  ['content','excl'].forEach(prefix => {
+    const el = document.getElementById('exp-'+prefix+'-count');
+    if (!el) return;
+    const pids = getFilteredHeroPids(prefix);
+    el.textContent = pids.length ? `${pids.length} hero PID${pids.length!==1?'s':''} match filters` : 'No PIDs match current filters';
+    el.style.color = pids.length ? 'var(--accent)' : 'var(--text3)';
+  });
+}
+
+function getFilteredHeroPids(prefix) {
+  const clubId = document.getElementById('exp-'+prefix+'-club')?.value || '';
+  const seasonId = document.getElementById('exp-'+prefix+'-season')?.value || '';
+  const status = document.getElementById('exp-'+prefix+'-status')?.value || '';
+  const kit = document.getElementById('exp-'+prefix+'-kit')?.value || '';
+  const font = document.getElementById('exp-'+prefix+'-font')?.value || '';
+  return (CACHE.heroes||[]).filter(h => {
+    if (clubId && h.ClubID !== clubId) return false;
+    if (seasonId && h.SeasonID !== seasonId) return false;
+    if (kit && (h.KitType||'').toLowerCase() !== kit.toLowerCase()) return false;
+    if (font && (h.FontType||'').toLowerCase() !== font.toLowerCase()) return false;
+    if (status) {
+      const player = CACHE.players.find(p=>p.id===h.PlayerID);
+      if (player && player.Status !== status) return false;
+    }
+    return true;
+  }).map(h=>h.PID).filter(Boolean);
+}
+
+function exportContentFromFilters() {
+  const pids = getFilteredHeroPids('content');
+  if (!pids.length) { toast('No PIDs match current filters','error'); return; }
+  exportFootballContent(pids);
+}
+
+function exportExclusionsFromFilters() {
+  const pids = getFilteredHeroPids('excl');
+  if (!pids.length) { toast('No PIDs match current filters','error'); return; }
+  // Use same logic as exportExclusionsFromSelection but with pids array
+  const rows = [];
+  pids.forEach(pid => {
+    const hero = CACHE.heroes.find(h=>h.PID===pid); if(!hero) return;
+    const parent = hero.ParentPIDID ? CACHE.parents.find(p=>p.id===hero.ParentPIDID) : null;
+    rows.push([parent?parent.PID:'', pid]);
+  });
+  if (!rows.length) { toast('No PIDs found','error'); return; }
+  const ws = XLSX.utils.aoa_to_sheet([['Parent PID','Hero PID'],...rows]);
+  ws['!cols'] = [{wch:14},{wch:14}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+  const today = new Date();
+  const d = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+  const clubName = CACHE.clubs.find(c=>c.id===document.getElementById('exp-excl-club')?.value)?.Name||'';
+  XLSX.writeFile(wb, `${d}${clubName?' '+clubName:''} exclusions.xlsx`);
+  toast(`Exported ${rows.length} exclusion${rows.length!==1?'s':''}`);
 }
 
 
