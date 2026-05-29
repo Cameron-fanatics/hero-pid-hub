@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v147 -->
+<!-- HEROPID-BUILD-v148 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -230,7 +230,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       </div>
       <div id="search-chips" style="display:none;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
       <div class="search-filters" id="filter-extra" style="display:none;margin-top:6px;">
-        <select class="filter-select" id="filter-font" onchange="runSearch()">
+        <select class="filter-select" id="filter-font" onchange="onClubFilterChange()">
           <option value="">All font types</option>
           <option value="league">League</option>
           <option value="specials">Specials</option>
@@ -1189,6 +1189,8 @@ async function updateHeroPlayerOptions() {
 async function saveClub() {
   const name = document.getElementById('club-name').value.trim();
   if (!name) { toast('Club name required','error'); return; }
+  const btn = document.querySelector('[onclick="saveClub()"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
   try {
     const rec = await atCreate(TABLES.clubs, {Name:name,Short:document.getElementById('club-short').value.trim(),League:document.getElementById('club-league').value.trim(),Sport:document.getElementById('club-sport').value,Country:document.getElementById('club-country').value.trim()});
     CACHE.clubs.push({id:rec.id,...rec.fields});
@@ -1196,7 +1198,11 @@ async function saveClub() {
     ['club-name','club-short','club-league','club-country'].forEach(id=>document.getElementById(id).value='');
     refreshClubs(); refreshFilterSelects(); updateStats();
     toast(`Club "${name}" added`);
-  } catch(e) { toast('Error: '+e.message,'error'); }
+  } catch(e) {
+    toast('Error: '+e.message,'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save Club'; }
+  }
 }
 
 async function saveEditClub() {
@@ -1408,11 +1414,19 @@ async function onClubFilterChange() {
     if (fv && !fontSel.querySelector(`option[value="${fv}"]`)) fontSel.value='';
   }
 
-  // Kit types that exist for this club
+  // Kit types that exist for this club + selected font type combination
+  const fontVal2 = document.getElementById('filter-font')?.value || '';
   const kitSel = document.getElementById('filter-kit');
   if (kitSel) {
     const kv = kitSel.value;
-    const validKits = clubVal ? new Set(heroesForClub.map(h=>(h.KitType||'').toLowerCase()).filter(Boolean)) : null;
+    // Filter by club AND font type if both selected
+    const heroesForKitFilter = clubVal || fontVal2
+      ? CACHE.heroes.filter(h =>
+          (!clubVal || h.ClubID === clubVal) &&
+          (!fontVal2 || (h.FontType||'').toLowerCase() === fontVal2.toLowerCase())
+        )
+      : CACHE.heroes;
+    const validKits = (clubVal || fontVal2) ? new Set(heroesForKitFilter.map(h=>(h.KitType||'').toLowerCase()).filter(Boolean)) : null;
     const allKits = [{v:'home',l:'Home'},{v:'away',l:'Away'},{v:'third',l:'Third'},{v:'fourth',l:'Fourth'},{v:'gk home',l:'GK Home'},{v:'gk away',l:'GK Away'},{v:'gk third',l:'GK Third'}];
     kitSel.innerHTML = '<option value="">All kit types</option>' +
       allKits
@@ -1423,7 +1437,6 @@ async function onClubFilterChange() {
   }
 
   if (!clubVal) {
-    // Reset to full lists when club is cleared
     refreshFilterSelects();
   }
   runSearch();
