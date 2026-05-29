@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v136 -->
+<!-- HEROPID-BUILD-v137 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -259,7 +259,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         </label>
         <div id="export-actions" style="display:none;align-items:center;gap:6px;">
           <span style="font-size:11px;color:var(--accent);" id="selected-count-label"></span>
-          <button class="btn btn-primary btn-sm" onclick="exportSelectedPids()">⬇ Export PIDs</button><button class="btn btn-ghost btn-sm" onclick="openCataloguesWithPids([...(window._selectedPids||new Set())])" style="margin-left:4px;">📋 Catalogues</button><button class="btn btn-ghost btn-sm" id="btn-exclusions" onclick="runExclusionsExport(this)" style="margin-left:4px;">⬇ Exclusions</button><button class="btn btn-ghost btn-sm" onclick="exportFootballContent()" style="margin-left:4px;">⬇ Content</button>
+          <button class="btn btn-primary btn-sm" onclick="exportSelectedPids()">⬇ Export PIDs</button><button class="btn btn-ghost btn-sm" onclick="openCataloguesWithPids([...(window._selectedPids||new Set())])" style="margin-left:4px;">📋 Catalogues</button><button class="btn btn-ghost btn-sm" id="btn-exclusions" onclick="runExclusionsExport(this)" style="margin-left:4px;">⬇ Exclusions</button><button class="btn btn-ghost btn-sm" onclick="exportFootballContent()" style="margin-left:4px;">⬇ Content</button><button class="btn btn-ghost btn-sm" onclick="archiveSelected()" style="margin-left:4px;border-color:rgba(255,92,92,0.4);color:var(--red,#ff5c5c);">Archive selected</button>
         </div>
       </div>
     </div>
@@ -1094,19 +1094,27 @@ function getCachedTable(k){try{const r=localStorage.getItem(k);if(!r)return null
 function setCachedTable(k,d){try{localStorage.setItem(k,JSON.stringify({data:d,ts:Date.now()}));}catch(e){}}
 function invalidateCache(){Object.values(CACHE_KEYS).forEach(k=>localStorage.removeItem(k));}
 async function loadCachedOrFetch(key,tid){const c=getCachedTable(key);if(c)return c;const r=await atGetAll(tid);const m=r.map(x=>({id:x.id,...x.fields}));setCachedTable(key,m);return m;}
-async function loadCache(force){
-  if(force)invalidateCache();
+async function loadCache(force, dataOnly=false){
+  // dataOnly=true: only refresh players/parents/heroes (skip clubs/seasons/catalogues)
+  // This is much faster after imports since those tables don't change
+  if(force) { Object.values(CACHE_KEYS).forEach(k=>localStorage.removeItem(k)); }
   try{
-    const[clubs,seasons,players,parents,heroes,catalogues]=await Promise.all([
-      atGetAll(TABLES.clubs).then(r=>r.map(x=>({id:x.id,...x.fields}))),
-      atGetAll(TABLES.seasons).then(r=>r.map(x=>({id:x.id,...x.fields}))),
+    if (!dataOnly) {
+      // Full load - fetch everything
+      const[clubs,seasons,catalogues]=await Promise.all([
+        CACHE.clubs.length ? Promise.resolve(CACHE.clubs) : atGetAll(TABLES.clubs).then(r=>r.map(x=>({id:x.id,...x.fields}))),
+        CACHE.seasons.length ? Promise.resolve(CACHE.seasons) : atGetAll(TABLES.seasons).then(r=>r.map(x=>({id:x.id,...x.fields}))),
+        CACHE.catalogues.length ? Promise.resolve(CACHE.catalogues) : atGetAll(TABLES.catalogues).then(r=>r.map(x=>({id:x.id,...x.fields}))),
+      ]);
+      CACHE.clubs=clubs; CACHE.seasons=seasons; CACHE.catalogues=catalogues||[];
+    }
+    const[players,parents,heroes]=await Promise.all([
       loadCachedOrFetch(CACHE_KEYS.players,TABLES.players),
       loadCachedOrFetch(CACHE_KEYS.parents,TABLES.parents),
       loadCachedOrFetch(CACHE_KEYS.heroes,TABLES.heroes),
-    atGetAll(TABLES.catalogues).then(r=>r.map(x=>({id:x.id,...x.fields}))),
     ]);
-    CACHE.clubs=clubs;CACHE.seasons=seasons;CACHE.players=players;CACHE.parents=parents;CACHE.heroes=heroes;;CACHE.catalogues=catalogues||[];
-    cacheLoaded=true;updateStats();refreshFilterSelects();refreshClubs();refreshSeasons();
+    CACHE.players=players; CACHE.parents=parents; CACHE.heroes=heroes;
+    cacheLoaded=true; updateStats(); refreshFilterSelects(); refreshClubs(); refreshSeasons();
   }catch(e){toast('Failed to load data: '+e.message,'error');}
 }
 
@@ -2400,6 +2408,36 @@ function updateSearchChips() {
     <button onclick="clearAllSearchFilters()" style="background:none;border:1px solid rgba(255,92,92,0.4);border-radius:20px;padding:3px 12px;font-size:11px;color:var(--red,#ff5c5c);cursor:pointer;">✕ Clear all</button>` : '');
 }
 
+async function archiveSelected() {
+  const pids = window._selectedPids ? [...window._selectedPids] : [];
+  if (!pids.length) { toast('No players selected', 'error'); return; }
+  // Find unique player IDs from selected PIDs
+  const playerIds = new Set();
+  pids.forEach(pid => {
+    const hero = CACHE.heroes.find(h => h.PID === pid);
+    if (hero && hero.PlayerID) playerIds.add(hero.PlayerID);
+  });
+  if (!playerIds.size) { toast('No players found for selected PIDs', 'error'); return; }
+  if (!confirm(`Archive ${playerIds.size} player${playerIds.size !== 1 ? 's' : ''}?`)) return;
+  const btn = document.querySelector('[onclick="archiveSelected()"]');
+  if (btn) { btn.textContent = 'Archiving...'; btn.disabled = true; }
+  let done = 0;
+  const ids = [...playerIds];
+  for (let i = 0; i < ids.length; i += 5) {
+    const batch = ids.slice(i, i + 5);
+    await Promise.all(batch.map(id => atUpdate(TABLES.players, id, {Status: 'archived'}).then(() => {
+      const p = CACHE.players.find(p => p.id === id);
+      if (p) p.Status = 'archived';
+    })));
+    done += batch.length;
+    if (btn) btn.textContent = `Archiving ${done}/${ids.size}...`;
+  }
+  if (btn) { btn.textContent = 'Archive selected'; btn.disabled = false; }
+  toast(`Archived ${playerIds.size} player${playerIds.size !== 1 ? 's' : ''}`);
+  window._selectedPids = new Set();
+  runSearch();
+}
+
 function clearAllSearchFilters() {
   const inp = document.getElementById('search-q'); if (inp) inp.value = '';
   const club = document.getElementById('filter-club'); if (club) club.value = '';
@@ -2836,6 +2874,7 @@ async function confirmImport() {
   progressWrap.innerHTML = '<div style="font-size:11px;color:var(--text2);margin-bottom:6px;display:flex;justify-content:space-between;"><span id="import-progress-label">Preparing...</span><span id="import-progress-pct" style="color:var(--accent);">0%</span></div><div style="background:var(--bg3);border-radius:4px;height:6px;overflow:hidden;"><div id="import-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s;border-radius:4px;"></div></div>';
   const previewContent = document.getElementById('import-preview-content');
   previewContent.insertBefore(progressWrap, previewContent.firstChild);
+  let _createdPlayers = [], _createdParents = [], _createdHeroes = [];
   const setProgress = (done, total, label) => {
     const pct = total > 0 ? Math.round((done/total)*100) : 0;
     const bar = document.getElementById('import-progress-bar');
@@ -2863,6 +2902,7 @@ async function confirmImport() {
       const p = newPlayers[pi];
       setProgress(done+pi, total, `Writing player ${pi+1} of ${newPlayers.length}...`);
       const rec=await atCreate(TABLES.players,{Name:toProperName(p.name),ShirtName:toShirtName(p.shirtName),SquadNumber:p.number,Type:p.type,ClubID:p.clubId,SeasonID:p.seasonId,Status:p.status,MDMActorID:p.mdmId||'',Goalkeeper:p.goalkeeper||false});
+      _createdPlayers.push(rec);
       CACHE.players.push({id:rec.id,...rec.fields});
       playerMap[p.name+'_'+p.clubId+'_'+p.seasonId]=rec.id;
     }
@@ -2902,7 +2942,18 @@ async function confirmImport() {
       if (confirmBtn) { confirmBtn.textContent = 'Import all'; confirmBtn.disabled = false; confirmBtn.style.background = ''; }
       if (cancelBtn) cancelBtn.style.display = '';
     }, 2500);
-    await loadCache(true);
+    // Incremental cache update — append newly created records directly without full AT refetch
+    if (_createdPlayers && _createdPlayers.length) {
+      _createdPlayers.forEach(r => { if (!CACHE.players.find(p=>p.id===r.id)) CACHE.players.push({id:r.id,...r.fields}); });
+    }
+    if (_createdParents && _createdParents.length) {
+      _createdParents.forEach(r => { if (!CACHE.parents.find(p=>p.id===r.id)) CACHE.parents.push({id:r.id,...r.fields}); });
+    }
+    if (_createdHeroes && _createdHeroes.length) {
+      _createdHeroes.forEach(r => { if (!CACHE.heroes.find(h=>h.id===r.id)) CACHE.heroes.push({id:r.id,...r.fields}); });
+    }
+    // Invalidate localStorage cache so next full load gets fresh data
+    Object.values(CACHE_KEYS).forEach(k=>localStorage.removeItem(k));
     updateStats(); refreshFilterSelects();
     const _importedPlayerList = d.players.map(p=>({name:p.name,clubId:p.clubId,seasonId:p.seasonId}));
     clearImport();
@@ -3102,6 +3153,7 @@ async function confirmCreationImport() {
     if (d.heroes.length>0) {
       const heroFields=d.heroes.map(h=>({PID:h.pid,PlayerID:playerMap[h.playerName+'_'+h.clubId+'_'+h.seasonId]||'',ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.garmentRaw,KitType:h.kitType,Status:'active'})).filter(h=>h.PlayerID);
       const recs=await atCreateBatch(TABLES.heroes,heroFields);
+      _createdHeroes.push(...recs);
       recs.forEach(r=>CACHE.heroes.push({id:r.id,...r.fields}));
     }
     if (d.provisional.length > 0) {
@@ -3131,6 +3183,7 @@ async function confirmCreationImport() {
       })).filter(h => h.PlayerID);
       if (provHeroFields.length > 0) {
         const recs = await atCreateBatch(TABLES.heroes, provHeroFields);
+        _createdHeroes.push(...recs);
         recs.forEach(r => CACHE.heroes.push({id:r.id,...r.fields}));
       }
     }
