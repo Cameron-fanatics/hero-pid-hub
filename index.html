@@ -3770,8 +3770,22 @@ async function buildSquadUpdatePreview(clubId, seasonId, newSquad, setStatus) {
   const notFound = newSquad.filter(p => {
     const pNorm = normName(p.name);
     const words = pNorm.split(' ').filter(Boolean);
-    const keys = [pNorm, words[words.length-1], words[0], words.length>1?words.slice(0,2).join('-'):null].filter(Boolean);
-    return !keys.some(k => newSquadMap[k] || (mdmByNorm[k] && newSquadMap[normName(mdmByNorm[k].JerseyName||'')]));
+    const keys = new Set([
+      pNorm,
+      words.length>1 ? words[words.length-1] : null,
+      words.length>1 ? words[0] : null,
+      words.length>1 ? words.slice(-2).join('-') : null,
+      words.length>1 ? words.slice(0,2).join('-') : null,
+      words.length>1 ? words.slice(0,2).join(' ') : null,
+      words.length>1 ? words.slice(-2).join(' ') : null,
+      words.length>1 ? words[0][0]+'.'+words[words.length-1] : null,
+      words.length>1 ? words.slice(1).join(' ')+' '+words[0] : null,
+      ...words,
+    ].filter(Boolean));
+    return ![...keys].some(k =>
+      newSquadMap[k] ||
+      (mdmByNorm[k] && newSquadMap[normName(mdmByNorm[k].JerseyName||'')])
+    );
   });
   // Store for apply
   const club = CACHE.clubs.find(c=>c.id===clubId);
