@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v141 -->
+<!-- HEROPID-BUILD-v143 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -487,6 +487,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       <div id="squad-update-preview" class="hidden card" style="margin-bottom:20px;">
         <div style="padding:16px;">
           <div id="squad-update-preview-stats" style="margin-bottom:12px;font-size:13px;color:var(--text2);"></div>
+          <div id="squad-update-missing" style="display:none;margin-bottom:16px;padding:12px 14px;background:rgba(255,179,64,0.07);border:1px solid rgba(255,179,64,0.3);border-radius:var(--radius-sm);"></div>
           <div id="squad-update-preview-table" style="max-height:480px;overflow-y:auto;margin-bottom:12px;"></div>
           <div style="display:flex;gap:8px;align-items:center;">
             <button class="btn btn-primary btn-sm" onclick="applySquadUpdate()">Save to AT + Export MDM CSV</button>
@@ -3789,7 +3790,55 @@ async function buildSquadUpdatePreview(clubId, seasonId, newSquad, setStatus) {
     <span style="color:var(--red);">${deactivations} deactivations</span> · 
     <span style="color:var(--amber);">${numChanges} number changes</span> · 
     <span style="color:var(--text2);">${changes.length} total rows in MDM export</span>
-    ${notFound.length?`<br><span style="color:var(--amber);">⚠ ${notFound.length} players not found in roster: ${notFound.map(p=>p.name).join(', ')}</span>`:''}`;
+    ${notFound.length?`<br><span style="color:var(--amber);">⚠ ${notFound.length} player${notFound.length!==1?'s':''} not found in MDM roster — see below</span>`:''}`;
+
+  // Render missing players section with manual jersey name input
+  const missingEl = document.getElementById('squad-update-missing');
+  if (notFound.length) {
+    missingEl.style.display = 'block';
+    // Get roster IDs available for this club
+    const rosterIds = [...new Set(clubMembers.map(m=>m.RosterID).filter(Boolean))];
+    const rosterOpts = rosterIds.map(id=>`<option value="${id}">${id}</option>`).join('');
+    missingEl.innerHTML = `
+      <div style="font-size:12px;font-weight:600;color:var(--amber);margin-bottom:4px;">⚠ Not in MDM Roster — ${notFound.length} player${notFound.length!==1?'s':''}</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">These players weren't found in the MDM roster. Fill in the details to include them in the export with <strong>id=0</strong> (MDM will assign the real ID). They will <strong>not</strong> be written to AT until you re-import the MDM roster after MDM assigns their ID.</div>
+      ${notFound.map((p,i)=>`
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;">
+        <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px;">${p.name} <span style="color:var(--text3);font-weight:400;">· #${p.number||'—'}</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:6px;">
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">JERSEY NAME</div>
+            <input type="text" id="mf-jersey-${i}" placeholder="e.g. FERNANDEZ-PARDO"
+              style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:4px 8px;color:var(--text);font-size:11px;"
+              oninput="updateMissingPlayer(${i})">
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">ACTOR ID</div>
+            <input type="text" id="mf-actor-${i}" placeholder="MDM Actor ID"
+              style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:4px 8px;color:var(--text);font-size:11px;"
+              oninput="updateMissingPlayer(${i})">
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">ROSTER ID</div>
+            <select id="mf-roster-${i}" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:4px 8px;color:var(--text);font-size:11px;"
+              onchange="updateMissingPlayer(${i})">
+              <option value="">Select roster</option>${rosterOpts}
+            </select>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">POSITION</div>
+            <select id="mf-pos-${i}" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:4px 8px;color:var(--text);font-size:11px;"
+              onchange="updateMissingPlayer(${i})">
+              <option value="UK">UK</option><option value="GK">GK</option><option value="DF">DF</option><option value="MF">MF</option><option value="FW">FW</option>
+            </select>
+          </div>
+        </div>
+        <div id="mf-status-${i}" style="font-size:10px;color:var(--text3);"></div>
+      </div>`).join('')}`;
+  } else {
+    missingEl.style.display = 'none';
+  }
+
   // Sort: A/V first (descending number), then A/H (descending number), then rest
   const sortedChanges = [...changes].sort((a,b) => {
     const aAV = a.newRosterStatus==='A' && a.newDisplayStatus==='V';
@@ -3832,6 +3881,31 @@ async function buildSquadUpdatePreview(clubId, seasonId, newSquad, setStatus) {
       changes[ci].numberChanged = val !== changes[ci].oldNumber;
     });
   });
+}
+
+function updateMissingPlayer(idx) {
+  const jerseyName = (document.getElementById('mf-jersey-'+idx)?.value||'').trim().toUpperCase();
+  const actorId = (document.getElementById('mf-actor-'+idx)?.value||'').trim();
+  const rosterId = (document.getElementById('mf-roster-'+idx)?.value||'').trim();
+  const position = (document.getElementById('mf-pos-'+idx)?.value||'UK').trim();
+  const statusEl = document.getElementById('mf-status-'+idx);
+  // Store in squadUpdateData.manualPlayers
+  if (!squadUpdateData.manualPlayers) squadUpdateData.manualPlayers = {};
+  squadUpdateData.manualPlayers[idx] = {jerseyName, actorId, rosterId, position};
+  // Show validation state
+  if (!jerseyName) { if(statusEl) statusEl.textContent=''; return; }
+  const missing = [];
+  if (!actorId) missing.push('Actor ID');
+  if (!rosterId) missing.push('Roster ID');
+  if (statusEl) {
+    if (missing.length) {
+      statusEl.textContent = `Still needed: ${missing.join(', ')}`;
+      statusEl.style.color = 'var(--amber)';
+    } else {
+      statusEl.textContent = '✓ Ready — will be included in export with id=0';
+      statusEl.style.color = 'var(--green)';
+    }
+  }
 }
 
 async function applySquadUpdate() {
@@ -3928,6 +4002,22 @@ function exportSquadUpdateCSV() {
     c.newDisplayStatus,
     '','','','5'
   ]);
+  // Add manually entered missing players with id=0
+  const manual = squadUpdateData.manualPlayers || {};
+  Object.values(manual).forEach(p => {
+    if (!p.jerseyName || !p.rosterId || !p.actorId) return; // skip incomplete
+    rows.push([
+      '0',          // id=0, MDM will assign
+      p.rosterId,
+      p.jerseyName, // use jersey name as player name too
+      p.jerseyName,
+      '', '',       // number will be set by MDM
+      p.position||'UK',
+      p.actorId,
+      'A', 'V',     // activate
+      '','','','5'
+    ]);
+  });
   const csv = [headers, ...rows].map(r=>r.map(v=>{
     const s=String(v??'');
     return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s;
