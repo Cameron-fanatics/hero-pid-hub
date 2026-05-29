@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v140 -->
+<!-- HEROPID-BUILD-v141 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3702,29 +3702,32 @@ async function buildSquadUpdatePreview(clubId, seasonId, newSquad, setStatus) {
     if (pn && !mdmByNorm[pn]) mdmByNorm[pn] = m;
   });
   // Build squad lookup: normName → {number, name, mdmEntry}
-  const newSquadMap = {};
-  newSquad.forEach(p => {
-    const pNorm = normName(p.name);
-    const words = pNorm.split(' ').filter(Boolean);
-    // Try multiple lookup strategies against MDM data
-    // Handles both Firstname SURNAME and SURNAME Firstname formats
-    const lookupKeys = [
-      pNorm,                                                    // exact
-      words.length>1 ? words[words.length-1] : null,           // last word
-      words.length>1 ? words[0] : null,                        // first word (SURNAME Firstname)
-      words.length>1 ? words.slice(-2).join('-') : null,       // last two hyphenated
-      words.length>1 ? words.slice(0,2).join('-') : null,      // first two hyphenated
-      words.length>1 ? words[0][0]+'.'+words[words.length-1] : null, // T.HERNANDEZ
-      // Reverse name order: CASTAGNE TIMOTHY → TIMOTHY CASTAGNE
-      words.length>1 ? words.slice(1).join(' ')+' '+words[0] : null,
-    ].filter(Boolean);
-    let mdmEntry = null;
-    for (const k of lookupKeys) {
-      if (mdmByNorm[k]) { mdmEntry = mdmByNorm[k]; break; }
-    }
-    const key = mdmEntry ? normName(mdmEntry.JerseyName||'') : pNorm;
-    if (!newSquadMap[key]) newSquadMap[key] = {number:p.number, name:p.name};
-  });
+   const newSquadMap = {};
+   newSquad.forEach(p => {
+     const pNorm = normName(p.name);
+     const words = pNorm.split(' ').filter(Boolean);
+     // Generate all possible lookup keys to handle different name formats:
+     // Firstname SURNAME, SURNAME Firstname, DE BRUYNE Kevin, MVOM ONANA Amadou etc.
+     const lookupKeys = new Set([
+       pNorm,                                                        // exact: CASTAGNE TIMOTHY
+       words.length>1 ? words[words.length-1] : null,               // last word: TIMOTHY → miss, BRUYNE → miss
+       words.length>1 ? words[0] : null,                            // first word: CASTAGNE ✓
+       words.length>1 ? words.slice(-2).join('-') : null,           // last two hyphenated
+       words.length>1 ? words.slice(0,2).join('-') : null,          // first two hyphenated: DE-BRUYNE
+       words.length>1 ? words.slice(0,2).join(' ') : null,          // first two spaced: DE BRUYNE ✓
+       words.length>1 ? words.slice(-2).join(' ') : null,           // last two spaced
+       words.length>1 ? words[0][0]+'.'+words[words.length-1] : null, // T.HERNANDEZ
+       words.length>1 ? words.slice(1).join(' ')+' '+words[0] : null, // reversed
+       // Try every individual word (catches MOREIRA in DA SILVA MOREIRA, ONANA in MVOM ONANA)
+       ...words,
+     ].filter(Boolean));
+     let mdmEntry = null;
+     for (const k of lookupKeys) {
+       if (mdmByNorm[k]) { mdmEntry = mdmByNorm[k]; break; }
+     }
+     const key = mdmEntry ? normName(mdmEntry.JerseyName||'') : pNorm;
+     if (!newSquadMap[key]) newSquadMap[key] = {number:p.number, name:p.name};
+   });
   // Build changes per unique roster member entry
   const changes = [];
   clubMembers.forEach(m=>{
