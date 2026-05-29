@@ -460,7 +460,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
             <div>
               <label class="form-label">Club</label>
-              <select id="squad-update-club" class="form-select" onchange="squadUpdateClubChanged()"></select>
+              <select id="squad-update-club" class="form-select" onchange="refreshSquadUpdateSeasons()"></select>
             </div>
             <div>
               <label class="form-label">Season</label>
@@ -3692,7 +3692,7 @@ async function buildSquadUpdatePreview(clubId, seasonId, newSquad, setStatus) {
   }
   // Build new squad lookup by jersey name
   // Normalise: uppercase, strip accents, normalise hyphens/spaces
-  const normName = s => s.toUpperCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/-/g,' ').replace(/[^A-Z0-9.' ]/g,' ').replace(/\s+/g,' ').trim();
+  const normName = s => { const r = s.toUpperCase().trim().normalize('NFD'); let out=''; for(const c of r){const cp=c.codePointAt(0);if(cp<0x0300||cp>0x036f)out+=c;} return out.replace(/-/g,' ').replace(/[^A-Z0-9.' ]/g,' ').replace(/  +/g,' ').trim(); };
   // Build lookup from MDM data: both jerseyName and playerName map to the same entry
   // This lets full names on the squad list match against MDM player names (solves Hernandez brothers etc.)
   const mdmByNorm = {};
