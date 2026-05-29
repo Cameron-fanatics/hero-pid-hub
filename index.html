@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v143 -->
+<!-- HEROPID-BUILD-v144 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3889,21 +3889,44 @@ function updateMissingPlayer(idx) {
   const rosterId = (document.getElementById('mf-roster-'+idx)?.value||'').trim();
   const position = (document.getElementById('mf-pos-'+idx)?.value||'UK').trim();
   const statusEl = document.getElementById('mf-status-'+idx);
-  // Store in squadUpdateData.manualPlayers
   if (!squadUpdateData.manualPlayers) squadUpdateData.manualPlayers = {};
-  squadUpdateData.manualPlayers[idx] = {jerseyName, actorId, rosterId, position};
-  // Show validation state
-  if (!jerseyName) { if(statusEl) statusEl.textContent=''; return; }
-  const missing = [];
-  if (!actorId) missing.push('Actor ID');
-  if (!rosterId) missing.push('Roster ID');
-  if (statusEl) {
-    if (missing.length) {
-      statusEl.textContent = `Still needed: ${missing.join(', ')}`;
-      statusEl.style.color = 'var(--amber)';
-    } else {
-      statusEl.textContent = '✓ Ready — will be included in export with id=0';
+  if (!jerseyName) {
+    delete squadUpdateData.manualPlayers[idx];
+    if (statusEl) statusEl.textContent = '';
+    return;
+  }
+  // Check if this jersey name matches an existing MDM roster member in AT
+  const {clubMembers} = squadUpdateData;
+  const existingMember = clubMembers.find(m=>(m.JerseyName||'').toUpperCase().trim()===jerseyName);
+  if (existingMember) {
+    // Found in AT roster — treat as normal match, add to newSquad so it activates normally
+    squadUpdateData.manualPlayers[idx] = {jerseyName, matched: true, existingMember};
+    // Add to newSquad so buildSquadUpdatePreview picks it up
+    const notFoundEntry = squadUpdateData.notFound[idx];
+    const existing = squadUpdateData.newSquad.find(p=>p._missingIdx===idx);
+    if (existing) { existing.name = jerseyName; }
+    else { squadUpdateData.newSquad.push({name: jerseyName, number: String(notFoundEntry?.number||''), _missingIdx: idx}); }
+    if (statusEl) {
+      statusEl.textContent = `✓ Found in roster — will activate normally and update AT`;
       statusEl.style.color = 'var(--green)';
+    }
+    // Rebuild preview with this player now matched
+    buildSquadUpdatePreview(squadUpdateData.clubId, squadUpdateData.seasonId, squadUpdateData.newSquad,
+      (msg,err) => { const s=document.getElementById('squad-update-status'); if(s){s.style.display='block';document.getElementById('squad-update-status-text').textContent=msg;} });
+  } else {
+    // Not in AT roster at all — manual id=0 path
+    squadUpdateData.manualPlayers[idx] = {jerseyName, actorId, rosterId, position, matched: false};
+    const missing = [];
+    if (!actorId) missing.push('Actor ID');
+    if (!rosterId) missing.push('Roster ID');
+    if (statusEl) {
+      if (missing.length) {
+        statusEl.textContent = `Not in roster. Still needed for export: ${missing.join(', ')}`;
+        statusEl.style.color = 'var(--amber)';
+      } else {
+        statusEl.textContent = '✓ Ready — will be added to export with id=0 (not written to AT until MDM assigns ID)';
+        statusEl.style.color = 'var(--green)';
+      }
     }
   }
 }
@@ -4002,9 +4025,10 @@ function exportSquadUpdateCSV() {
     c.newDisplayStatus,
     '','','','5'
   ]);
-  // Add manually entered missing players with id=0
+  // Add manually entered missing players with id=0 (only those NOT found in existing roster)
   const manual = squadUpdateData.manualPlayers || {};
   Object.values(manual).forEach(p => {
+    if (p.matched) return; // already handled as normal activation above
     if (!p.jerseyName || !p.rosterId || !p.actorId) return; // skip incomplete
     rows.push([
       '0',          // id=0, MDM will assign
