@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v137 -->
+<!-- HEROPID-BUILD-v140 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3640,12 +3640,14 @@ function parseSquadUpdateUpload(file) {
         const wb = XLSX.read(e.target.result, {type:'array'});
         const ws = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-        // Find number and name columns
-        const hdrs = (rows[0]||[]).map(v=>String(v||'').toLowerCase());
+        // Find first non-empty row to use as header (handles files with empty rows at top)
+        const hdrRowIdx = rows.findIndex(r => r.some(v => String(v||'').trim() !== ''));
+        if (hdrRowIdx === -1) { setStatus('Cannot find Number and Name columns',true); return; }
+        const hdrs = (rows[hdrRowIdx]||[]).map(v=>String(v||'').toLowerCase());
         const numIdx = hdrs.findIndex(h=>h.includes('number')||h==='num'||h==='#');
         const nameIdx = hdrs.findIndex(h=>h.includes('name'));
         if (numIdx===-1||nameIdx===-1) { setStatus('Cannot find Number and Name columns',true); return; }
-        for (let i=1;i<rows.length;i++) {
+        for (let i=hdrRowIdx+1;i<rows.length;i++) {
           const num=rows[i][numIdx], name=rows[i][nameIdx];
           if (!name||String(name).trim()==='') continue;
           newSquad.push({number:String(num||'').trim(), name:String(name).trim().toUpperCase()});
@@ -3703,8 +3705,23 @@ async function buildSquadUpdatePreview(clubId, seasonId, newSquad, setStatus) {
   const newSquadMap = {};
   newSquad.forEach(p => {
     const pNorm = normName(p.name);
-    const mdmEntry = mdmByNorm[pNorm];
-    // Key by the MDM jerseyName (normalised) so we can match against clubMembers below
+    const words = pNorm.split(' ').filter(Boolean);
+    // Try multiple lookup strategies against MDM data
+    // Handles both Firstname SURNAME and SURNAME Firstname formats
+    const lookupKeys = [
+      pNorm,                                                    // exact
+      words.length>1 ? words[words.length-1] : null,           // last word
+      words.length>1 ? words[0] : null,                        // first word (SURNAME Firstname)
+      words.length>1 ? words.slice(-2).join('-') : null,       // last two hyphenated
+      words.length>1 ? words.slice(0,2).join('-') : null,      // first two hyphenated
+      words.length>1 ? words[0][0]+'.'+words[words.length-1] : null, // T.HERNANDEZ
+      // Reverse name order: CASTAGNE TIMOTHY → TIMOTHY CASTAGNE
+      words.length>1 ? words.slice(1).join(' ')+' '+words[0] : null,
+    ].filter(Boolean);
+    let mdmEntry = null;
+    for (const k of lookupKeys) {
+      if (mdmByNorm[k]) { mdmEntry = mdmByNorm[k]; break; }
+    }
     const key = mdmEntry ? normName(mdmEntry.JerseyName||'') : pNorm;
     if (!newSquadMap[key]) newSquadMap[key] = {number:p.number, name:p.name};
   });
@@ -3746,7 +3763,12 @@ async function buildSquadUpdatePreview(clubId, seasonId, newSquad, setStatus) {
     });
   });
   // Check for players in new squad not found in any roster member
-  const notFound = newSquad.filter(p => !newSquadMap[normName(mdmByNorm[normName(p.name)]?.JerseyName||'')] && !newSquadMap[normName(p.name)]);
+  const notFound = newSquad.filter(p => {
+    const pNorm = normName(p.name);
+    const words = pNorm.split(' ').filter(Boolean);
+    const keys = [pNorm, words[words.length-1], words[0], words.length>1?words.slice(0,2).join('-'):null].filter(Boolean);
+    return !keys.some(k => newSquadMap[k] || (mdmByNorm[k] && newSquadMap[normName(mdmByNorm[k].JerseyName||'')]));
+  });
   // Store for apply
   const club = CACHE.clubs.find(c=>c.id===clubId);
   const season = CACHE.seasons.find(s=>s.id===seasonId);
