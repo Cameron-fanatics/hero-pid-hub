@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v148 -->
+<!-- HEROPID-BUILD-v149 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2572,7 +2572,9 @@ function calcDataHealth() {
 function isEntryIncomplete(type, id) {
   if (type === 'player') {
     const p = CACHE.players.find(x => x.id === id);
-    return p && (!p.SquadNumber || !p.ShirtName);
+    if (!p) return false;
+    const naShirt = (p.ShirtName||'').toUpperCase() === 'N/A';
+    return (!p.SquadNumber && p.SquadNumber !== 0 && !naShirt) || (!p.ShirtName && !naShirt);
   }
   if (type === 'parent') {
     const p = CACHE.parents.find(x => x.id === id);
