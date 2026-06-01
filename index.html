@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v150 -->
+<!-- HEROPID-BUILD-v151 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2841,7 +2841,8 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
 
     const shirtName = shirtCol!==-1 ? String(row[shirtCol]||'').trim()||rawName.toUpperCase() : rawName.toUpperCase();
     const number = numberCol!==-1 ? (parseInt(row[numberCol])||null) : null;
-    const mdmId = actorIdCol!==-1 ? (String(row[actorIdCol]||'').startsWith('=') ? '' : String(row[actorIdCol]||'').trim()) : '';
+    const _rawActorId = actorIdCol!==-1 ? String(row[actorIdCol]||'').trim() : '';
+    const mdmId = (_rawActorId.startsWith('=') || _rawActorId.startsWith('#') || !_rawActorId) ? '' : _rawActorId;
     const isVariant = isVariantName(rawName);
     const type = isVariant ? 'variant' : 'player';
 
