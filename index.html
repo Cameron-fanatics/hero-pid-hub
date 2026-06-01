@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v157 -->
+<!-- HEROPID-BUILD-v158 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3043,6 +3043,12 @@ async function processCreationFiles(files) {
   const fontType=document.getElementById('creation-font').value;
   if (!seasonId){toast('Please select a season','error');return;}
   document.getElementById('creation-preview').classList.add('hidden');
+  // Always fetch fresh heroes before checking duplicates — stale localStorage cache can cause false positives
+  try {
+    localStorage.removeItem(CACHE_KEYS.heroes);
+    const freshHeroes = await atGetAll(TABLES.heroes);
+    CACHE.heroes = freshHeroes.map(x=>({id:x.id,...x.fields}));
+  } catch(e) { /* proceed with existing cache */ }
   const allRows=[];
   for (const file of files) {
     const text=await file.text();
@@ -3112,14 +3118,16 @@ function parseCreationFedCode(nameStr) {
 }
 
 function parseCreationRows(rows,seasonId,fontType,fileNames) {
-  creationImportData={seasonId,fontType,fileNames,heroes:[],players:[],parents:[],provisional:[],allParsedPlayers:[],stats:{matched:0,unmatched:0,duplicate:0,provisional:0}};
+  creationImportData={seasonId,fontType,fileNames,heroes:[],players:[],parents:[],provisional:[],allParsedPlayers:[],duplicatePids:[],stats:{matched:0,unmatched:0,duplicate:0,provisional:0}};
   const seen=new Set();
   rows.forEach(row=>{
     const pid=(row['productId']||'').trim();
     const name=(row['name']||'').trim();
     const basePid=(row['baseProductId']||'').trim();
     if (!pid||!name) return;
-    if (seen.has(pid)||CACHE.heroes.find(h=>h.PID===pid)){creationImportData.stats.duplicate++;return;}
+    if (seen.has(pid)){creationImportData.stats.duplicate++;creationImportData.duplicatePids.push({pid,name,reason:'within-file duplicate'});return;}
+    const atMatch=CACHE.heroes.find(h=>String(h.PID)===pid);
+    if (atMatch){creationImportData.stats.duplicate++;creationImportData.duplicatePids.push({pid,name,reason:'already in Airtable'});return;}
     seen.add(pid);
     const clubName=parseCreationFedCode(name);
     const club=CACHE.clubs.find(c=>(c.Name||'').toLowerCase()===clubName.toLowerCase());
@@ -3144,6 +3152,11 @@ function showCreationPreview(fileNames) {
   let html=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;"><div class="stat-pill"><span class="stat-label">Hero PIDs</span><span class="stat-value" style="color:var(--green);">${d.heroes.length}</span></div><div class="stat-pill"><span class="stat-label">Provisional</span><span class="stat-value" style="color:var(--amber);">${d.provisional.length}</span></div><div class="stat-pill"><span class="stat-label">Duplicates</span><span class="stat-value" style="color:var(--text3);">${d.stats.duplicate}</span></div><div class="stat-pill"><span class="stat-label">New Parents</span><span class="stat-value" style="color:var(--accent);">${d.parents.length}</span></div></div>`;
   if (d.stats.matched>0) html+=`<div style="background:var(--green-bg);border:1px solid rgba(61,214,140,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--green);margin-bottom:10px;">✓ ${d.stats.matched} PIDs matched to existing parent PIDs</div>`;
   if (d.provisional.length>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${d.provisional.length} PIDs have no player name — stored as provisional.<button class="btn btn-ghost btn-sm" style="margin-left:8px;" onclick="exportProvisionalList()">⎘ Export for Homeplate</button></div>`;
+  if (d.duplicatePids&&d.duplicatePids.length>0) {
+    const atDups=d.duplicatePids.filter(x=>x.reason==='already in Airtable');
+    const fileDups=d.duplicatePids.filter(x=>x.reason==='within-file duplicate');
+    html+=`<details style="background:var(--bg3);border:1px solid rgba(255,92,92,0.2);border-radius:var(--radius-sm);margin-bottom:10px;"><summary style="padding:10px 14px;font-size:12px;color:var(--red);cursor:pointer;list-style:none;">⚠ ${d.duplicatePids.length} duplicate${d.duplicatePids.length!==1?'s':''} skipped — click to inspect${atDups.length>0?' ('+atDups.length+' already in AT)':''}</summary><div style="padding:0 14px 12px;"><table style="width:100%;font-size:11px;border-collapse:collapse;"><thead><tr><th style="text-align:left;color:var(--text3);padding:4px 8px 4px 0;">PID</th><th style="text-align:left;color:var(--text3);padding:4px 8px 4px 0;">Name</th><th style="text-align:left;color:var(--text3);padding:4px 0;">Reason</th></tr></thead><tbody>${d.duplicatePids.map(x=>`<tr><td class="mono" style="padding:3px 8px 3px 0;color:var(--text);">${x.pid}</td><td style="padding:3px 8px 3px 0;color:var(--text2);font-size:10px;">${x.name}</td><td style="padding:3px 0;color:${x.reason==='already in Airtable'?'var(--red)':'var(--text3)'};font-size:10px;">${x.reason}</td></tr>`).join('')}</tbody></table></div></details>`;
+  }
   document.getElementById('creation-preview-content').innerHTML=html;
 }
 
