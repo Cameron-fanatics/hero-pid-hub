@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v153 -->
+<!-- HEROPID-BUILD-v154 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3575,7 +3575,7 @@ async function importMdmRoster() {
     CACHE.mdmRosterMembers = existing.map(x=>({id:x.id,...x.fields}));
   }
   const existingByRMID = {};
-  CACHE.mdmRosterMembers.filter(r=>r.ClubID===clubId).forEach(r=>existingByRMID[r.RosterMemberID]=r);
+  CACHE.mdmRosterMembers.filter(r=>r.ClubID===clubId).forEach(r=>existingByRMID[String(r.RosterMemberID)]=r);
   const toCreate = [];
   const toUpdate = [];
   rows.forEach(r => {
@@ -3593,8 +3593,8 @@ async function importMdmRoster() {
       ClubID: clubId,
       Club: clubName
     };
-    if (existingByRMID[r.id]) {
-      toUpdate.push({atId: existingByRMID[r.id].id, fields});
+    if (existingByRMID[String(r.id)]) {
+      toUpdate.push({atId: existingByRMID[String(r.id)].id, fields});
     } else {
       toCreate.push(fields);
     }
