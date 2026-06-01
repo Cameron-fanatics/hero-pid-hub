@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v152 -->
+<!-- HEROPID-BUILD-v153 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2811,7 +2811,7 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
       row.forEach((v, c) => {
         const vl = String(v||'').toLowerCase().trim();
         if (vl==='actor name'||vl==='name') nameCol=c;
-        if (vl==='actor id') actorIdCol=c;
+        // Actor ID intentionally not read from storage sheets - only populated from MDM roster imports
         if (vl==='back of shirt name'||vl==='shirt name'||vl==='jerseyname') shirtCol=c;
         if (vl==='number'||vl==='jersey number'||vl===' number') numberCol=c;
       });
@@ -3630,21 +3630,31 @@ async function importMdmRoster() {
   CACHE.players.filter(p => p.ClubID === clubId).forEach(p => {
     // Match by MDMActorID first, fall back to jersey name match
     let desired = p.MDMActorID ? actorToStatus[p.MDMActorID] : null;
+    let matchedEntry = null;
     if (!desired) {
       // Fallback: find MDM entry by jersey name matching shirt name
       const shirtName = (p.ShirtName||'').toUpperCase().trim();
-      const mdmEntry = rows.find(r => (r.jerseyName||'').toUpperCase().trim() === shirtName);
-      if (mdmEntry) desired = mdmEntry.rosterStatus === 'A' ? 'active' : 'archived';
+      matchedEntry = rows.find(r => (r.jerseyName||'').toUpperCase().trim() === shirtName);
+      if (matchedEntry) desired = matchedEntry.rosterStatus === 'A' ? 'active' : 'archived';
+    } else {
+      matchedEntry = rows.find(r => r.actorId === p.MDMActorID);
     }
-    if (desired && p.Status !== desired) {
-      playerUpdates.push({player: p, desired});
+    const needsStatusUpdate = desired && p.Status !== desired;
+    const needsActorIdUpdate = matchedEntry && matchedEntry.actorId && !p.MDMActorID;
+    if (needsStatusUpdate || needsActorIdUpdate) {
+      playerUpdates.push({player: p, desired: desired||p.Status, actorId: needsActorIdUpdate ? matchedEntry.actorId : null});
     }
   });
   for (let i = 0; i < playerUpdates.length; i += 5) {
     const batch = playerUpdates.slice(i, i + 5);
-    await Promise.all(batch.map(({player, desired}) =>
-      atUpdate(TABLES.players, player.id, {Status: desired}).then(() => { player.Status = desired; })
-    ));
+    await Promise.all(batch.map(({player, desired, actorId}) => {
+      const fields = {Status: desired};
+      if (actorId) fields.MDMActorID = actorId;
+      return atUpdate(TABLES.players, player.id, fields).then(() => {
+        player.Status = desired;
+        if (actorId) player.MDMActorID = actorId;
+      });
+    }));
     setStatus(`⟳ Syncing player statuses... ${Math.min(i+5, playerUpdates.length)}/${playerUpdates.length}`);
   }
   document.getElementById('mdm-roster-preview').classList.add('hidden');
