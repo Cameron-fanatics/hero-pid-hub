@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v149 -->
+<!-- HEROPID-BUILD-v150 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -588,6 +588,16 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         <button class="btn btn-ghost btn-sm" onclick="exportIncomplete('heroes')">⬇ Export Incomplete</button><button class="btn btn-danger btn-sm" style="margin-left:6px;" onclick="openWipeModal('heroes','Hero PIDs')">⚠ Clear All</button>
         <label class="btn btn-ghost btn-sm" style="cursor:pointer;">↑ Upload Fixes<input type="file" accept=".csv" style="display:none" onchange="importCleanup('heroes',this.files[0])"></label>
         <span class="cleanup-status" id="cleanup-status-heroes" style="display:none;font-size:11px;color:var(--accent);"></span>
+      </div>
+    </div>
+
+    <!-- MDM ROSTER MEMBERS -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">MDM Roster Members — Incomplete Data</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Flags roster members where the Roster Member ID is <span class="mono" style="font-size:11px;">0</span> (MDM hasn't assigned an ID yet) or Roster ID is missing. CSV columns: <span class="mono" style="font-size:11px;">RosterMemberID, RosterID, JerseyName, PlayerName, JerseyNumber, ActorID, Club</span></div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="exportIncomplete('mdmRosterMembers')">⬇ Export Incomplete</button>
+        <span class="cleanup-status" id="cleanup-status-mdmRosterMembers" style="display:none;font-size:11px;color:var(--accent);"></span>
       </div>
     </div>
 
@@ -2140,6 +2150,18 @@ function exportIncomplete(tableKey) {
     dl(toCSV(hdrs, rows), 'incomplete_heroes.csv');
     toast(`Exported ${incomplete.length} incomplete hero PID${incomplete.length!==1?'s':''}`);
   }
+  else if (tableKey === 'mdmRosterMembers') {
+    const members = CACHE.mdmRosterMembers || [];
+    const incomplete = members.filter(m => !m.RosterMemberID || String(m.RosterMemberID) === '0' || !m.RosterID);
+    if (!incomplete.length) { toast('All MDM roster members complete ✓'); return; }
+    const hdrs = ['RosterMemberID','RosterID','JerseyName','PlayerName','JerseyNumber','ActorID','Club'];
+    const rows = incomplete.map(m => {
+      const cl = CACHE.clubs.find(c=>c.id===m.ClubID);
+      return [m.RosterMemberID||'0', m.RosterID||'', m.JerseyName||'', m.PlayerName||'', m.JerseyNumber||'', m.ActorID||'', cl?.Name||''];
+    });
+    dl(toCSV(hdrs, rows), 'incomplete_mdm_roster_members.csv');
+    toast(`Exported ${incomplete.length} incomplete roster member${incomplete.length!==1?'s':''}`);
+  }
 }
 
 async function importCleanup(tableKey, file) {
@@ -2538,8 +2560,9 @@ function calcDataHealth() {
   const incompletePlayers = CACHE.players.filter(p => !p.SquadNumber || !p.ShirtName).length;
   const incompleteParents = CACHE.parents.filter(p => !p.PID || (isUSSport(p.ClubID) && !p.CustomSKU)).length;
   const incompleteHeroes = CACHE.heroes.filter(h => !h.ParentPIDID || !h.KitType || !h.GarmentType || (isUSSport(h.ClubID) && (!h.ProductTitle || !h.Gender || !h.JerseyColour))).length;
+  const incompleteMdm = (CACHE.mdmRosterMembers||[]).filter(m => !m.RosterMemberID || String(m.RosterMemberID)==='0' || !m.RosterID).length;
   const total = CACHE.players.length + CACHE.parents.length + CACHE.heroes.length;
-  const totalIncomplete = incompletePlayers + incompleteParents + incompleteHeroes;
+  const totalIncomplete = incompletePlayers + incompleteParents + incompleteHeroes + incompleteMdm;
   const pct = total > 0 ? (totalIncomplete / total) * 100 : 0;
   const level = totalIncomplete === 0 ? 'green' : pct <= 2 ? 'amber' : 'red';
   const colour = level === 'green' ? 'var(--green)' : level === 'amber' ? 'var(--amber)' : 'var(--red,#fc8181)';
