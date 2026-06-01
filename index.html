@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v151 -->
+<!-- HEROPID-BUILD-v152 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2105,7 +2105,7 @@ function exportIncomplete(tableKey) {
     toast(`Exported ${incomplete.length} incomplete season${incomplete.length!==1?'s':''}`);
   }
   else if (tableKey === 'players') {
-    const incomplete = CACHE.players.filter(p => !p.SquadNumber || !p.ShirtName);
+    const incomplete = CACHE.players.filter(p => isEntryIncomplete('player', p.id));
     if (!incomplete.length) { toast('All players complete ✓'); return; }
     const hdrs = ['PlayerID','Name','ShirtName','SquadNumber','Club','Season'];
     const rows = incomplete.map(p => {
@@ -2557,7 +2557,7 @@ function refreshImportSelects() {
 }
 
 function calcDataHealth() {
-  const incompletePlayers = CACHE.players.filter(p => !p.SquadNumber || !p.ShirtName).length;
+  const incompletePlayers = CACHE.players.filter(p => isEntryIncomplete('player', p.id)).length;
   const incompleteParents = CACHE.parents.filter(p => !p.PID || (isUSSport(p.ClubID) && !p.CustomSKU)).length;
   const incompleteHeroes = CACHE.heroes.filter(h => !h.ParentPIDID || !h.KitType || !h.GarmentType || (isUSSport(h.ClubID) && (!h.ProductTitle || !h.Gender || !h.JerseyColour))).length;
   const incompleteMdm = (CACHE.mdmRosterMembers||[]).filter(m => !m.RosterMemberID || String(m.RosterMemberID)==='0' || !m.RosterID).length;
