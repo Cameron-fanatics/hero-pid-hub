@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v155 -->
+<!-- HEROPID-BUILD-v157 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3453,7 +3453,7 @@ function parseMdmRosterUpload(file) {
   setStatus('Reading...');
   const reader = new FileReader();
   reader.onerror = () => setStatus('Could not read file',true);
-  reader.onload = e => {
+  reader.onload = async e => {
     try {
       // Decode as UTF-8 (MDM exports are UTF-8, with or without BOM)
       // Some rows may contain mojibake (windows-1252 chars saved inside a UTF-8 file by MDM)
@@ -3490,11 +3490,17 @@ function parseMdmRosterUpload(file) {
       const club = CACHE.clubs.find(c=>c.id===clubId);
       const season = CACHE.seasons.find(s=>s.id===seasonId);
       mdmRosterData = {rows, clubId, seasonId, clubName:club?.Name||'', seasonName:season?.Label||''};
-      // Check for existing entries for this club
-      const existing = CACHE.mdmRosterMembers||[];
-      const existingIds = new Set(existing.filter(r=>r.ClubID===clubId).map(r=>r.RosterMemberID));
-      const newCount = rows.filter(r=>!existingIds.has(r.id)).length;
-      const updateCount = rows.filter(r=>existingIds.has(r.id)).length;
+      // Load existing MDM roster members before preview counts
+      if (!CACHE.mdmRosterMembers) {
+        const existingRecs = await atGetAll(TABLES.mdmRosterMembers);
+        CACHE.mdmRosterMembers = existingRecs.map(x=>({id:x.id,...x.fields}));
+      }
+      const existing = CACHE.mdmRosterMembers || [];
+      const existingIds = new Set(
+        existing.filter(r=>r.ClubID===clubId).map(r=>String(r.RosterMemberID||'').trim())
+      );
+      const newCount = rows.filter(r=>!existingIds.has(String(r.id||'').trim())).length;
+      const updateCount = rows.filter(r=>existingIds.has(String(r.id||'').trim())).length;
       // Show preview
       const preview = document.getElementById('mdm-roster-preview');
       preview.classList.remove('hidden');
