@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v154 -->
+<!-- HEROPID-BUILD-v155 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3162,6 +3162,7 @@ async function confirmCreationImport() {
   const btn=document.getElementById('creation-confirm-btn');
   btn.textContent='Importing...';btn.disabled=true;
   const d=creationImportData;
+  let _createdHeroes = [], _createdParents = [], _createdPlayers = [];
   try {
     if (d.parents.length>0) {
       const recs=await atCreateBatch(TABLES.parents,d.parents.map(p=>({PID:p.pid,ClubID:p.clubId,SeasonID:p.seasonId,KitType:p.kitType,GarmentType:p.garmentType})));
