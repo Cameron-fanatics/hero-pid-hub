@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v158 -->
+<!-- HEROPID-BUILD-v160 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -848,8 +848,8 @@ const KIT_ORDER = ['Home','Away','Third','GK','GK Plain'];
 const KIT_WORDS_DETECT = ['home','away','third','gk','fourth','fifth'];
 const GARMENT_KEYWORDS = ['pro shirt','pro kids','mens ss','mens s/s','mens ls','mens l/s','dri fit adv mens','dri-fit adv mens','dri fit adv womens','dri-fit adv womens','authentic shirt','authentic l/s','authentic kids','authentic womens','womens authentic','womens pro shirt','womens ss','womens s/s','womens','kids ss','kids s/s','minikit','mini kit','babykit','baby kit','cropped','little kids','infants','gk','goalkeeper','dri fit','dri-fit','authentic','outsize','infant','baby kit','babykit','unsponsored','pro mens','infant/baby','retro','dri fit adv','dri-fit adv','womens shirt','youth kit'];
 const GARMENT_ALIASES = {'mens ss':'mens_ss','mens s/s':'mens_ss','mens short sleeve':'mens_ss','mens jersey':'mens_ss','mens shirt':'mens_ss','jersey':'mens_ss','dri fit adv mens ss':'pro_shirt','dri-fit adv mens ss':'pro_shirt','dri fit adv shirt':'pro_shirt','dri-fit adv shirt':'pro_shirt','dri-fit adv':'pro_shirt','dri fit adv':'pro_shirt','dri fit adv womens ss':'womens_pro','dri-fit adv womens ss':'womens_pro','dri-fit adv womens':'womens_pro','dri fit adv kids ss':'pro_kids','dri-fit adv kids ss':'pro_kids','dri-fit adv kids':'pro_kids','authentic shirt ls':'pro_shirt_ls','authentic ls':'pro_shirt_ls','womens shirt':'womens','youth kit':'youth_kit','mens ls':'mens_ls','mens l/s':'mens_ls','mens long sleeve':'mens_ls','mens ls jersey':'mens_ls','pro shirt':'pro_shirt','pro':'pro_shirt','authentic':'pro_shirt','dri fit':'pro_shirt','dri-fit':'pro_shirt','adv':'pro_shirt','dri fit adv':'pro_shirt','dri-fit adv':'pro_shirt','authentic shirt':'pro_shirt','authentic l/s':'pro_shirt_ls','authentic long sleeve':'pro_shirt_ls','authentic ls':'pro_shirt_ls','womens':'womens','womens ss':'womens','womens s/s':'womens','womens jersey':'womens','womens shirt':'womens','womens pro':'womens_pro','womens pro shirt':'womens_pro','dri fit adv womens ss':'womens_pro','womens authentic':'womens_pro','authentic womens':'womens_pro','womens cropped':'womens_cropped','cropped':'womens_cropped','kids ss':'kids_ss','kids s/s':'kids_ss','kids':'kids_ss','pro kids':'pro_kids','dri fit adv kids ss':'pro_kids','authentic kids':'pro_kids','vapor kids':'pro_kids','aero-fit kids':'pro_kids','dri-fit adv kids':'pro_kids','pro kids ls':'pro_kids_ls','authentic kids ls':'pro_kids_ls','authentic kids l/s':'pro_kids_ls','kids l/s':'kids_ls','kids ls':'kids_ls','kids long sleeve':'kids_ls','womens ls':'womens_ls','womens l/s':'womens_ls','womens long sleeve':'womens_ls','womens pro ls':'womens_pro_ls','womens pro l/s':'womens_pro_ls','authentic womens ls':'womens_pro_ls','authentic womens l/s':'womens_pro_ls','little kids':'little_kids','lk':'little_kids','mini kit little kids':'little_kids','minikit':'little_kids','mini kit':'little_kids','babykit':'infants','baby kit':'infants','infants':'infants','baby':'infants','mini kit infants':'infants','gk shirt':'pro_shirt','goalkeeper shirt':'pro_shirt','gk authentic':'pro_shirt','gk':'pro_shirt','outsize':'mens_outsize','infant':'infants','infant kit':'infants','baby kit':'infants','babykit':'infants','infant/babykit':'infants','infant/baby kit':'infants','mini kit infants':'infants','mini kit little kids':'little_kids','womens ss':'womens','womens s/s':'womens','dri fit adv mens ss':'pro_shirt','dri-fit adv mens ss':'pro_shirt','dri fit adv shirt':'pro_shirt','dri-fit adv shirt':'pro_shirt','dri-fit adv':'pro_shirt','dri fit adv':'pro_shirt','dri fit adv womens ss':'womens_pro','dri-fit adv womens ss':'womens_pro','dri-fit adv womens':'womens_pro','dri fit adv kids ss':'pro_kids','dri-fit adv kids ss':'pro_kids','dri-fit adv kids':'pro_kids','authentic shirt ls':'pro_shirt_ls','authentic ls':'pro_shirt_ls','womens shirt':'womens','youth kit':'youth_kit','dri fit adv womens ss':'womens_pro','dri-fit adv womens ss':'womens_pro','dri fit adv kids ss':'pro_kids','dri-fit adv kids ss':'pro_kids','retro ss':'retro_ss','retro s/s':'retro_ss','mens ss unsponsored':'mens_unsponsored','mens s/s unsponsored':'mens_unsponsored','pro mens l/s':'pro_shirt_ls','pro mens ls':'pro_shirt_ls','pro unsponsored':'pro_unsponsored','unsponsored':'mens_unsponsored','womens unsponsored':'womens_unsponsored'};
-const FED_MAP = {'FRNC':'FFF','FRANCE':'FFF','GERM':'DFB','GERMANY':'DFB','ENG':'England','ENGL':'England','SPAN':'Spain','ITAL':'Italy','PORT':'Portugal','NETH':'Netherlands','BELG':'Belgium','BRAZ':'Brazil','ARG':'Argentina','ARGEN':'Argentina'};
-const BRAND_ANCHORS = ['FRANCE NIKE','FRANCE ADIDAS','FRANCE PUMA','DFB ADIDAS','DFB NIKE','DFB PUMA','ENGLAND NIKE','SPAIN ADIDAS','ITALY PUMA','PORTUGAL NIKE','NETHERLANDS NIKE'];
+const FED_MAP = {'FRNC':'FFF','FRANCE':'FFF','GERM':'DFB','GERMANY':'DFB','ENG':'England','ENGL':'England','SPAN':'Spain','ITAL':'Italy','PORT':'Portugal','NETH':'Netherlands','BELG':'Belgium','BELGM':'Belgium','BRAZ':'Brazil','ARG':'Argentina','ARGEN':'Argentina'};
+const BRAND_ANCHORS = ['FRANCE NIKE','FRANCE ADIDAS','FRANCE PUMA','DFB ADIDAS','DFB NIKE','DFB PUMA','ENGLAND NIKE','SPAIN ADIDAS','ITALY PUMA','PORTUGAL NIKE','NETHERLANDS NIKE','BELGIUM ADIDAS','BELGIUM NIKE','BELGIUM PUMA'];
 
 // Local cache for search performance
 let CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null,catalogues:[]};
@@ -2596,6 +2596,7 @@ function isEntryIncomplete(type, id) {
   if (type === 'player') {
     const p = CACHE.players.find(x => x.id === id);
     if (!p) return false;
+    if (p.Name === '__provisional__') return false;
     const naShirt = (p.ShirtName||'').toUpperCase() === 'N/A';
     return (!p.SquadNumber && p.SquadNumber !== 0 && !naShirt) || (!p.ShirtName && !naShirt);
   }
@@ -3135,11 +3136,12 @@ function parseCreationRows(rows,seasonId,fontType,fileNames) {
     const kitType=parseCreationKitType(name);
     const garmentType=parseCreationGarmentType(name);
     const playerName=parseCreationPlayerName(name);
-    const knownParent=CACHE.parents.find(p=>p.PID===basePid);
+    const knownParent=CACHE.parents.find(p=>String(p.PID)===String(basePid));
+    const parentRecordId=knownParent?knownParent.id:null;
     if (knownParent) creationImportData.stats.matched++;
     else { creationImportData.stats.unmatched++; if(basePid&&!creationImportData.parents.find(p=>p.pid===basePid)) creationImportData.parents.push({pid:basePid,clubId,seasonId,kitType,garmentType}); }
-    if (!playerName) { creationImportData.stats.provisional++; creationImportData.provisional.push({pid,basePid,clubId,seasonId,kitType,garmentType,fontType,name}); }
-    else { creationImportData.players.push({name:toProperName(playerName),clubId,seasonId,fontType,kitType}); creationImportData.heroes.push({pid,playerName:toProperName(playerName),basePid,clubId,seasonId,fontType,kitType,garmentType,garmentRaw:name,status:'active'}); }
+    if (!playerName) { creationImportData.stats.provisional++; creationImportData.provisional.push({pid,basePid,parentRecordId,clubId,seasonId,kitType,garmentType,fontType,name}); }
+    else { creationImportData.players.push({name:toProperName(playerName),clubId,seasonId,fontType,kitType}); creationImportData.heroes.push({pid,playerName:toProperName(playerName),basePid,parentRecordId,clubId,seasonId,fontType,kitType,garmentType,garmentRaw:name,status:'active'}); }
     if (playerName && clubId) { const _pk=playerName+'_'+clubId+'_'+seasonId; if(!creationImportData.allParsedPlayers.find(p=>p._key===_pk)) creationImportData.allParsedPlayers.push({name:toProperName(playerName),clubId,seasonId,_key:_pk}); }
   });
   showCreationPreview(fileNames);
@@ -3177,9 +3179,13 @@ async function confirmCreationImport() {
   const d=creationImportData;
   let _createdHeroes = [], _createdParents = [], _createdPlayers = [];
   try {
+    // Build a map from basePid -> AT record ID, seeded from already-known parents
+    const parentIdMap={};
+    d.heroes.forEach(h=>{ if(h.parentRecordId) parentIdMap[h.basePid]=h.parentRecordId; });
+    d.provisional.forEach(h=>{ if(h.parentRecordId) parentIdMap[h.basePid]=h.parentRecordId; });
     if (d.parents.length>0) {
       const recs=await atCreateBatch(TABLES.parents,d.parents.map(p=>({PID:p.pid,ClubID:p.clubId,SeasonID:p.seasonId,KitType:p.kitType,GarmentType:p.garmentType})));
-      recs.forEach(r=>CACHE.parents.push({id:r.id,...r.fields}));
+      recs.forEach(r=>{ CACHE.parents.push({id:r.id,...r.fields}); if(r.fields&&r.fields.PID) parentIdMap[String(r.fields.PID)]=r.id; });
     }
     const playerMap={};
     // Find existing players first
@@ -3205,7 +3211,7 @@ async function confirmCreationImport() {
       recs.forEach((r,i)=>{ CACHE.players.push({id:r.id,...r.fields}); playerMap[newPlayerKeys[i]]=r.id; });
     }
     if (d.heroes.length>0) {
-      const heroFields=d.heroes.map(h=>({PID:h.pid,PlayerID:playerMap[h.playerName+'_'+h.clubId+'_'+h.seasonId]||'',ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.garmentRaw,KitType:h.kitType,Status:'active'})).filter(h=>h.PlayerID);
+      const heroFields=d.heroes.map(h=>{const pId=parentIdMap[String(h.basePid)]||'';return {PID:h.pid,PlayerID:playerMap[h.playerName+'_'+h.clubId+'_'+h.seasonId]||'',ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.garmentRaw,KitType:h.kitType,Status:'active',...(pId?{ParentPIDID:pId}:{})};}).filter(h=>h.PlayerID);
       const recs=await atCreateBatch(TABLES.heroes,heroFields);
       _createdHeroes.push(...recs);
       recs.forEach(r=>CACHE.heroes.push({id:r.id,...r.fields}));
@@ -3230,11 +3236,13 @@ async function confirmCreationImport() {
         newProvRecs.forEach((r, i) => { CACHE.players.push({id:r.id,...r.fields}); provPlayerMap[missingProvKeys[i]] = r.id; });
       }
       // Batch create all provisional hero PIDs
-      const provHeroFields = d.provisional.map(h => ({
-        PID:h.pid, PlayerID:provPlayerMap[h.clubId+'_'+h.seasonId]||'',
-        ClubID:h.clubId, SeasonID:h.seasonId, FontType:h.fontType,
-        GarmentType:h.garmentType, GarmentRaw:h.name, KitType:h.kitType, Status:'provisional'
-      })).filter(h => h.PlayerID);
+      const provHeroFields = d.provisional.map(h => {
+        const pId=parentIdMap[String(h.basePid)]||'';
+        return {PID:h.pid, PlayerID:provPlayerMap[h.clubId+'_'+h.seasonId]||'',
+          ClubID:h.clubId, SeasonID:h.seasonId, FontType:h.fontType,
+          GarmentType:h.garmentType, GarmentRaw:h.name, KitType:h.kitType, Status:'provisional',
+          ...(pId?{ParentPIDID:pId}:{})};
+      }).filter(h => h.PlayerID);
       if (provHeroFields.length > 0) {
         const recs = await atCreateBatch(TABLES.heroes, provHeroFields);
         _createdHeroes.push(...recs);
