@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v165 -->
+<!-- HEROPID-BUILD-v169 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -160,6 +160,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <div class="nav-section" style="margin-top:8px;">Data</div>
     <div class="nav-item" onclick="showPage('clubs')" id="nav-clubs"><span class="icon">◈</span> Clubs</div>
     <div class="nav-item" onclick="showPage('seasons')" id="nav-seasons"><span class="icon">◷</span> Seasons</div>
+    <div class="nav-item" onclick="showPage('fonts')" id="nav-fonts"><span class="icon">✦</span> Fonts</div>
     <div class="nav-item" onclick="showPage('cleanup')" id="nav-cleanup"><span class="icon">⚠</span> Data Clean-up</div>
     <div class="nav-section" style="margin-top:8px;">Settings</div>
     <div class="nav-item" onclick="showPage('settings')" id="nav-settings"><span class="icon">⚙</span> Settings</div>
@@ -501,6 +502,21 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 </div>
 
 <!-- CLUBS PAGE -->
+<div id="page-fonts" class="hidden">
+  <div class="topbar"><div class="page-title">Fonts</div>
+    <button class="btn btn-primary btn-sm" onclick="openAddFontModal()">+ Add Font</button>
+  </div>
+  <div class="content">
+    <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">One record per club + font type + kit type. Letter style, colour, and the font PDF are used in image team exports.</div>
+    <div id="fonts-table-wrap">
+      <table class="data-table" style="font-size:11px;">
+        <thead><tr><th>Font Name</th><th>Club</th><th>Font Type</th><th>Kit Type</th><th>Letter Style</th><th>Letter Colour</th><th>PDF</th><th></th></tr></thead>
+        <tbody id="fonts-tbody"><tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px;">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <div id="page-clubs" class="hidden">
   <div class="topbar"><div class="page-title">Clubs</div><button class="btn btn-primary" onclick="openModal('modal-add-club')">+ Add Club</button></div>
   <div class="content"><div id="clubs-selection-bar"></div><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div id="clubs-perpage"></div><div id="clubs-pager" style="margin-left:auto;"></div></div>
@@ -614,19 +630,27 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       <div class="tab active" onclick="switchExportTab('content')" id="export-tab-content" style="flex:none;padding:8px 20px;">Content</div>
       <div class="tab" onclick="switchExportTab('exclusions')" id="export-tab-exclusions" style="flex:none;padding:8px 20px;">Exclusions</div>
       <div class="tab" onclick="switchExportTab('catalogues')" id="export-tab-catalogues" style="flex:none;padding:8px 20px;">Catalogues</div>
-      <div class="tab" onclick="switchExportTab('images')" id="export-tab-images" style="flex:none;padding:8px 20px;opacity:0.5;cursor:not-allowed;">Images <span style="font-size:10px;color:var(--text3);">coming soon</span></div>
+      <div class="tab" onclick="switchExportTab('images')" id="export-tab-images" style="flex:none;padding:8px 20px;">Images</div>
     </div>
+
+<style>
+.ms-wrap{display:flex;flex-wrap:wrap;gap:6px;min-height:32px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:6px 8px;cursor:pointer;align-items:center;}
+.ms-chip{display:inline-flex;align-items:center;gap:4px;background:var(--accent-glow);border:1px solid var(--accent);border-radius:4px;padding:2px 8px;font-size:11px;color:var(--accent);white-space:nowrap;}
+.ms-chip .ms-x{cursor:pointer;font-size:13px;line-height:1;color:var(--accent);margin-left:2px;}
+.ms-chip .ms-x:hover{color:#fff;}
+.ms-placeholder{font-size:12px;color:var(--text3);}
+.ms-clear{font-size:11px;color:var(--red);cursor:pointer;margin-left:auto;white-space:nowrap;padding:2px 6px;border:1px solid rgba(255,92,92,0.3);border-radius:4px;}
+.ms-clear:hover{background:var(--red-bg);}
+.ms-dropdown{position:absolute;z-index:200;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-sm);box-shadow:0 4px 20px rgba(0,0,0,0.4);min-width:160px;margin-top:4px;}
+.ms-option{padding:8px 12px;font-size:12px;cursor:pointer;color:var(--text2);}
+.ms-option:hover{background:var(--bg3);color:var(--text);}
+.ms-option.selected{color:var(--accent);background:var(--accent-glow);}
+</style>
 
     <!-- CONTENT EXPORT -->
     <div id="export-content-content" style="max-width:860px;">
       <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Filter by club, season, kit type and font type — exports the content format for the selected PIDs.</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
-        <div><label class="form-label">Club</label><select class="form-select" id="exp-content-club"><option value="">All clubs</option></select></div>
-        <div><label class="form-label">Season</label><select class="form-select" id="exp-content-season"><option value="">All seasons</option></select></div>
-        <div><label class="form-label">Status</label><select class="form-select" id="exp-content-status"><option value="active" selected>Active</option><option value="">Active + Archived</option><option value="archived">Archived</option></select></div>
-        <div><label class="form-label">Kit Type</label><select class="form-select" id="exp-content-kit"><option value="">All kit types</option><option value="Home">Home</option><option value="Away">Away</option><option value="Third">Third</option><option value="Fourth">Fourth</option><option value="GK Home">GK Home</option><option value="GK Away">GK Away</option></select></div>
-        <div><label class="form-label">Font Type</label><select class="form-select" id="exp-content-font"><option value="">All font types</option><option value="league">League</option><option value="cup">Cup</option><option value="womens">Womens League</option><option value="womens_cup">Womens Cup</option><option value="specials">Specials</option></select></div>
-      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;"><div><label class="form-label">Club</label><select class="form-select" id="exp-content-club"><option value="">All clubs</option></select></div><div><label class="form-label">Season</label><select class="form-select" id="exp-content-season"><option value="">All seasons</option></select></div><div><label class="form-label">Status</label><select class="form-select" id="exp-content-status"><option value="active" selected>Active</option><option value="">Active + Archived</option><option value="archived">Archived</option></select></div><div style="position:relative;"><label class="form-label">Kit Type</label><div class="ms-wrap" id="exp-content-kit-wrap" onclick="toggleMsDropdown('exp-content-kit')"><span class="ms-placeholder" id="exp-content-kit-ph">All kit types</span></div><div class="ms-dropdown" id="exp-content-kit-dd" style="display:none;position:absolute;width:100%;"><div class="ms-option" onclick="toggleMsOption(event,'exp-content-kit','Home','Home')">Home</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-kit','Away','Away')">Away</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-kit','Third','Third')">Third</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-kit','Fourth','Fourth')">Fourth</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-kit','GK Home','GK Home')">GK Home</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-kit','GK Away','GK Away')">GK Away</div></div></div><div style="position:relative;"><label class="form-label">Font Type</label><div class="ms-wrap" id="exp-content-font-wrap" onclick="toggleMsDropdown('exp-content-font')"><span class="ms-placeholder" id="exp-content-font-ph">All font types</span></div><div class="ms-dropdown" id="exp-content-font-dd" style="display:none;position:absolute;width:100%;"><div class="ms-option" onclick="toggleMsOption(event,'exp-content-font','league','League')">League</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-font','cup','Cup')">Cup</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-font','womens','Womens League')">Womens League</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-font','womens_cup','Womens Cup')">Womens Cup</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-font','specials','Specials')">Specials</div></div></div></div>
       <div id="exp-content-count" style="font-size:12px;color:var(--text3);margin-bottom:16px;"></div>
       <button class="btn btn-primary" onclick="exportContentFromFilters()" id="exp-content-btn">⬇ Export Content</button>
     </div>
@@ -634,13 +658,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <!-- EXCLUSIONS EXPORT -->
     <div id="export-content-exclusions" class="hidden" style="max-width:860px;">
       <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Filter by club, season, kit type and font type — exports Parent PID + Hero PID format.</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;">
-        <div><label class="form-label">Club</label><select class="form-select" id="exp-excl-club"><option value="">All clubs</option></select></div>
-        <div><label class="form-label">Season</label><select class="form-select" id="exp-excl-season"><option value="">All seasons</option></select></div>
-        <div><label class="form-label">Status</label><select class="form-select" id="exp-excl-status"><option value="active" selected>Active</option><option value="">Active + Archived</option><option value="archived">Archived</option></select></div>
-        <div><label class="form-label">Kit Type</label><select class="form-select" id="exp-excl-kit"><option value="">All kit types</option><option value="Home">Home</option><option value="Away">Away</option><option value="Third">Third</option><option value="Fourth">Fourth</option><option value="GK Home">GK Home</option><option value="GK Away">GK Away</option></select></div>
-        <div><label class="form-label">Font Type</label><select class="form-select" id="exp-excl-font"><option value="">All font types</option><option value="league">League</option><option value="cup">Cup</option><option value="womens">Womens League</option><option value="womens_cup">Womens Cup</option><option value="specials">Specials</option></select></div>
-      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;"><div><label class="form-label">Club</label><select class="form-select" id="exp-excl-club"><option value="">All clubs</option></select></div><div><label class="form-label">Season</label><select class="form-select" id="exp-excl-season"><option value="">All seasons</option></select></div><div><label class="form-label">Status</label><select class="form-select" id="exp-excl-status"><option value="active" selected>Active</option><option value="">Active + Archived</option><option value="archived">Archived</option></select></div><div style="position:relative;"><label class="form-label">Kit Type</label><div class="ms-wrap" id="exp-excl-kit-wrap" onclick="toggleMsDropdown('exp-excl-kit')"><span class="ms-placeholder" id="exp-excl-kit-ph">All kit types</span></div><div class="ms-dropdown" id="exp-excl-kit-dd" style="display:none;position:absolute;width:100%;"><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-kit','Home','Home')">Home</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-kit','Away','Away')">Away</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-kit','Third','Third')">Third</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-kit','Fourth','Fourth')">Fourth</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-kit','GK Home','GK Home')">GK Home</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-kit','GK Away','GK Away')">GK Away</div></div></div><div style="position:relative;"><label class="form-label">Font Type</label><div class="ms-wrap" id="exp-excl-font-wrap" onclick="toggleMsDropdown('exp-excl-font')"><span class="ms-placeholder" id="exp-excl-font-ph">All font types</span></div><div class="ms-dropdown" id="exp-excl-font-dd" style="display:none;position:absolute;width:100%;"><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-font','league','League')">League</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-font','cup','Cup')">Cup</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-font','womens','Womens League')">Womens League</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-font','womens_cup','Womens Cup')">Womens Cup</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-font','specials','Specials')">Specials</div></div></div></div>
       <div id="exp-excl-count" style="font-size:12px;color:var(--text3);margin-bottom:16px;"></div>
       <button class="btn btn-primary" onclick="exportExclusionsFromFilters()" id="exp-excl-btn">⬇ Export Exclusions</button>
     </div>
@@ -729,13 +747,12 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       </div>
     </div>
 
-    <!-- IMAGES (COMING SOON) -->
+    <!-- IMAGES EXPORT -->
     <div id="export-content-images" class="hidden" style="max-width:860px;">
-      <div style="padding:40px;text-align:center;border:2px dashed var(--border);border-radius:var(--radius);color:var(--text3);">
-        <div style="font-size:24px;margin-bottom:10px;">🖼</div>
-        <div style="font-size:14px;font-weight:600;margin-bottom:4px;">Images Export</div>
-        <div style="font-size:12px;">Coming soon — this export will be available in a future update.</div>
-      </div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Filter by club, season, kit type and font type — exports image format xlsx + font PDF(s) as a zip.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;"><div><label class="form-label">Club</label><select class="form-select" id="exp-img-club"><option value="">All clubs</option></select></div><div><label class="form-label">Season</label><select class="form-select" id="exp-img-season"><option value="">All seasons</option></select></div><div><label class="form-label">Status</label><select class="form-select" id="exp-img-status"><option value="active" selected>Active</option><option value="">Active + Archived</option><option value="archived">Archived</option></select></div><div style="position:relative;"><label class="form-label">Kit Type</label><div class="ms-wrap" id="exp-img-kit-wrap" onclick="toggleMsDropdown('exp-img-kit')"><span class="ms-placeholder" id="exp-img-kit-ph">All kit types</span></div><div class="ms-dropdown" id="exp-img-kit-dd" style="display:none;position:absolute;width:100%;"><div class="ms-option" onclick="toggleMsOption(event,'exp-img-kit','Home','Home')">Home</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-kit','Away','Away')">Away</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-kit','Third','Third')">Third</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-kit','Fourth','Fourth')">Fourth</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-kit','GK Home','GK Home')">GK Home</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-kit','GK Away','GK Away')">GK Away</div></div></div><div style="position:relative;"><label class="form-label">Font Type</label><div class="ms-wrap" id="exp-img-font-wrap" onclick="toggleMsDropdown('exp-img-font')"><span class="ms-placeholder" id="exp-img-font-ph">All font types</span></div><div class="ms-dropdown" id="exp-img-font-dd" style="display:none;position:absolute;width:100%;"><div class="ms-option" onclick="toggleMsOption(event,'exp-img-font','league','League')">League</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-font','cup','Cup')">Cup</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-font','womens','Womens League')">Womens League</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-font','womens_cup','Womens Cup')">Womens Cup</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-font','specials','Specials')">Specials</div></div></div></div>
+      <div id="exp-img-count" style="font-size:12px;color:var(--text3);margin-bottom:16px;"></div>
+      <button class="btn btn-primary" onclick="exportImageFromFilters()" id="exp-img-btn">⬇ Export Images ZIP</button>
     </div>
 
   </div>
@@ -743,6 +760,38 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 
 </main>
 </div><!-- end .app -->
+
+<!-- FONT MODAL -->
+<div class="modal-overlay hidden" id="modal-font">
+  <div class="modal" style="max-width:500px;">
+    <div class="modal-header"><span class="modal-title" id="modal-font-title">Add Font</span><button class="modal-close" onclick="closeModal('modal-font')">✕</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="font-record-id">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Font Name *</label><input class="form-input" id="font-name" placeholder="e.g. Premier League"></div>
+        <div class="form-group"><label class="form-label">Club *</label><select class="form-select" id="font-club"></select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Font Type *</label><input class="form-input" id="font-type" placeholder="e.g. League, Cup, WSL"></div>
+        <div class="form-group"><label class="form-label">Kit Type *</label><input class="form-input" id="font-kit" placeholder="e.g. Home, Away, Third"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Letter Style</label><input class="form-input" id="font-style" placeholder="e.g. Curved, Straight"></div>
+        <div class="form-group"><label class="form-label">Letter Colour</label><input class="form-input" id="font-colour" placeholder="e.g. White, Navy"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Font PDF</label>
+        <div id="font-pdf-current" style="font-size:11px;color:var(--text3);margin-bottom:6px;"></div>
+        <input type="file" id="font-pdf-file" accept=".pdf" style="font-size:12px;color:var(--text2);">
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Note: PDF is stored in Airtable as an attachment. Upload here to replace.</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-font')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveFontRecord()" id="font-save-btn">Save Font</button>
+    </div>
+  </div>
+</div>
 
 <!-- MODALS -->
 <div class="modal-overlay" id="modal-add-club">
@@ -829,6 +878,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
 <script>
 // BUILD:1779485494
@@ -852,7 +902,7 @@ const FED_MAP = {'FRNC':'FFF','FRANCE':'FFF','GERM':'DFB','GERMANY':'DFB','ENG':
 const BRAND_ANCHORS = ['FRANCE NIKE','FRANCE ADIDAS','FRANCE PUMA','DFB ADIDAS','DFB NIKE','DFB PUMA','ENGLAND NIKE','SPAIN ADIDAS','ITALY PUMA','PORTUGAL NIKE','NETHERLANDS NIKE','BELGIUM ADIDAS','BELGIUM NIKE','BELGIUM PUMA'];
 
 // Local cache for search performance
-let CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null,catalogues:[]};
+let CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null,catalogues:[],fonts:[]};
 
 // ─── NAME NORMALISATION ───────────────────────────────────────────────────────
 const toProperName = s => (s||'').trim().replace(/\s+/g,' ')
@@ -974,7 +1024,7 @@ function disconnectAirtable() {
   localStorage.removeItem('at_tables');
   localStorage.removeItem('at_fields_init');
   AT_TOKEN = ''; AT_BASE = ''; TABLES = {};
-  CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null};
+  CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null,fonts:[]};
   updateStats();
   refreshSettingsStatus();
   toast('Disconnected from Airtable');
@@ -1029,7 +1079,7 @@ async function initTables() {
   const required = ['Clubs','Seasons','Players','Parent PIDs','Hero PIDs'];
   const missing = required.filter(n => !tableMap[n]);
   if (missing.length > 0) throw new Error(`Missing tables: ${missing.join(', ')}. Please create them in Airtable first.`);
-  TABLES = {clubs:tableMap['Clubs'],seasons:tableMap['Seasons'],players:tableMap['Players'],parents:tableMap['Parent PIDs'],heroes:tableMap['Hero PIDs'],mdmRosterMembers:tableMap['MDM Roster Members'],catalogues:'tblH92885JmpxxBIM'};
+  TABLES = {clubs:tableMap['Clubs'],seasons:tableMap['Seasons'],players:tableMap['Players'],parents:tableMap['Parent PIDs'],heroes:tableMap['Hero PIDs'],mdmRosterMembers:tableMap['MDM Roster Members'],catalogues:'tblH92885JmpxxBIM',fonts:'tblD6GssdzWoGAZ90'};
   // Only run ensureFields once per session — skip if already done
   if (!localStorage.getItem('at_fields_init') && !window._fieldsInitDone) {
     window._fieldsInitDone = true;
@@ -1125,13 +1175,15 @@ async function loadCache(force, dataOnly=false){
       loadCachedOrFetch(CACHE_KEYS.heroes,TABLES.heroes),
     ]);
     CACHE.players=players; CACHE.parents=parents; CACHE.heroes=heroes;
+    // Load fonts (lightweight, no cache needed)
+    if (TABLES.fonts) { try { const fr=await atGetAll(TABLES.fonts); CACHE.fonts=fr.map(x=>({id:x.id,...x.fields})); } catch(e){} }
     cacheLoaded=true; updateStats(); refreshFilterSelects(); refreshClubs(); refreshSeasons();
   }catch(e){toast('Failed to load data: '+e.message,'error');}
 }
 
 // ─── PAGES ────────────────────────────────────────────────────────────────────
 function showPage(page) {
-  ['search','manage','import','clubs','seasons','settings','cleanup','bulkexport'].forEach(p => {
+  ['search','manage','import','clubs','seasons','settings','cleanup','bulkexport','fonts'].forEach(p => {
     document.getElementById('page-'+p)?.classList.add('hidden');
     document.getElementById('nav-'+p)?.classList.remove('active');
   });
@@ -1143,6 +1195,7 @@ function showPage(page) {
   if (page==='import') { refreshImportSelects(); initDropZones(); }
   if (page==='settings') refreshSettingsStatus();
   if (page==='bulkexport') initBulkExport();
+  if (page==='fonts') renderFontsPage();
   if (page==='search') {
     const sf = document.getElementById('filter-status');
     if (sf && sf.value === '') sf.value = 'active';
@@ -4282,8 +4335,11 @@ function renderCatalogueSiteList(filter='') {
     html += `<div style="padding:5px 8px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;background:var(--bg);border-bottom:1px solid var(--border);font-weight:600;">${grp}</div>`;
     items.forEach(c => {
       const sel = !!_catalogueSelectedSites[c.CatalogueID];
+      const safeName = String(c.Name||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      const safeGrp = String(grp||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      const safeId = String(c.CatalogueID||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       html += `<label style="display:flex;align-items:center;gap:10px;padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .1s;${sel?'background:rgba(99,179,237,0.07);':''}">
-        <input type="checkbox" ${sel?'checked':''} style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0;" onchange="toggleCatalogueSite(${c.CatalogueID},'${(c.Name||'').replace(/'/g,"\'")}','${grp}',this.checked)">
+        <input type="checkbox" ${sel?'checked':''} style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0;" onchange="toggleCatalogueSite('${safeId}','${safeName}','${safeGrp}',this.checked)">
         <span style="font-size:12px;color:var(--text2);flex:1;">${c.Name}</span>
         <span style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;">${c.CatalogueID}</span>
       </label>`;
@@ -4334,25 +4390,31 @@ function updateCatalogueChips() {
   chipsSection.style.display = 'block';
   actionSection.style.display = 'block';
   countEl.textContent = `(${selected.length})`;
-  chipsWrap.innerHTML = selected.map(s => `
+  chipsWrap.innerHTML = selected.map(s => {
+    const safeId = String(s.catalogueId||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `
     <span style="display:inline-flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:4px 10px;font-size:11px;color:var(--text2);">
       ${s.name}
-      <button onclick="toggleCatalogueSite(${s.catalogueId},'','',false)" style="background:none;border:none;color:var(--red,#ff5c5c);cursor:pointer;padding:0;line-height:1;font-size:14px;margin-left:2px;opacity:0.8;" title="Remove">✕</button>
-    </span>`).join('');
+      <button onclick="toggleCatalogueSite('${safeId}','','',false)" style="background:none;border:none;color:var(--red,#ff5c5c);cursor:pointer;padding:0;line-height:1;font-size:14px;margin-left:2px;opacity:0.8;" title="Remove">✕</button>
+    </span>`;
+  }).join('');
   // Render per-site action selects
   const perSite = document.getElementById('cat-action-per-site');
-  perSite.innerHTML = selected.map(s => `
+  perSite.innerHTML = selected.map(s => {
+    const safeId = String(s.catalogueId||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `
     <div style="display:flex;align-items:center;gap:12px;padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);">
       <span style="font-size:12px;color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${s.name}</span>
       <select style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:5px 10px;color:var(--text2);font-size:12px;min-width:220px;"
-        onchange="_catalogueSelectedSites[${s.catalogueId}].action=this.value">
+        onchange="_catalogueSelectedSites['${safeId}'].action=this.value">
         <option value="">— Select action —</option>
         <option value="ADD" ${s.action==='ADD'?'selected':''}>ADD</option>
         <option value="REMOVE" ${s.action==='REMOVE'?'selected':''}>REMOVE</option>
         <option value="EXCLUSIVE" ${s.action==='EXCLUSIVE'?'selected':''}>EXCLUSIVE</option>
         <option value="REMOVE FROM EXCLUSIVE" ${s.action==='REMOVE FROM EXCLUSIVE'?'selected':''}>REMOVE FROM EXCLUSIVE</option>
       </select>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function applyGlobalCatalogueAction() {
@@ -4463,6 +4525,312 @@ function openCataloguesWithPids(pids) {
 
 
 // ─── EXPORT TAB ───────────────────────────────────────────────────────────────
+
+
+// ─── FONTS MANAGEMENT ────────────────────────────────────────────────────────
+function renderFontsPage() {
+  const tbody = document.getElementById('fonts-tbody');
+  if (!tbody) return;
+  const fonts = CACHE.fonts || [];
+  if (!fonts.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px;">No font records yet — click + Add Font to create one.</td></tr>'; return; }
+  tbody.innerHTML = fonts.map(f => {
+    const club = CACHE.clubs.find(c => c.id === f.ClubID);
+    const pdfs = (f.FontFile||[]);
+    const pdfLinks = pdfs.map(p => `<a href="${p.url}" target="_blank" style="color:var(--accent);font-size:11px;">${p.filename||'PDF'}</a>`).join(', ') || '—';
+    return `<tr>
+      <td style="color:var(--text);font-weight:500;">${f.FontName||'—'}</td>
+      <td>${club?.Name||f.ClubID||'—'}</td>
+      <td>${f.FontType||'—'}</td>
+      <td>${f.KitType||'—'}</td>
+      <td>${f.LetterStyle||'—'}</td>
+      <td>${f.LetterColour||'—'}</td>
+      <td>${pdfLinks}</td>
+      <td style="display:flex;gap:4px;">
+        <button class="btn btn-ghost btn-sm" onclick="openEditFontModal('${f.id}')">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteFontRecord('${f.id}')">Delete</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openAddFontModal() {
+  document.getElementById('font-record-id').value = '';
+  document.getElementById('font-name').value = '';
+  document.getElementById('font-type').value = '';
+  document.getElementById('font-kit').value = '';
+  document.getElementById('font-style').value = '';
+  document.getElementById('font-colour').value = '';
+  document.getElementById('font-pdf-file').value = '';
+  document.getElementById('font-pdf-current').textContent = '';
+  document.getElementById('modal-font-title').textContent = 'Add Font';
+  fillSelect('font-club', CACHE.clubs, c => ({v: c.id, l: c.Name||''}));
+  openModal('modal-font');
+}
+
+function openEditFontModal(id) {
+  const f = (CACHE.fonts||[]).find(x => x.id === id);
+  if (!f) return;
+  document.getElementById('font-record-id').value = id;
+  document.getElementById('font-name').value = f.FontName||'';
+  document.getElementById('font-type').value = f.FontType||'';
+  document.getElementById('font-kit').value = f.KitType||'';
+  document.getElementById('font-style').value = f.LetterStyle||'';
+  document.getElementById('font-colour').value = f.LetterColour||'';
+  document.getElementById('font-pdf-file').value = '';
+  const pdfs = f.FontFile||[];
+  document.getElementById('font-pdf-current').textContent = pdfs.length ? 'Current: '+pdfs.map(p=>p.filename||'PDF').join(', ') : '';
+  document.getElementById('modal-font-title').textContent = 'Edit Font';
+  fillSelect('font-club', CACHE.clubs, c => ({v: c.id, l: c.Name||''}));
+  document.getElementById('font-club').value = f.ClubID||'';
+  openModal('modal-font');
+}
+
+async function saveFontRecord() {
+  const id = document.getElementById('font-record-id').value;
+  const name = document.getElementById('font-name').value.trim();
+  const clubId = document.getElementById('font-club').value;
+  const fontType = document.getElementById('font-type').value.trim();
+  const kitType = document.getElementById('font-kit').value.trim();
+  const style = document.getElementById('font-style').value.trim();
+  const colour = document.getElementById('font-colour').value.trim();
+  if (!name || !clubId || !fontType || !kitType) { toast('Font Name, Club, Font Type and Kit Type are required', 'error'); return; }
+  const btn = document.getElementById('font-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving...';
+  try {
+    const fields = {FontName: name, ClubID: clubId, FontType: fontType, KitType: kitType, LetterStyle: style, LetterColour: colour};
+    let rec;
+    if (id) { await atUpdate(TABLES.fonts, id, fields); rec = (CACHE.fonts||[]).find(f=>f.id===id); if(rec) Object.assign(rec, fields); }
+    else { rec = await atCreate(TABLES.fonts, fields); if(rec) { const r={id:rec.id,...rec.fields}; (CACHE.fonts=CACHE.fonts||[]).push(r); } }
+    // Handle PDF upload if provided
+    const pdfFile = document.getElementById('font-pdf-file').files[0];
+    if (pdfFile && rec) {
+      const recId = id || rec.id;
+      toast('Uploading PDF to Airtable...');
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const b64 = e.target.result.split(',')[1];
+          await atFetch(TABLES.fonts+'/'+recId, {method:'PATCH', body:JSON.stringify({fields:{FontFile:[{url:'data:application/pdf;base64,'+b64,filename:pdfFile.name}]}})});
+          const fresh = await atGetAll(TABLES.fonts);
+          CACHE.fonts = fresh.map(x=>({id:x.id,...x.fields}));
+          renderFontsPage();
+          toast('Font saved with PDF ✓');
+        } catch(e2) { toast('Font saved but PDF upload failed: '+e2.message,'error'); }
+      };
+      reader.readAsDataURL(pdfFile);
+    } else {
+      renderFontsPage();
+      toast('Font saved ✓');
+    }
+    closeModal('modal-font');
+  } catch(e) { toast('Error: '+e.message,'error'); }
+  btn.disabled=false; btn.textContent='Save Font';
+}
+
+async function deleteFontRecord(id) {
+  if (!confirm('Delete this font record?')) return;
+  try {
+    await atFetch(TABLES.fonts+'/'+id, {method:'DELETE'});
+    CACHE.fonts = (CACHE.fonts||[]).filter(f=>f.id!==id);
+    renderFontsPage();
+    toast('Font deleted');
+  } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+// ─── IMAGE EXPORT ─────────────────────────────────────────────────────────────
+async function exportImageFromFilters() {
+  if (typeof ExcelJS === 'undefined') { toast('ExcelJS loading, try again','error'); return; }
+  if (typeof JSZip === 'undefined') { toast('JSZip loading, try again','error'); return; }
+  const pids = getFilteredHeroPids('img');
+  if (!pids.length) { toast('No PIDs match current filters','error'); return; }
+  const clubId = document.getElementById('exp-img-club')?.value || '';
+  const heroList = pids.map(pid=>CACHE.heroes.find(h=>h.PID===pid)).filter(Boolean);
+  if (!heroList.length) { toast('No hero PIDs found','error'); return; }
+  const btn = document.getElementById('exp-img-btn');
+  btn.disabled=true; btn.textContent='Building...';
+  try {
+    // Build xlsx (same logic as exportFootballContent but with font metadata in row 1)
+    const sheets={};
+    heroList.forEach(hero=>{
+      const player=CACHE.players.find(p=>p.id===hero.PlayerID);
+      const isGK=player?.Goalkeeper||false;
+      const kitLabel=(hero.KitType||'').toLowerCase();
+      const effectiveKit=isGK&&!kitLabel.startsWith('gk')?('gk '+kitLabel):kitLabel;
+      const key=(hero.FontType||'').toLowerCase()+'_'+effectiveKit;
+      if(!sheets[key])sheets[key]=[];sheets[key].push(hero);
+    });
+    const firstHero=heroList[0];
+    const club=firstHero?(CACHE.clubs.find(c=>c.id===firstHero.ClubID)?.Name||''):'';
+    const wb=new ExcelJS.Workbook(); wb.creator='HeroPID Hub';
+    const thin={style:'thin'};const allB={top:thin,left:thin,bottom:thin,right:thin};
+    const grey={style:'thin',color:{argb:'FFD3D3D3'}};const hairB={top:grey,left:grey,bottom:grey,right:grey};
+    const pdfFiles = []; // collect {filename, url} for PDFs to zip
+    Object.entries(sheets).forEach(([key,heroes])=>{
+      const sn=FOOTBALL_SHEET_NAMES[key]||key;
+      const kt=(heroes[0]?.KitType||'').toLowerCase(),ft=(heroes[0]?.FontType||'').toLowerCase();
+      // Look up font metadata
+      const fontRec = (CACHE.fonts||[]).find(f =>
+        f.ClubID === (heroes[0]?.ClubID) &&
+        (f.FontType||'').toLowerCase() === ft &&
+        (f.KitType||'').toLowerCase() === kt
+      );
+      const letterStyle = fontRec?.LetterStyle || '';
+      const letterColour = fontRec?.LetterColour || '';
+      const fontName = fontRec?.FontName || (FONT_LABELS[ft]||ft);
+      // Collect PDF if present
+      if (fontRec?.FontFile?.length) {
+        fontRec.FontFile.forEach(pdf => {
+          if (!pdfFiles.find(p=>p.filename===pdf.filename)) pdfFiles.push({filename:pdf.filename||'font.pdf',url:pdf.url});
+        });
+      }
+      const pm={};
+      heroes.forEach(h=>{if(!pm[h.PlayerID]){const pl=CACHE.players.find(p=>p.id===h.PlayerID);if(pl?.Status==='archived')return;pm[h.PlayerID]={pl,sn:(pl?.ShirtName||'').toUpperCase(),num:pl?.SquadNumber||9999,hs:[]};}if(pm[h.PlayerID])pm[h.PlayerID].hs.push(h);});
+      const players=Object.values(pm).sort((a,b)=>a.num-b.num);
+      const pr=new Array(18).fill(null);
+      heroes.forEach(h=>{if(!h.ParentPIDID)return;const par=CACHE.parents.find(p=>p.id===h.ParentPIDID);if(!par)return;const ci=FOOTBALL_COL_MAP[h.GarmentType];if(ci!==undefined&&!pr[ci])pr[ci]=par.PID?Number(par.PID):null;if(h.GarmentType==='infants'&&!pr[BABY_COL])pr[BABY_COL]=par.PID?Number(par.PID):null;});
+      const fl=FONT_LABELS[ft]||ft,kl=kt.charAt(0).toUpperCase()+kt.slice(1);
+      const rows=[
+        [club, letterStyle, letterColour, fontName, ...new Array(14).fill(null)], // Row 1: metadata
+        new Array(18).fill(null),new Array(18).fill(null),new Array(18).fill(null),
+        [fl,kl,'Authentic Mens SS','Authentic Mens LS','Authentic Womens SS','Rep Mens SS','Rep Mens LS','Rep Kids SS','Rep Kids LS','Rep Womens SS','Little Kids','Infants','Baby','Authentic Kids SS','Authentic Womens LS','Rep Womens LS','Authentic Kids LS','Womens Cropped'],
+        [null,null,'Vapor Mens SS','Vapor Mens LS','Vapor Womens SS','Stadium Mens SS','Stadium Mens LS',null,null,null,'Mini Kit',null,null,null,null,null,null,null],
+        [null,'Blank',...pr.slice(2)],
+        new Array(18).fill(null),
+        ['Name Plate','Number',...new Array(16).fill(null)],
+      ];
+      players.forEach(({sn:sn2,num,hs})=>{const row=new Array(18).fill(null);row[0]=sn2;row[1]=num===9999?null:num;hs.forEach(h=>{const ci=FOOTBALL_COL_MAP[h.GarmentType];if(ci!==undefined)row[ci]=h.PID?Number(h.PID):null;if(h.GarmentType==='infants')row[BABY_COL]=h.PID?Number(h.PID):null;});rows.push(row);});
+      const ws=wb.addWorksheet(sn,{properties:{defaultColWidth:14},views:[{showGridLines:false}]});
+      ws.columns=[{width:22},{width:9},...new Array(16).fill({width:14})];
+      rows.forEach((rd,ri)=>{const row=ws.addRow(rd);
+        for(let _c=1;_c<=18;_c++){const cell=row.getCell(_c);if(!cell.value&&cell.value!==0)cell.value=null;cell.border=hairB;}
+        if(ri===0){row.getCell(1).font={bold:true,size:14};return;}
+        if(ri===7)return;
+        for(let _c=1;_c<=18;_c++){
+          const cell=row.getCell(_c);
+          const isHeaderRow=ri===4||ri===5;const isParentRow=ri===6;const isPlayerRow=ri>=8;
+          if(isHeaderRow){cell.border=allB;if(ri===4&&_c<=2)cell.font={bold:true,size:11};}
+          else if(isParentRow){if(_c>=2){cell.border=allB;if(_c===2)cell.font={bold:true,size:11};else if(cell.value)cell.font={bold:true,color:{argb:'FFFFAA00'}};}}
+          else if(isPlayerRow&&_c<=2){cell.border=allB;if(ri===8)cell.font={bold:true,size:11};}
+        }
+      });
+      const lastDataRow=9+players.length;
+      for(let tr=lastDataRow+1;tr<=33;tr++){const row=ws.getRow(tr);for(let _c=1;_c<=18;_c++){row.getCell(_c).border=hairB;row.getCell(_c).value=null;}row.getCell(1).border=allB;row.getCell(2).border=allB;}
+    });
+    const today=new Date();
+    const yy=String(today.getFullYear()).slice(2),mm=String(today.getMonth()+1).padStart(2,'0'),dd=String(today.getDate()).padStart(2,'0');
+    const pc=Object.keys(heroList.reduce((a,h)=>{if(h.PlayerID)a[h.PlayerID]=1;return a;},{})).length;
+    const cs=club.replace(/[^a-zA-Z0-9]/g,'_').replace(/_+/g,'_');
+    const ps=pc===1?(CACHE.players.find(p=>p.id===heroList.find(h=>h.PlayerID)?.PlayerID)?.ShirtName||pc+'Players'):pc+'Players';
+    const xlsxFilename=`${yy}.${mm}.${dd}_${cs}_ImageExport_${ps}.xlsx`;
+    const xlsxBuf = await wb.xlsx.writeBuffer();
+    // Build zip
+    const zip = new JSZip();
+    zip.file(xlsxFilename, xlsxBuf);
+    // Fetch and add PDFs
+    const skippedPdfs = [];
+    for (const pdf of pdfFiles) {
+      try {
+        const resp = await fetch(pdf.url);
+        if (!resp.ok) throw new Error('HTTP '+resp.status);
+        const buf = await resp.arrayBuffer();
+        zip.file(pdf.filename, buf);
+      } catch(e) { skippedPdfs.push(pdf.filename); }
+    }
+    if (skippedPdfs.length) toast(`${skippedPdfs.length} PDF(s) could not be fetched and were excluded: ${skippedPdfs.join(', ')}`, 'error');
+    const zipBlob = await zip.generateAsync({type:'blob'});
+    const url=URL.createObjectURL(zipBlob);
+    const a=document.createElement('a');
+    a.href=url; a.download=`${yy}.${mm}.${dd}_${cs}_ImageExport.zip`;
+    a.click(); URL.revokeObjectURL(url);
+    toast(`Image export: ${heroList.length} PIDs, ${pdfFiles.length} PDF${pdfFiles.length!==1?'s':''}`);
+  } catch(e) { toast('Export error: '+e.message,'error'); }
+  btn.disabled=false; btn.textContent='⬇ Export Images ZIP';
+}
+
+// ─── MULTI-SELECT CHIPS ───────────────────────────────────────────────────────
+const _msState = {}; // id -> {values: Set, labels: Map<value,label>}
+
+function getMsValues(id) { return _msState[id] ? [..._msState[id].values] : []; }
+
+function toggleMsDropdown(id) {
+  const dd = document.getElementById(id+'-dd');
+  if (!dd) return;
+  const isOpen = dd.style.display !== 'none';
+  // Close all other dropdowns
+  document.querySelectorAll('.ms-dropdown').forEach(d => d.style.display='none');
+  if (!isOpen) {
+    dd.style.display = 'block';
+    // Close on outside click
+    setTimeout(() => {
+      const handler = (e) => {
+        if (!dd.contains(e.target) && !document.getElementById(id+'-wrap')?.contains(e.target)) {
+          dd.style.display='none'; document.removeEventListener('click',handler);
+        }
+      };
+      document.addEventListener('click', handler);
+    }, 0);
+  }
+}
+
+function toggleMsOption(e, id, value, label) {
+  e.stopPropagation();
+  if (!_msState[id]) _msState[id] = {values: new Set(), labels: new Map()};
+  const s = _msState[id];
+  if (s.values.has(value)) { s.values.delete(value); s.labels.delete(value); }
+  else { s.values.add(value); s.labels.set(value, label); }
+  renderMsWrap(id);
+  updateExportCounts();
+}
+
+function renderMsWrap(id) {
+  const wrap = document.getElementById(id+'-wrap');
+  const ph = document.getElementById(id+'-ph');
+  const dd = document.getElementById(id+'-dd');
+  if (!wrap) return;
+  const s = _msState[id];
+  const vals = s ? [...s.values] : [];
+  // Update option selected states
+  if (dd) dd.querySelectorAll('.ms-option').forEach(opt => {
+    const ov = opt.getAttribute('onclick')?.match(/,'([^']+)','[^']+'\)/)?.[1];
+    if (ov) opt.classList.toggle('selected', vals.includes(ov));
+  });
+  // Render chips
+  const existing = wrap.querySelectorAll('.ms-chip, .ms-clear');
+  existing.forEach(e => e.remove());
+  if (vals.length === 0) {
+    if (ph) ph.style.display='';
+    return;
+  }
+  if (ph) ph.style.display='none';
+  vals.forEach(v => {
+    const lbl = s.labels.get(v) || v;
+    const chip = document.createElement('span');
+    chip.className = 'ms-chip';
+    chip.innerHTML = lbl + '<span class="ms-x" onclick="event.stopPropagation();removeMsOption(\'' + id + '\',\'' + v + '\')">\u00d7</span>';
+    wrap.insertBefore(chip, null);
+  });
+  // Clear all — appears whenever ≥1 selected
+  const clr = document.createElement('span');
+  clr.className = 'ms-clear';
+  clr.textContent = 'Clear all';
+  clr.onclick = (e) => { e.stopPropagation(); clearMs(id); };
+  wrap.appendChild(clr);
+}
+
+function removeMsOption(id, value) {
+  if (!_msState[id]) return;
+  _msState[id].values.delete(value);
+  _msState[id].labels.delete(value);
+  renderMsWrap(id);
+  updateExportCounts();
+}
+
+function clearMs(id) {
+  if (_msState[id]) { _msState[id].values.clear(); _msState[id].labels.clear(); }
+  renderMsWrap(id);
+  updateExportCounts();
+}
+
 function switchExportTab(tab) {
   ['content','exclusions','catalogues','images'].forEach(t => {
     document.getElementById('export-tab-'+t).classList.toggle('active', t===tab);
@@ -4474,24 +4842,23 @@ function switchExportTab(tab) {
 function initBulkExport() {
   populateExportFilters();
   renderCatalogueSiteList();
-  // Wire up filter change listeners
-  ['exp-content-club','exp-content-season','exp-content-status','exp-content-kit','exp-content-font',
-   'exp-excl-club','exp-excl-season','exp-excl-status','exp-excl-kit','exp-excl-font'].forEach(id => {
+  // Wire up filter change listeners for selects (kit/font now handled by ms chips)
+  ['exp-content-club','exp-content-season','exp-content-status',
+   'exp-excl-club','exp-excl-season','exp-excl-status',
+   'exp-img-club','exp-img-season','exp-img-status'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('change', updateExportCounts);
   });
 }
 
 function populateExportFilters() {
-  ['content','excl'].forEach(prefix => {
+  ['content','excl','img'].forEach(prefix => {
     const clubSel = document.getElementById('exp-'+prefix+'-club');
     const seasonSel = document.getElementById('exp-'+prefix+'-season');
     if (!clubSel || !seasonSel) return;
-    // Clubs
     const currentClub = clubSel.value;
     clubSel.innerHTML = '<option value="">All clubs</option>' +
       (CACHE.clubs||[]).map(c=>`<option value="${c.id}" ${c.id===currentClub?'selected':''}>${c.Name}</option>`).join('');
-    // Seasons
     const currentSeason = seasonSel.value;
     seasonSel.innerHTML = '<option value="">All seasons</option>' +
       (CACHE.seasons||[]).map(s=>`<option value="${s.id}" ${s.id===currentSeason?'selected':''}>${s.Label||s.id}</option>`).join('');
@@ -4500,7 +4867,7 @@ function populateExportFilters() {
 }
 
 function updateExportCounts() {
-  ['content','excl'].forEach(prefix => {
+  ['content','excl','img'].forEach(prefix => {
     const el = document.getElementById('exp-'+prefix+'-count');
     if (!el) return;
     const pids = getFilteredHeroPids(prefix);
@@ -4513,13 +4880,13 @@ function getFilteredHeroPids(prefix) {
   const clubId = document.getElementById('exp-'+prefix+'-club')?.value || '';
   const seasonId = document.getElementById('exp-'+prefix+'-season')?.value || '';
   const status = document.getElementById('exp-'+prefix+'-status')?.value || '';
-  const kit = document.getElementById('exp-'+prefix+'-kit')?.value || '';
-  const font = document.getElementById('exp-'+prefix+'-font')?.value || '';
+  const kits = getMsValues('exp-'+prefix+'-kit');   // array, empty = all
+  const fonts = getMsValues('exp-'+prefix+'-font');  // array, empty = all
   return (CACHE.heroes||[]).filter(h => {
     if (clubId && h.ClubID !== clubId) return false;
     if (seasonId && h.SeasonID !== seasonId) return false;
-    if (kit && (h.KitType||'').toLowerCase() !== kit.toLowerCase()) return false;
-    if (font && (h.FontType||'').toLowerCase() !== font.toLowerCase()) return false;
+    if (kits.length && !kits.some(k => (h.KitType||'').toLowerCase() === k.toLowerCase())) return false;
+    if (fonts.length && !fonts.some(f => (h.FontType||'').toLowerCase() === f.toLowerCase())) return false;
     if (status) {
       const player = CACHE.players.find(p=>p.id===h.PlayerID);
       if (player && player.Status !== status) return false;
