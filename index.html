@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v162 -->
+<!-- HEROPID-BUILD-v163 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1949,13 +1949,59 @@ async function saveEditPlayer() {
   const seasonId = document.getElementById('edit-player-season').value;
   if (!name || !shirt) { toast('Name and shirt name required', 'error'); return; }
   try {
-    await atUpdate(TABLES.players, id, {Name:toProperName(name), ShirtName:toShirtName(shirt), SquadNumber:number, Status:status, Type:type, ClubID:clubId, SeasonID:seasonId, Goalkeeper:goalkeeper});
     const cached = CACHE.players.find(p => p.id === id);
+    const oldName = cached?.ShirtName || '';
+    const oldNumber = cached?.SquadNumber ?? null;
+    const nameChanged = toShirtName(shirt).toUpperCase() !== oldName.toUpperCase();
+    const numberChanged = number !== oldNumber;
+    await atUpdate(TABLES.players, id, {Name:toProperName(name), ShirtName:toShirtName(shirt), SquadNumber:number, Status:status, Type:type, ClubID:clubId, SeasonID:seasonId, Goalkeeper:goalkeeper});
     if (cached) { cached.Name=name; cached.ShirtName=shirt.toUpperCase(); cached.SquadNumber=number; cached.Status=status; cached.Type=type; cached.ClubID=clubId; cached.SeasonID=seasonId; cached.Goalkeeper=goalkeeper; }
     closeModal('modal-edit-player');
     refreshManage();
     toast(`${name} updated`);
+    // Auto-download MDM CSV if jersey name or number changed
+    if ((nameChanged || numberChanged) && cached?.MDMActorID) {
+      exportPlayerEditMDMCSV(cached, toShirtName(shirt).toUpperCase(), number, oldName, oldNumber);
+    }
   } catch(e) { toast('Error: ' + e.message, 'error'); }
+}
+
+function exportPlayerEditMDMCSV(player, newShirtName, newNumber, oldShirtName, oldNumber) {
+  const members = (CACHE.mdmRosterMembers||[]).filter(m => m.ActorID === player.MDMActorID);
+  if (!members.length) {
+    toast('No MDM roster entries found for this player — CSV not generated', 'error');
+    return;
+  }
+  const club = CACHE.clubs.find(c => c.id === player.ClubID);
+  const headers = ['id','rosterId','name','jerseyName','jerseyNumber','jerseyNumberString','position','actorId','rosterStatus','displayStatus','startDate','endDate','nickname','playerTier'];
+  const rows = members.map(m => [
+    m.RosterMemberID,
+    m.RosterID,
+    player.Name,
+    newShirtName,
+    newNumber ?? m.JerseyNumber ?? '',
+    newNumber ?? m.JerseyNumber ?? '',
+    m.Position || 'UK',
+    player.MDMActorID,
+    m.RosterStatus || 'A',
+    m.DisplayStatus || 'V',
+    '','','','5'
+  ]);
+  const csv = [headers, ...rows].map(r=>r.map(v=>{
+    const s=String(v??'');
+    return s.includes(',')||s.includes('"')||s.includes('\n')?`"${s.replace(/"/g,'""')}"`:s;
+  }).join(',')).join('\n');
+  const bom = '\uFEFF';
+  const blob = new Blob([bom+csv],{type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const clubName = (club?.Name||'Unknown').replace(/\s+/g,'_');
+  const date = new Date().toISOString().slice(0,10);
+  a.download = `MDM_PlayerEdit_${clubName}_${newShirtName}_${date}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast(`MDM CSV downloaded for ${player.Name}`);
 }
 async function deactivatePlayer(id) {
   const p = CACHE.players.find(x => x.id === id);
