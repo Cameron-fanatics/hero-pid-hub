@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v171 -->
+<!-- HEROPID-BUILD-v173 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -510,7 +510,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">One record per club + font type + kit type. Letter style, colour, and the font PDF are used in image team exports.</div>
     <div id="fonts-table-wrap">
       <table class="data-table" style="font-size:11px;">
-        <thead><tr><th>Font Name</th><th>Club</th><th>Font Type</th><th>Kit Type</th><th>Letter Style</th><th>Letter Colour</th><th>PDF</th><th></th></tr></thead>
+        <thead><tr><th>Club</th><th>Season</th><th>Font Type</th><th>Kit Type</th><th>Letter Style</th><th>Letter Colour</th><th>PDF</th><th></th></tr></thead>
         <tbody id="fonts-tbody"><tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px;">Loading...</td></tr></tbody>
       </table>
     </div>
@@ -768,8 +768,8 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <div class="modal-body">
       <input type="hidden" id="font-record-id">
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Font Name *</label><input class="form-input" id="font-name" placeholder="e.g. Premier League"></div>
         <div class="form-group"><label class="form-label">Club *</label><select class="form-select" id="font-club"></select></div>
+        <div class="form-group"><label class="form-label">Season *</label><select class="form-select" id="font-season"></select></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Font Type *</label><input class="form-input" id="font-type" placeholder="e.g. League, Cup, WSL"></div>
@@ -4536,11 +4536,12 @@ function renderFontsPage() {
   if (!fonts.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px;">No font records yet — click + Add Font to create one.</td></tr>'; return; }
   tbody.innerHTML = fonts.map(f => {
     const club = CACHE.clubs.find(c => c.id === f.ClubID);
+    const season = CACHE.seasons.find(s => s.id === f.SeasonID);
     const pdfs = (f.FontFile||[]);
     const pdfLinks = pdfs.map(p => `<a href="${p.url}" target="_blank" style="color:var(--accent);font-size:11px;">${p.filename||'PDF'}</a>`).join(', ') || '—';
     return `<tr>
-      <td style="color:var(--text);font-weight:500;">${f.FontName||'—'}</td>
-      <td>${club?.Name||f.ClubID||'—'}</td>
+      <td style="color:var(--text);font-weight:500;">${club?.Name||f.ClubID||'—'}</td>
+      <td>${season?.Label||f.SeasonID||'—'}</td>
       <td>${f.FontType||'—'}</td>
       <td>${f.KitType||'—'}</td>
       <td>${f.LetterStyle||'—'}</td>
@@ -4556,7 +4557,6 @@ function renderFontsPage() {
 
 function openAddFontModal() {
   document.getElementById('font-record-id').value = '';
-  document.getElementById('font-name').value = '';
   document.getElementById('font-type').value = '';
   document.getElementById('font-kit').value = '';
   document.getElementById('font-style').value = '';
@@ -4565,6 +4565,7 @@ function openAddFontModal() {
   document.getElementById('font-pdf-current').textContent = '';
   document.getElementById('modal-font-title').textContent = 'Add Font';
   fillSelect('font-club', CACHE.clubs, c => ({v: c.id, l: c.Name||''}));
+  fillSelect('font-season', [...CACHE.seasons].sort((a,b)=>(b.Label||'').localeCompare(a.Label||'')), s => ({v: s.id, l: s.Label||''}));
   openModal('modal-font');
 }
 
@@ -4572,7 +4573,6 @@ function openEditFontModal(id) {
   const f = (CACHE.fonts||[]).find(x => x.id === id);
   if (!f) return;
   document.getElementById('font-record-id').value = id;
-  document.getElementById('font-name').value = f.FontName||'';
   document.getElementById('font-type').value = f.FontType||'';
   document.getElementById('font-kit').value = f.KitType||'';
   document.getElementById('font-style').value = f.LetterStyle||'';
@@ -4582,23 +4582,25 @@ function openEditFontModal(id) {
   document.getElementById('font-pdf-current').textContent = pdfs.length ? 'Current: '+pdfs.map(p=>p.filename||'PDF').join(', ') : '';
   document.getElementById('modal-font-title').textContent = 'Edit Font';
   fillSelect('font-club', CACHE.clubs, c => ({v: c.id, l: c.Name||''}));
+  fillSelect('font-season', [...CACHE.seasons].sort((a,b)=>(b.Label||'').localeCompare(a.Label||'')), s => ({v: s.id, l: s.Label||''}));
   document.getElementById('font-club').value = f.ClubID||'';
+  document.getElementById('font-season').value = f.SeasonID||'';
   openModal('modal-font');
 }
 
 async function saveFontRecord() {
   const id = document.getElementById('font-record-id').value;
-  const name = document.getElementById('font-name').value.trim();
   const clubId = document.getElementById('font-club').value;
+  const seasonId = document.getElementById('font-season').value;
   const fontType = document.getElementById('font-type').value.trim();
   const kitType = document.getElementById('font-kit').value.trim();
   const style = document.getElementById('font-style').value.trim();
   const colour = document.getElementById('font-colour').value.trim();
-  if (!name || !clubId || !fontType || !kitType) { toast('Font Name, Club, Font Type and Kit Type are required', 'error'); return; }
+  if (!clubId || !seasonId || !fontType || !kitType) { toast('Club, Season, Font Type and Kit Type are required', 'error'); return; }
   const btn = document.getElementById('font-save-btn');
   btn.disabled = true; btn.textContent = 'Saving...';
   try {
-    const fields = {FontName: name, ClubID: clubId, FontType: fontType, KitType: kitType, LetterStyle: style, LetterColour: colour};
+    const fields = {ClubID: clubId, SeasonID: seasonId, FontType: fontType, KitType: kitType, LetterStyle: style, LetterColour: colour};
     let rec;
     if (id) { await atUpdate(TABLES.fonts, id, fields); rec = (CACHE.fonts||[]).find(f=>f.id===id); if(rec) Object.assign(rec, fields); }
     else { rec = await atCreate(TABLES.fonts, fields); if(rec) { const r={id:rec.id,...rec.fields}; (CACHE.fonts=CACHE.fonts||[]).push(r); } }
@@ -4670,14 +4672,16 @@ async function exportImageFromFilters() {
       const sn=FOOTBALL_SHEET_NAMES[key]||key;
       const kt=(heroes[0]?.KitType||'').toLowerCase(),ft=(heroes[0]?.FontType||'').toLowerCase();
       // Look up font metadata
+      const heroSeasonId = heroes[0]?.SeasonID || '';
       const fontRec = (CACHE.fonts||[]).find(f =>
         f.ClubID === (heroes[0]?.ClubID) &&
+        f.SeasonID === heroSeasonId &&
         (f.FontType||'').toLowerCase() === ft &&
         (f.KitType||'').toLowerCase() === kt
       );
       const letterStyle = fontRec?.LetterStyle || '';
       const letterColour = fontRec?.LetterColour || '';
-      const fontName = fontRec?.FontName || (FONT_LABELS[ft]||ft);
+      const fontName = FONT_LABELS[ft] || ft;
       // Collect PDF if present
       if (fontRec?.FontFile?.length) {
         fontRec.FontFile.forEach(pdf => {
