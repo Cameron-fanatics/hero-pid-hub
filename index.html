@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v163 -->
+<!-- HEROPID-BUILD-v165 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1952,36 +1952,50 @@ async function saveEditPlayer() {
     const cached = CACHE.players.find(p => p.id === id);
     const oldName = cached?.ShirtName || '';
     const oldNumber = cached?.SquadNumber ?? null;
+    const oldGoalkeeper = cached?.Goalkeeper || false;
     const nameChanged = toShirtName(shirt).toUpperCase() !== oldName.toUpperCase();
     const numberChanged = number !== oldNumber;
+    const gkChanged = goalkeeper !== oldGoalkeeper;
     await atUpdate(TABLES.players, id, {Name:toProperName(name), ShirtName:toShirtName(shirt), SquadNumber:number, Status:status, Type:type, ClubID:clubId, SeasonID:seasonId, Goalkeeper:goalkeeper});
     if (cached) { cached.Name=name; cached.ShirtName=shirt.toUpperCase(); cached.SquadNumber=number; cached.Status=status; cached.Type=type; cached.ClubID=clubId; cached.SeasonID=seasonId; cached.Goalkeeper=goalkeeper; }
     closeModal('modal-edit-player');
     refreshManage();
     toast(`${name} updated`);
-    // Auto-download MDM CSV if jersey name or number changed
-    if ((nameChanged || numberChanged) && cached?.MDMActorID) {
-      exportPlayerEditMDMCSV(cached, toShirtName(shirt).toUpperCase(), number, oldName, oldNumber);
+    // Auto-download MDM CSV if jersey name, number or GK status changed
+    if ((nameChanged || numberChanged || gkChanged) && cached?.MDMActorID) {
+      // Ensure MDM roster members are loaded before generating CSV
+      try {
+        if (!CACHE.mdmRosterMembers) {
+          toast('Loading MDM roster data...');
+          const recs = await atGetAll(TABLES.mdmRosterMembers);
+          CACHE.mdmRosterMembers = recs.map(x=>({id:x.id,...x.fields}));
+        }
+        exportPlayerEditMDMCSV(cached, toShirtName(shirt).toUpperCase(), number, goalkeeper, toProperName(name));
+      } catch(csvErr) { toast('Player saved but MDM CSV failed: ' + csvErr.message, 'error'); }
     }
   } catch(e) { toast('Error: ' + e.message, 'error'); }
 }
 
-function exportPlayerEditMDMCSV(player, newShirtName, newNumber, oldShirtName, oldNumber) {
-  const members = (CACHE.mdmRosterMembers||[]).filter(m => m.ActorID === player.MDMActorID);
+function exportPlayerEditMDMCSV(player, newShirtName, newNumber, isGoalkeeper, properName) {
+  const members = (CACHE.mdmRosterMembers||[]).filter(m =>
+    String(m.ActorID||'').trim() === String(player.MDMActorID||'').trim() &&
+    m.ClubID === player.ClubID
+  );
   if (!members.length) {
     toast('No MDM roster entries found for this player — CSV not generated', 'error');
     return;
   }
   const club = CACHE.clubs.find(c => c.id === player.ClubID);
+  const position = isGoalkeeper ? 'GK' : 'UK';
   const headers = ['id','rosterId','name','jerseyName','jerseyNumber','jerseyNumberString','position','actorId','rosterStatus','displayStatus','startDate','endDate','nickname','playerTier'];
   const rows = members.map(m => [
     m.RosterMemberID,
     m.RosterID,
-    player.Name,
+    properName || player.Name,
     newShirtName,
     newNumber ?? m.JerseyNumber ?? '',
     newNumber ?? m.JerseyNumber ?? '',
-    m.Position || 'UK',
+    position,
     player.MDMActorID,
     m.RosterStatus || 'A',
     m.DisplayStatus || 'V',
