@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v160 -->
+<!-- HEROPID-BUILD-v162 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3520,6 +3520,8 @@ function parseMdmRosterUpload(file) {
       const existingIds = new Set(
         existing.filter(r=>r.ClubID===clubId).map(r=>String(r.RosterMemberID||'').trim())
       );
+      const existingByRMID = {};
+      existing.filter(r=>r.ClubID===clubId).forEach(r=>existingByRMID[String(r.RosterMemberID||'').trim()]=r);
       const newCount = rows.filter(r=>!existingIds.has(String(r.id||'').trim())).length;
       const updateCount = rows.filter(r=>existingIds.has(String(r.id||'').trim())).length;
       // Show preview
@@ -3546,16 +3548,22 @@ function parseMdmRosterUpload(file) {
       const mdmTbl = document.createElement('div');
       mdmTbl.innerHTML = `
         <table class="data-table" style="font-size:11px;">
-          <thead><tr><th>ID</th><th>Roster</th><th>Jersey Name</th><th>Name</th><th title="Double-click to edit"># ✎</th><th>Pos</th><th>Status</th></tr></thead>
-          <tbody>${rows.map((r,ri)=>`<tr>
+          <thead><tr><th></th><th>ID</th><th>Roster</th><th>Actor ID</th><th>Jersey Name</th><th>Name</th><th title="Double-click to edit"># ✎</th><th>Pos</th><th>Status</th></tr></thead>
+          <tbody>${rows.map((r,ri)=>{
+            const isNew=!existingByRMID[String(r.id)];
+            const rowStyle=isNew?'background:rgba(61,214,140,0.06);':'';
+            const badge=isNew?'<span class="badge badge-active" style="font-size:9px;padding:1px 5px;">NEW</span>':'<span class="badge" style="font-size:9px;padding:1px 5px;background:rgba(255,179,64,0.1);color:var(--amber);border:1px solid rgba(255,179,64,0.2);">UPD</span>';
+            return `<tr style="${rowStyle}">
+            <td style="padding:4px 6px;">${badge}</td>
             <td class="mono">${r.id}</td>
             <td class="mono">${r.rosterId}</td>
+            <td class="mono" style="color:var(--accent);">${r.actorId||'—'}</td>
             <td style="color:var(--text);" data-field="jerseyName" data-ri="${ri}">${r.jerseyName}</td>
             <td style="color:var(--text2);">${r.name}</td>
             <td class="mono" data-field="jerseyNumber" data-ri="${ri}" style="${r._numberConflict?'background:rgba(255,179,64,0.15);color:var(--amber);cursor:pointer;':''}">${r._numberConflict?'⚠ conflict':r.jerseyNumber}</td>
             <td>${r.position}</td>
             <td><span class="badge ${r.rosterStatus==='A'?'badge-active':'badge-inactive'}">${r.rosterStatus}/${r.displayStatus}</span></td>
-          </tr>`).join('')}
+          </tr>`;}).join('')}
           </tbody>
         </table>`;
       const tblWrap = document.getElementById('mdm-roster-preview-table');
@@ -3932,7 +3940,7 @@ async function buildSquadUpdatePreview(clubId, seasonId, newSquad, setStatus) {
   }
 
   // Sort: A/V first (descending number), then A/H (descending number), then rest
-  const sortedChanges = [...changes].sort((a,b) => {
+  const sortedChanges = changes.map((c,i)=>({...c,originalIndex:i})).sort((a,b) => {
     const aAV = a.newRosterStatus==='A' && a.newDisplayStatus==='V';
     const bAV = b.newRosterStatus==='A' && b.newDisplayStatus==='V';
     const aAH = a.newRosterStatus==='A' && a.newDisplayStatus==='H';
@@ -3948,18 +3956,23 @@ async function buildSquadUpdatePreview(clubId, seasonId, newSquad, setStatus) {
       <thead><tr><th>Jersey Name</th><th>Player</th><th>Roster</th><th>Old #</th><th>New #</th><th>Old Status</th><th>New Status</th><th>Change</th></tr></thead>
       <tbody>${sortedChanges.map((c,ci)=>{
         const tags = [];
+        const statusChanged = c.statusChanged || (c.inNewSquad&&c.newRosterStatus==='A'&&c.oldStatus.startsWith('I')) || (!c.inNewSquad&&c.newRosterStatus==='I');
+        const isActivate = c.inNewSquad&&c.newRosterStatus==='A'&&c.oldStatus.startsWith('I');
+        const isDeactivate = !c.inNewSquad&&c.newRosterStatus==='I';
+        const hasChange = c.numberChanged || statusChanged;
+        const rowBg = isActivate?'background:rgba(61,214,140,0.06);' : isDeactivate?'background:rgba(255,92,92,0.06);' : c.numberChanged?'background:rgba(255,179,64,0.06);' : '';
         if (c.numberChanged) tags.push(`<span class="badge" style="background:rgba(255,179,64,.15);color:var(--amber);border:1px solid rgba(255,179,64,.3);">#</span>`);
-        if (c.inNewSquad&&c.newRosterStatus==='A'&&c.oldStatus.startsWith('I')) tags.push(`<span class="badge badge-active">Activate</span>`);
-        if (!c.inNewSquad&&c.newRosterStatus==='I') tags.push(`<span class="badge badge-inactive">Deactivate</span>`);
-        return `<tr>
+        if (isActivate) tags.push(`<span class="badge badge-active">Activate</span>`);
+        if (isDeactivate) tags.push(`<span class="badge badge-inactive">Deactivate</span>`);
+        return `<tr style="${rowBg}">
           <td style="color:var(--text);font-weight:500;">${c.jerseyName}</td>
           <td style="color:var(--text2);">${c.playerName}</td>
           <td class="mono" style="font-size:10px;">${c.rosterId}</td>
-          <td class="mono">${c.oldNumber}</td>
-          <td class="mono" data-field="newNumber" data-ci="${ci}" style="color:${c.numberChanged?'var(--amber)':'var(--text2)'};">${c.newNumber}</td>
-          <td class="mono">${c.oldStatus}</td>
-          <td class="mono" style="color:${c.inNewSquad?'var(--green)':'var(--red)'};">${c.newRosterStatus}/${c.newDisplayStatus}</td>
-          <td style="display:flex;gap:4px;flex-wrap:wrap;">${tags.join('')}</td>
+          <td class="mono" style="color:var(--text3);">${c.oldNumber}</td>
+          <td class="mono" data-field="newNumber" data-ci="${c.originalIndex}" style="color:${c.numberChanged?'var(--amber)':'var(--text2)'};${c.numberChanged?'font-weight:600;':''}">${c.newNumber}${c.numberChanged?` <span style="font-size:9px;color:var(--text3);">was ${c.oldNumber}</span>`:''}</td>
+          <td class="mono" style="color:var(--text3);">${c.oldStatus}</td>
+          <td class="mono" style="color:${isActivate?'var(--green)':isDeactivate?'var(--red)':'var(--text2)'};${statusChanged?'font-weight:600;':''}">${c.newRosterStatus}/${c.newDisplayStatus}</td>
+          <td style="display:flex;gap:4px;flex-wrap:wrap;">${tags.length?tags.join(''):'<span style="color:var(--text3);font-size:10px;">no change</span>'}</td>
         </tr>`;
       }).join('')}
       </tbody>
