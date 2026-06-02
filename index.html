@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v169 -->
+<!-- HEROPID-BUILD-v171 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -762,7 +762,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 </div><!-- end .app -->
 
 <!-- FONT MODAL -->
-<div class="modal-overlay hidden" id="modal-font">
+<div class="modal-overlay" id="modal-font">
   <div class="modal" style="max-width:500px;">
     <div class="modal-header"><span class="modal-title" id="modal-font-title">Add Font</span><button class="modal-close" onclick="closeModal('modal-font')">✕</button></div>
     <div class="modal-body">
@@ -1167,7 +1167,7 @@ async function loadCache(force, dataOnly=false){
         CACHE.seasons.length ? Promise.resolve(CACHE.seasons) : atGetAll(TABLES.seasons).then(r=>r.map(x=>({id:x.id,...x.fields}))),
         CACHE.catalogues.length ? Promise.resolve(CACHE.catalogues) : atGetAll(TABLES.catalogues).then(r=>r.map(x=>({id:x.id,...x.fields}))),
       ]);
-      CACHE.clubs=clubs; CACHE.seasons=seasons; CACHE.catalogues=catalogues||[];
+      CACHE.clubs=clubs.slice().sort((a,b)=>(a.Name||'').localeCompare(b.Name||'')); CACHE.seasons=seasons; CACHE.catalogues=catalogues||[];
     }
     const[players,parents,heroes]=await Promise.all([
       loadCachedOrFetch(CACHE_KEYS.players,TABLES.players),
@@ -1257,6 +1257,7 @@ async function saveClub() {
   try {
     const rec = await atCreate(TABLES.clubs, {Name:name,Short:document.getElementById('club-short').value.trim(),League:document.getElementById('club-league').value.trim(),Sport:document.getElementById('club-sport').value,Country:document.getElementById('club-country').value.trim()});
     CACHE.clubs.push({id:rec.id,...rec.fields});
+    CACHE.clubs.sort((a,b)=>(a.Name||'').localeCompare(b.Name||''));
     closeModal('modal-add-club');
     ['club-name','club-short','club-league','club-country'].forEach(id=>document.getElementById(id).value='');
     refreshClubs(); refreshFilterSelects(); updateStats();
