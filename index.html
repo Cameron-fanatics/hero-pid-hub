@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v177 -->
+<!-- HEROPID-BUILD-v180 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1553,7 +1553,9 @@ async function interpretAndSearch(query, filterClub, filterSeason, filterFont, f
       localParseAndSearch(query, filterClub, filterSeason, filterFont, filterStatus, filterKit);
       return;
     }
+    window._lastSearchIntent = {playerName: parsed.playerName||null, kitType: parsed.kitType||null, fontType: parsed.fontType||null, garmentType: parsed.garmentType||null, rawQuery: query};
     executeSearch(parsed.playerName||query, parsed.garmentType||null, parsed.fontType||null, parsed.kitType?parsed.kitType.toLowerCase():(filterKit||null), filterClub, filterSeason, parsed.fontType||filterFont, filterStatus);
+    updateSearchChips();
   } catch(e) {
     localParseAndSearch(query, filterClub, filterSeason, filterFont, filterStatus, filterKit);
   }
@@ -2534,7 +2536,18 @@ function updateSearchChips() {
   const kit = document.getElementById('filter-kit')?.value;
   const status = document.getElementById('filter-status')?.value;
 
-  if (q) chips.push({label: q, type:'query'});
+  if (q) {
+    const intent = window._lastSearchIntent;
+    if (intent && intent.rawQuery === q) {
+      if (intent.playerName) chips.push({label: intent.playerName, type:'query'});
+      if (intent.kitType) chips.push({label: intent.kitType, type:'queryKit'});
+      if (intent.fontType && !font) chips.push({label: FONT_LABELS[intent.fontType]||intent.fontType, type:'queryFont'});
+      if (intent.garmentType && !chips.find(c=>c.type==='query')) chips.push({label: GARMENT_LABELS[intent.garmentType]||intent.garmentType, type:'query'});
+      if (!chips.length) chips.push({label: q, type:'query'});
+    } else {
+      chips.push({label: q, type:'query'});
+    }
+  }
   if (club) {
     const clubName = CACHE.clubs.find(c=>c.id===club)?.Name || club;
     chips.push({label: clubName, type:'club', value: club});
@@ -2559,7 +2572,7 @@ function updateSearchChips() {
       ${chip.label}
       <button onclick="removeChip('${chip.type}')" style="background:none;border:none;color:var(--red,#ff5c5c);cursor:pointer;font-size:13px;line-height:1;padding:0;opacity:0.8;" title="Remove">×</button>
     </span>
-  `).join('') + (nonStatusChips.length > 1 ? `
+  `).join('') + (nonStatusChips.length >= 1 ? `
     <button onclick="clearAllSearchFilters()" style="background:none;border:1px solid rgba(255,92,92,0.4);border-radius:20px;padding:3px 12px;font-size:11px;color:var(--red,#ff5c5c);cursor:pointer;">✕ Clear all</button>` : '');
 }
 
@@ -2595,6 +2608,7 @@ async function archiveSelected() {
 
 function clearAllSearchFilters() {
   const inp = document.getElementById('search-q'); if (inp) inp.value = '';
+  window._lastSearchIntent = null;
   const club = document.getElementById('filter-club'); if (club) club.value = '';
   const season = document.getElementById('filter-season'); if (season) season.value = '';
   const font = document.getElementById('filter-font'); if (font) font.value = '';
@@ -2605,9 +2619,11 @@ function clearAllSearchFilters() {
 }
 
 function removeChip(type) {
-  if (type === 'query') {
+  if (type === 'query' || type === 'queryKit' || type === 'queryFont') {
+    // Clear the full query and intent when any query-derived chip is removed
     const inp = document.getElementById('search-q');
     if (inp) inp.value = '';
+    window._lastSearchIntent = null;
   } else if (type === 'club') {
     const sel = document.getElementById('filter-club');
     if (sel) { sel.value = ''; onClubFilterChange(); return; }
