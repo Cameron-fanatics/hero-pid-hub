@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v180 -->
+<!-- HEROPID-BUILD-v181 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1587,7 +1587,9 @@ function localParseAndSearch(query, filterClub, filterSeason, filterFont, filter
       const _fClub = _clubHit.id;
       const _fSeason = _seasonHit ? _seasonHit.id : (filterSeason || '');
       const _fKit = _kitM2 ? _kitM2[1] : (filterKit || null);
+      window._lastSearchIntent = {playerName: null, kitType: _fKit||null, fontType: _fontM2||null, garmentType: null, rawQuery: query};
       executeSearch('', null, _fontM2, _fKit, _fClub, _fSeason, _fontM2||filterFont||null, filterStatus || null, true);
+      updateSearchChips();
       return;
     }
   }
@@ -1619,7 +1621,10 @@ function localParseAndSearch(query, filterClub, filterSeason, filterFont, filter
   const kitMatch = q.match(/\b(home|away|third|fourth|gk|goalkeeper)\b/);
   const _resolvedClub = _clubHit ? _clubHit.id : filterClub;
   const _resolvedSeason = _seasonHit ? _seasonHit.id : filterSeason;
-  executeSearch(nameQ, garment, font, kitMatch?kitMatch[1]:(filterKit||null), _resolvedClub, _resolvedSeason, font||filterFont, filterStatus);
+  const parsedKit = kitMatch ? kitMatch[1] : (filterKit || null);
+  window._lastSearchIntent = {playerName: nameQ||null, kitType: parsedKit||null, fontType: font||null, garmentType: garment||null, rawQuery: query};
+  executeSearch(nameQ, garment, font, parsedKit, _resolvedClub, _resolvedSeason, font||filterFont, filterStatus);
+  updateSearchChips();
 }
 
 function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filterClub, filterSeason, filterFont, filterStatus, groupByClub) {
