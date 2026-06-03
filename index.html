@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v181 -->
+<!-- HEROPID-BUILD-v183 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1445,7 +1445,7 @@ function searchMatch(h,n) { return normaliseAccents(h.toLowerCase()).includes(no
 let searchTimer = null;
 function debounceSearch() { clearTimeout(searchTimer); searchTimer = setTimeout(runSearch, 300); }
 
-async function onClubFilterChange() {
+async function onClubFilterChange(skipSearch = false) {
   const clubVal = document.getElementById('filter-club').value;
   const extra = document.getElementById('filter-extra');
   if (extra) extra.style.display = clubVal ? 'flex' : 'none';
@@ -1506,7 +1506,7 @@ async function onClubFilterChange() {
   if (!clubVal) {
     refreshFilterSelects();
   }
-  runSearch();
+  if (!skipSearch) runSearch();
 }
 
 function runSearch() {
@@ -1587,6 +1587,10 @@ function localParseAndSearch(query, filterClub, filterSeason, filterFont, filter
       const _fClub = _clubHit.id;
       const _fSeason = _seasonHit ? _seasonHit.id : (filterSeason || '');
       const _fKit = _kitM2 ? _kitM2[1] : (filterKit || null);
+      // Sync dropdowns so chips render correctly
+      const _clubSel = document.getElementById('filter-club');
+      if (_clubSel) { _clubSel.value = _fClub; onClubFilterChange(true); }
+      if (_seasonHit) { const _sesSel = document.getElementById('filter-season'); if(_sesSel) _sesSel.value = _fSeason; }
       window._lastSearchIntent = {playerName: null, kitType: _fKit||null, fontType: _fontM2||null, garmentType: null, rawQuery: query};
       executeSearch('', null, _fontM2, _fKit, _fClub, _fSeason, _fontM2||filterFont||null, filterStatus || null, true);
       updateSearchChips();
@@ -4711,12 +4715,22 @@ async function exportImageFromFilters() {
       // Use kt derived from the sheet key (which already has GK adjustment applied)
       // key format is ft_effectiveKit e.g. 'league_gk home'
       const ktFromKey = key.slice(ft.length + 1); // strip 'ft_' prefix
-      const fontRec = (CACHE.fonts||[]).find(f =>
+      const isGKSheet = ktFromKey.startsWith('gk');
+      // Try exact match first, then fall back to 'goalkeeper' for GK sheets
+      let fontRec = (CACHE.fonts||[]).find(f =>
         f.ClubID === (heroes[0]?.ClubID) &&
         f.SeasonID === heroSeasonId &&
         normFontType(f.FontType) === ft &&
         normKitType(f.KitType) === ktFromKey
       );
+      if (!fontRec && isGKSheet) {
+        fontRec = (CACHE.fonts||[]).find(f =>
+          f.ClubID === (heroes[0]?.ClubID) &&
+          f.SeasonID === heroSeasonId &&
+          normFontType(f.FontType) === ft &&
+          normKitType(f.KitType) === 'goalkeeper'
+        );
+      }
       const letterStyle = fontRec?.LetterStyle || '';
       const letterColour = fontRec?.LetterColour || '';
       const fontName = FONT_LABELS[ft] || ft;
@@ -4738,7 +4752,7 @@ async function exportImageFromFilters() {
       heroes.forEach(h=>{if(!h.ParentPIDID)return;const par=CACHE.parents.find(p=>p.id===h.ParentPIDID);if(!par)return;const ci=FOOTBALL_COL_MAP[h.GarmentType];if(ci!==undefined&&!pr[ci])pr[ci]=par.PID?Number(par.PID):null;if(h.GarmentType==='infants'&&!pr[BABY_COL])pr[BABY_COL]=par.PID?Number(par.PID):null;});
       const fl=FONT_LABELS[ft]||ft,kl=kt.charAt(0).toUpperCase()+kt.slice(1);
       const rows=[
-        [club, letterStyle, letterColour, fontName, ...new Array(14).fill(null)], // Row 1: metadata
+        [club, letterStyle, letterColour, fontName, ktFromKey.charAt(0).toUpperCase()+ktFromKey.slice(1), ...new Array(13).fill(null)], // Row 1: metadata
         new Array(18).fill(null),new Array(18).fill(null),new Array(18).fill(null),
         [fl,kl,'Authentic Mens SS','Authentic Mens LS','Authentic Womens SS','Rep Mens SS','Rep Mens LS','Rep Kids SS','Rep Kids LS','Rep Womens SS','Little Kids','Infants','Baby','Authentic Kids SS','Authentic Womens LS','Rep Womens LS','Authentic Kids LS','Womens Cropped'],
         [null,null,'Vapor Mens SS','Vapor Mens LS','Vapor Womens SS','Stadium Mens SS','Stadium Mens LS',null,null,null,'Mini Kit',null,null,null,null,null,null,null],
