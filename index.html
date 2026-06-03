@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v175 -->
+<!-- HEROPID-BUILD-v177 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -651,7 +651,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <!-- CONTENT EXPORT -->
     <div id="export-content-content" style="max-width:860px;">
       <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Filter by club, season, kit type and font type — exports the content format for the selected PIDs.</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;"><div><label class="form-label">Club</label><select class="form-select" id="exp-content-club"><option value="">All clubs</option></select></div><div><label class="form-label">Season</label><select class="form-select" id="exp-content-season"><option value="">All seasons</option></select></div><div><label class="form-label">Status</label><select class="form-select" id="exp-content-status"><option value="active" selected>Active</option><option value="">Active + Archived</option><option value="archived">Archived</option></select></div><div style="position:relative;"><label class="form-label">Kit Type</label><div class="ms-wrap" id="exp-content-kit-wrap" onclick="toggleMsDropdown('exp-content-kit')"><span class="ms-placeholder" id="exp-content-kit-ph">All kit types</span></div><div class="ms-dropdown" id="exp-content-kit-dd" style="display:none;position:absolute;width:100%;"><div class="ms-option" onclick="toggleMsOption(event,'exp-content-kit','Home','Home')">Home</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-kit','Away','Away')">Away</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-kit','Third','Third')">Third</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-kit','Fourth','Fourth')">Fourth</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-kit','GK Home','GK Home')">GK Home</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-kit','GK Away','GK Away')">GK Away</div></div></div><div style="position:relative;"><label class="form-label">Font Type</label><div class="ms-wrap" id="exp-content-font-wrap" onclick="toggleMsDropdown('exp-content-font')"><span class="ms-placeholder" id="exp-content-font-ph">All font types</span></div><div class="ms-dropdown" id="exp-content-font-dd" style="display:none;position:absolute;width:100%;"><div class="ms-option" onclick="toggleMsOption(event,'exp-content-font','league','League')">League</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-font','cup','Cup')">Cup</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-font','womens','Womens League')">Womens League</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-font','womens_cup','Womens Cup')">Womens Cup</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-font','specials','Specials')">Specials</div></div></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;"><div><label class="form-label">Club</label><select class="form-select" id="exp-content-club" onchange="onExportClubChange('content')"><option value="">All clubs</option></select></div><div><label class="form-label">Season</label><select class="form-select" id="exp-content-season"><option value="">All seasons</option></select></div><div><label class="form-label">Status</label><select class="form-select" id="exp-content-status"><option value="active" selected>Active</option><option value="">Active + Archived</option><option value="archived">Archived</option></select></div><div style="position:relative;"><label class="form-label">Kit Type</label><div class="ms-wrap" id="exp-content-kit-wrap" onclick="toggleMsDropdown('exp-content-kit')"><span class="ms-placeholder" id="exp-content-kit-ph">All kit types</span></div><div class="ms-dropdown" id="exp-content-kit-dd" style="display:none;position:absolute;width:100%;"><div class="ms-option" onclick="toggleMsOption(event,'exp-content-kit','Home','Home')">Home</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-kit','Away','Away')">Away</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-kit','Third','Third')">Third</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-kit','Fourth','Fourth')">Fourth</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-kit','GK Home','GK Home')">GK Home</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-kit','GK Away','GK Away')">GK Away</div></div></div><div style="position:relative;"><label class="form-label">Font Type</label><div class="ms-wrap" id="exp-content-font-wrap" onclick="toggleMsDropdown('exp-content-font')"><span class="ms-placeholder" id="exp-content-font-ph">All font types</span></div><div class="ms-dropdown" id="exp-content-font-dd" style="display:none;position:absolute;width:100%;"><div class="ms-option" onclick="toggleMsOption(event,'exp-content-font','league','League')">League</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-font','cup','Cup')">Cup</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-font','womens','Womens League')">Womens League</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-font','womens_cup','Womens Cup')">Womens Cup</div><div class="ms-option" onclick="toggleMsOption(event,'exp-content-font','specials','Specials')">Specials</div></div></div></div>
       <div id="exp-content-count" style="font-size:12px;color:var(--text3);margin-bottom:16px;"></div>
       <button class="btn btn-primary" onclick="exportContentFromFilters()" id="exp-content-btn">⬇ Export Content</button>
     </div>
@@ -659,7 +659,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <!-- EXCLUSIONS EXPORT -->
     <div id="export-content-exclusions" class="hidden" style="max-width:860px;">
       <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Filter by club, season, kit type and font type — exports Parent PID + Hero PID format.</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;"><div><label class="form-label">Club</label><select class="form-select" id="exp-excl-club"><option value="">All clubs</option></select></div><div><label class="form-label">Season</label><select class="form-select" id="exp-excl-season"><option value="">All seasons</option></select></div><div><label class="form-label">Status</label><select class="form-select" id="exp-excl-status"><option value="active" selected>Active</option><option value="">Active + Archived</option><option value="archived">Archived</option></select></div><div style="position:relative;"><label class="form-label">Kit Type</label><div class="ms-wrap" id="exp-excl-kit-wrap" onclick="toggleMsDropdown('exp-excl-kit')"><span class="ms-placeholder" id="exp-excl-kit-ph">All kit types</span></div><div class="ms-dropdown" id="exp-excl-kit-dd" style="display:none;position:absolute;width:100%;"><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-kit','Home','Home')">Home</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-kit','Away','Away')">Away</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-kit','Third','Third')">Third</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-kit','Fourth','Fourth')">Fourth</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-kit','GK Home','GK Home')">GK Home</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-kit','GK Away','GK Away')">GK Away</div></div></div><div style="position:relative;"><label class="form-label">Font Type</label><div class="ms-wrap" id="exp-excl-font-wrap" onclick="toggleMsDropdown('exp-excl-font')"><span class="ms-placeholder" id="exp-excl-font-ph">All font types</span></div><div class="ms-dropdown" id="exp-excl-font-dd" style="display:none;position:absolute;width:100%;"><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-font','league','League')">League</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-font','cup','Cup')">Cup</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-font','womens','Womens League')">Womens League</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-font','womens_cup','Womens Cup')">Womens Cup</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-font','specials','Specials')">Specials</div></div></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;"><div><label class="form-label">Club</label><select class="form-select" id="exp-excl-club" onchange="onExportClubChange('excl')"><option value="">All clubs</option></select></div><div><label class="form-label">Season</label><select class="form-select" id="exp-excl-season"><option value="">All seasons</option></select></div><div><label class="form-label">Status</label><select class="form-select" id="exp-excl-status"><option value="active" selected>Active</option><option value="">Active + Archived</option><option value="archived">Archived</option></select></div><div style="position:relative;"><label class="form-label">Kit Type</label><div class="ms-wrap" id="exp-excl-kit-wrap" onclick="toggleMsDropdown('exp-excl-kit')"><span class="ms-placeholder" id="exp-excl-kit-ph">All kit types</span></div><div class="ms-dropdown" id="exp-excl-kit-dd" style="display:none;position:absolute;width:100%;"><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-kit','Home','Home')">Home</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-kit','Away','Away')">Away</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-kit','Third','Third')">Third</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-kit','Fourth','Fourth')">Fourth</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-kit','GK Home','GK Home')">GK Home</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-kit','GK Away','GK Away')">GK Away</div></div></div><div style="position:relative;"><label class="form-label">Font Type</label><div class="ms-wrap" id="exp-excl-font-wrap" onclick="toggleMsDropdown('exp-excl-font')"><span class="ms-placeholder" id="exp-excl-font-ph">All font types</span></div><div class="ms-dropdown" id="exp-excl-font-dd" style="display:none;position:absolute;width:100%;"><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-font','league','League')">League</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-font','cup','Cup')">Cup</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-font','womens','Womens League')">Womens League</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-font','womens_cup','Womens Cup')">Womens Cup</div><div class="ms-option" onclick="toggleMsOption(event,'exp-excl-font','specials','Specials')">Specials</div></div></div></div>
       <div id="exp-excl-count" style="font-size:12px;color:var(--text3);margin-bottom:16px;"></div>
       <button class="btn btn-primary" onclick="exportExclusionsFromFilters()" id="exp-excl-btn">⬇ Export Exclusions</button>
     </div>
@@ -751,7 +751,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <!-- IMAGES EXPORT -->
     <div id="export-content-images" class="hidden" style="max-width:860px;">
       <div style="font-size:12px;color:var(--text3);margin-bottom:16px;">Filter by club, season, kit type and font type — exports image format xlsx + font PDF(s) as a zip.</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;"><div><label class="form-label">Club</label><select class="form-select" id="exp-img-club"><option value="">All clubs</option></select></div><div><label class="form-label">Season</label><select class="form-select" id="exp-img-season"><option value="">All seasons</option></select></div><div><label class="form-label">Status</label><select class="form-select" id="exp-img-status"><option value="active" selected>Active</option><option value="">Active + Archived</option><option value="archived">Archived</option></select></div><div style="position:relative;"><label class="form-label">Kit Type</label><div class="ms-wrap" id="exp-img-kit-wrap" onclick="toggleMsDropdown('exp-img-kit')"><span class="ms-placeholder" id="exp-img-kit-ph">All kit types</span></div><div class="ms-dropdown" id="exp-img-kit-dd" style="display:none;position:absolute;width:100%;"><div class="ms-option" onclick="toggleMsOption(event,'exp-img-kit','Home','Home')">Home</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-kit','Away','Away')">Away</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-kit','Third','Third')">Third</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-kit','Fourth','Fourth')">Fourth</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-kit','GK Home','GK Home')">GK Home</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-kit','GK Away','GK Away')">GK Away</div></div></div><div style="position:relative;"><label class="form-label">Font Type</label><div class="ms-wrap" id="exp-img-font-wrap" onclick="toggleMsDropdown('exp-img-font')"><span class="ms-placeholder" id="exp-img-font-ph">All font types</span></div><div class="ms-dropdown" id="exp-img-font-dd" style="display:none;position:absolute;width:100%;"><div class="ms-option" onclick="toggleMsOption(event,'exp-img-font','league','League')">League</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-font','cup','Cup')">Cup</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-font','womens','Womens League')">Womens League</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-font','womens_cup','Womens Cup')">Womens Cup</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-font','specials','Specials')">Specials</div></div></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px;"><div><label class="form-label">Club</label><select class="form-select" id="exp-img-club" onchange="onExportClubChange('img')"><option value="">All clubs</option></select></div><div><label class="form-label">Season</label><select class="form-select" id="exp-img-season"><option value="">All seasons</option></select></div><div><label class="form-label">Status</label><select class="form-select" id="exp-img-status"><option value="active" selected>Active</option><option value="">Active + Archived</option><option value="archived">Archived</option></select></div><div style="position:relative;"><label class="form-label">Kit Type</label><div class="ms-wrap" id="exp-img-kit-wrap" onclick="toggleMsDropdown('exp-img-kit')"><span class="ms-placeholder" id="exp-img-kit-ph">All kit types</span></div><div class="ms-dropdown" id="exp-img-kit-dd" style="display:none;position:absolute;width:100%;"><div class="ms-option" onclick="toggleMsOption(event,'exp-img-kit','Home','Home')">Home</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-kit','Away','Away')">Away</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-kit','Third','Third')">Third</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-kit','Fourth','Fourth')">Fourth</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-kit','GK Home','GK Home')">GK Home</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-kit','GK Away','GK Away')">GK Away</div></div></div><div style="position:relative;"><label class="form-label">Font Type</label><div class="ms-wrap" id="exp-img-font-wrap" onclick="toggleMsDropdown('exp-img-font')"><span class="ms-placeholder" id="exp-img-font-ph">All font types</span></div><div class="ms-dropdown" id="exp-img-font-dd" style="display:none;position:absolute;width:100%;"><div class="ms-option" onclick="toggleMsOption(event,'exp-img-font','league','League')">League</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-font','cup','Cup')">Cup</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-font','womens','Womens League')">Womens League</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-font','womens_cup','Womens Cup')">Womens Cup</div><div class="ms-option" onclick="toggleMsOption(event,'exp-img-font','specials','Specials')">Specials</div></div></div></div>
       <div id="exp-img-count" style="font-size:12px;color:var(--text3);margin-bottom:16px;"></div>
       <button class="btn btn-primary" onclick="exportImageFromFilters()" id="exp-img-btn">⬇ Export Images ZIP</button>
     </div>
@@ -2421,7 +2421,9 @@ const FOOTBALL_SHEET_NAMES = {
   'cup_home':'Cup Home','cup_away':'Cup Away','cup_third':'Cup Third',
   'cup_gk home':'Cup GK Home','cup_gk away':'Cup GK Away','cup_gk third':'Cup GK Third',
   'womens_home':'Womens Home','womens_away':'Womens Away','womens_third':'Womens Third',
+  'womens_gk home':'Womens GK Home','womens_gk away':'Womens GK Away','womens_gk third':'Womens GK Third',
   'womens_cup_home':'Womens Cup Home','womens_cup_away':'Womens Cup Away','womens_cup_third':'Womens Cup Third',
+  'womens_cup_gk home':'Womens Cup GK Home','womens_cup_gk away':'Womens Cup GK Away','womens_cup_gk third':'Womens Cup GK Third',
   'specials_home':'Specials Home','specials_away':'Specials Away','specials_third':'Specials Third','specials_':'Specials','retro_ss_home':'Retro Home','retro_ss_away':'Retro Away',
 };
 
@@ -4675,11 +4677,24 @@ async function exportImageFromFilters() {
       const kt=(heroes[0]?.KitType||'').toLowerCase(),ft=(heroes[0]?.FontType||'').toLowerCase();
       // Look up font metadata
       const heroSeasonId = heroes[0]?.SeasonID || '';
+      const normFontType = t => {
+        const s = (t||'').toLowerCase().replace(/[^a-z]/g,'');
+        if (s==='womenscup') return 'womens_cup';
+        if (s==='wsl'||s==='womensleague'||s==='womens') return 'womens';
+        if (s==='league') return 'league';
+        if (s==='cup') return 'cup';
+        if (s==='specials') return 'specials';
+        return s;
+      };
+      const normKitType = t => (t||'').toLowerCase().trim();
+      // Use kt derived from the sheet key (which already has GK adjustment applied)
+      // key format is ft_effectiveKit e.g. 'league_gk home'
+      const ktFromKey = key.slice(ft.length + 1); // strip 'ft_' prefix
       const fontRec = (CACHE.fonts||[]).find(f =>
         f.ClubID === (heroes[0]?.ClubID) &&
         f.SeasonID === heroSeasonId &&
-        (f.FontType||'').toLowerCase() === ft &&
-        (f.KitType||'').toLowerCase() === kt
+        normFontType(f.FontType) === ft &&
+        normKitType(f.KitType) === ktFromKey
       );
       const letterStyle = fontRec?.LetterStyle || '';
       const letterColour = fontRec?.LetterColour || '';
@@ -4863,6 +4878,13 @@ function initBulkExport() {
   });
 }
 
+function getExportSeasonsForClub(clubId) {
+  if (!clubId) return CACHE.seasons||[];
+  // Return only seasons that have at least one hero PID for this club
+  const seasonIds = new Set((CACHE.heroes||[]).filter(h=>h.ClubID===clubId).map(h=>h.SeasonID).filter(Boolean));
+  return (CACHE.seasons||[]).filter(s=>seasonIds.has(s.id));
+}
+
 function populateExportFilters() {
   ['content','excl','img'].forEach(prefix => {
     const clubSel = document.getElementById('exp-'+prefix+'-club');
@@ -4871,10 +4893,22 @@ function populateExportFilters() {
     const currentClub = clubSel.value;
     clubSel.innerHTML = '<option value="">All clubs</option>' +
       (CACHE.clubs||[]).map(c=>`<option value="${c.id}" ${c.id===currentClub?'selected':''}>${c.Name}</option>`).join('');
+    const availableSeasons = getExportSeasonsForClub(currentClub);
     const currentSeason = seasonSel.value;
     seasonSel.innerHTML = '<option value="">All seasons</option>' +
-      (CACHE.seasons||[]).map(s=>`<option value="${s.id}" ${s.id===currentSeason?'selected':''}>${s.Label||s.id}</option>`).join('');
+      availableSeasons.map(s=>`<option value="${s.id}" ${s.id===currentSeason?'selected':''}>${s.Label||s.id}</option>`).join('');
   });
+  updateExportCounts();
+}
+
+function onExportClubChange(prefix) {
+  const clubSel = document.getElementById('exp-'+prefix+'-club');
+  const seasonSel = document.getElementById('exp-'+prefix+'-season');
+  if (!clubSel || !seasonSel) return;
+  const clubId = clubSel.value;
+  const availableSeasons = getExportSeasonsForClub(clubId);
+  seasonSel.innerHTML = '<option value="">All seasons</option>' +
+    availableSeasons.map(s=>`<option value="${s.id}">${s.Label||s.id}</option>`).join('');
   updateExportCounts();
 }
 
