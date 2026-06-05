@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v205 -->
+<!-- HEROPID-BUILD-v209 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -904,7 +904,7 @@ const FED_MAP = {'FRNC':'FFF','FRANCE':'FFF','GERM':'DFB','GERMANY':'DFB','ENG':
 const BRAND_ANCHORS = ['FRANCE NIKE','FRANCE ADIDAS','FRANCE PUMA','DFB ADIDAS','DFB NIKE','DFB PUMA','ENGLAND NIKE','SPAIN ADIDAS','ITALY PUMA','PORTUGAL NIKE','NETHERLANDS NIKE','BELGIUM ADIDAS','BELGIUM NIKE','BELGIUM PUMA','LEEDS UNITED ADIDAS','LEEDS UNITED NIKE','LEEDS UNITED PUMA'];
 
 // Local cache for search performance
-let CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null,catalogues:[],fonts:[]};
+let CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null,catalogues:[],fonts:[],rosterMappings:[]};
 // O(1) lookup maps — rebuilt whenever CACHE arrays change
 let CACHE_MAPS = {
   heroByPID: new Map(),       // String(PID) -> hero
@@ -914,6 +914,7 @@ let CACHE_MAPS = {
   playerById: new Map(),      // AT record id -> player
   clubById: new Map(),        // AT record id -> club
   seasonById: new Map(),      // AT record id -> season
+  rosterMappingByKey: new Map(), // `${ClubID}|${SeasonID}|${normFontType}|${normKitType}` -> rosterMapping
 };
 function buildCacheMaps() {
   CACHE_MAPS.heroByPID = new Map((CACHE.heroes||[]).map(h => [String(h.PID), h]));
@@ -923,9 +924,38 @@ function buildCacheMaps() {
   CACHE_MAPS.playerById = new Map((CACHE.players||[]).map(p => [p.id, p]));
   CACHE_MAPS.clubById = new Map((CACHE.clubs||[]).map(c => [c.id, c]));
   CACHE_MAPS.seasonById = new Map((CACHE.seasons||[]).map(s => [s.id, s]));
+  CACHE_MAPS.rosterMappingByKey = new Map(
+    (CACHE.rosterMappings||[])
+      .filter(r => r.Active)
+      .map(r => [`${r.ClubID}|${r.SeasonID}|${(r.FontType||'').toLowerCase()}|${(r.KitType||'').toLowerCase()}`, r])
+  );
 }
 
-// ─── NAME NORMALISATION ───────────────────────────────────────────────────────
+// Resolve ActorID / RosterID for a hero PID at import time
+// actorId = player's MDMActorID; clubId/seasonId/fontType/kitType from the hero row
+function resolveMdmLinks(actorId, clubId, seasonId, fontType, kitType) {
+  const rmKey = `${clubId}|${seasonId}|${(fontType||'').toLowerCase()}|${(kitType||'').toLowerCase()}`;
+  const rm = CACHE_MAPS.rosterMappingByKey.get(rmKey);
+  return {
+    actorId: actorId || '',
+    rosterId: rm ? (rm.RosterID || '') : '',
+    missingMapping: !rm,
+  };
+}
+
+// Validate for duplicate active roster mappings (same ClubID+SeasonID+FontType+KitType, Active=true)
+// Returns array of {key, count, rows} for any duplicates found
+function validateRosterMappingDuplicates() {
+  const counts = new Map();
+  (CACHE.rosterMappings||[]).filter(r=>r.Active).forEach(r => {
+    const k = `${r.ClubID}|${r.SeasonID}|${(r.FontType||'').toLowerCase()}|${(r.KitType||'').toLowerCase()}`;
+    if (!counts.has(k)) counts.set(k, []);
+    counts.get(k).push(r);
+  });
+  const dupes = [];
+  counts.forEach((rows, key) => { if (rows.length > 1) dupes.push({key, count:rows.length, rows}); });
+  return dupes;
+}
 const toProperName = s => (s||'').trim().replace(/\s+/g,' ')
   .replace(/([^\s\-']+)/g, w => w.charAt(0).toUpperCase()+w.slice(1).toLowerCase());
 const toShirtName  = s => (s||'').trim().toUpperCase();
@@ -1045,7 +1075,7 @@ function disconnectAirtable() {
   localStorage.removeItem('at_tables');
   localStorage.removeItem('at_fields_init');
   AT_TOKEN = ''; AT_BASE = ''; TABLES = {};
-  CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null,catalogues:[],fonts:[]};
+  CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null,catalogues:[],fonts:[],rosterMappings:[]};
   updateStats();
   refreshSettingsStatus();
   toast('Disconnected from Airtable');
@@ -1099,7 +1129,7 @@ async function initTables() {
   const required = ['Clubs','Seasons','Players','Parent PIDs','Hero PIDs'];
   const missing = required.filter(n => !tableMap[n]);
   if (missing.length > 0) throw new Error(`Missing tables: ${missing.join(', ')}. Please create them in Airtable first.`);
-  TABLES = {clubs:tableMap['Clubs'],seasons:tableMap['Seasons'],players:tableMap['Players'],parents:tableMap['Parent PIDs'],heroes:tableMap['Hero PIDs'],mdmRosterMembers:tableMap['MDM Roster Members'],catalogues:'tblH92885JmpxxBIM',fonts:'tblD6GssdzWoGAZ90'};
+  TABLES = {clubs:tableMap['Clubs'],seasons:tableMap['Seasons'],players:tableMap['Players'],parents:tableMap['Parent PIDs'],heroes:tableMap['Hero PIDs'],mdmRosterMembers:tableMap['MDM Roster Members'],catalogues:'tblH92885JmpxxBIM',fonts:'tblD6GssdzWoGAZ90',rosterMappings:'tblFtei2eh790LvNf'};
   // Only run ensureFields once per session — skip if already done
   if (!localStorage.getItem('at_fields_init') && !window._fieldsInitDone) {
     window._fieldsInitDone = true;
@@ -1178,16 +1208,17 @@ async function loadCachedOrFetch(key,tid){const c=getCachedTable(key);if(c)retur
 async function loadCache(force, dataOnly=false){
   // dataOnly=true: only refresh players/parents/heroes (skip clubs/seasons/catalogues)
   // This is much faster after imports since those tables don't change
-  if(force) { Object.values(CACHE_KEYS).forEach(k=>localStorage.removeItem(k)); }
+  if(force) { Object.values(CACHE_KEYS).forEach(k=>localStorage.removeItem(k)); CACHE.rosterMappings=[]; }
   try{
     if (!dataOnly) {
       // Full load - fetch everything
-      const[clubs,seasons,catalogues]=await Promise.all([
+      const[clubs,seasons,catalogues,rosterMappings]=await Promise.all([
         CACHE.clubs.length ? Promise.resolve(CACHE.clubs) : atGetAll(TABLES.clubs).then(r=>r.map(x=>({id:x.id,...x.fields}))),
         CACHE.seasons.length ? Promise.resolve(CACHE.seasons) : atGetAll(TABLES.seasons).then(r=>r.map(x=>({id:x.id,...x.fields}))),
         CACHE.catalogues.length ? Promise.resolve(CACHE.catalogues) : atGetAll(TABLES.catalogues).then(r=>r.map(x=>({id:x.id,...x.fields}))),
+        CACHE.rosterMappings.length ? Promise.resolve(CACHE.rosterMappings) : atGetAll(TABLES.rosterMappings).then(r=>r.map(x=>({id:x.id,...x.fields}))).catch(()=>[]),
       ]);
-      CACHE.clubs=clubs.slice().sort((a,b)=>(a.Name||'').localeCompare(b.Name||'')); CACHE.seasons=seasons; CACHE.catalogues=catalogues||[];
+      CACHE.clubs=clubs.slice().sort((a,b)=>(a.Name||'').localeCompare(b.Name||'')); CACHE.seasons=seasons; CACHE.catalogues=catalogues||[]; CACHE.rosterMappings=rosterMappings||[];
     }
     const[players,parents,heroes]=await Promise.all([
       loadCachedOrFetch(CACHE_KEYS.players,TABLES.players),
@@ -1420,7 +1451,11 @@ async function saveHero() {
   if (!pid||!playerId||!clubId||!seasonId) { toast('PID, player, club and season required','error'); return; }
   if (CACHE.heroes.find(h=>h.PID===pid)) { toast(`PID ${pid} already exists`,'error'); return; }
   try {
-    const rec = await atCreate(TABLES.heroes, {PID:pid,PlayerID:playerId,ClubID:clubId,SeasonID:seasonId,FontType:document.getElementById('hero-font').value,GarmentType:document.getElementById('hero-garment').value,KitType:document.getElementById('hero-kit').value.trim(),Status:document.getElementById('hero-status').value});
+    const fontType = document.getElementById('hero-font').value;
+    const kitType = document.getElementById('hero-kit').value.trim();
+    const player = CACHE.players.find(p=>p.id===playerId);
+    const {actorId, rosterId} = resolveMdmLinks(player?.MDMActorID||'', clubId, seasonId, fontType, kitType);
+    const rec = await atCreate(TABLES.heroes, {PID:pid,PlayerID:playerId,ClubID:clubId,SeasonID:seasonId,FontType:fontType,GarmentType:document.getElementById('hero-garment').value,KitType:kitType,Status:document.getElementById('hero-status').value,ActorID:actorId,RosterID:rosterId});
     CACHE.heroes.push({id:rec.id,...rec.fields});
     buildCacheMaps();
     closeModal('modal-add-hero');
@@ -3084,16 +3119,27 @@ function showImportPreview(club, season, filename) {
   const d=importData;
   const _seenPK=new Set();
   const _cachePlayerMap = new Map((CACHE.players||[]).map(p=>[p.Name+'|'+p.ClubID+'|'+p.SeasonID, p]));
+  // Roll-forward: find previous-season templates for players not in current season
+  const _prevPlayerMap = new Map((CACHE.players||[]).map(p=>[p.Name+'|'+p.ClubID, p]));
   const newPlayers=d.players.filter(p=>{const k=p.name+'|'+p.clubId+'|'+p.seasonId+'|'+p.fontType;if(_seenPK.has(k))return false;_seenPK.add(k);return !_cachePlayerMap.has(p.name+'|'+p.clubId+'|'+p.seasonId);});
+  const rolledForward = newPlayers.filter(p => _prevPlayerMap.has(p.name+'|'+p.clubId));
+  const brandNew = newPlayers.filter(p => !_prevPlayerMap.has(p.name+'|'+p.clubId));
   const existingPlayers=d.players.filter(p=>(CACHE.players||[]).some(e=>e.Name===p.name&&e.ClubID!==p.clubId));
   const newHeroes=d.heroes.filter(h=>!CACHE_MAPS.heroByPID.has(String(h.pid)));
   const newParents=d.parents.filter(p=>!CACHE_MAPS.parentByPID.has(String(p.pid)));
   const dupHeroes=d.heroes.length-newHeroes.length;
   document.getElementById('import-preview-title').textContent=`Preview — ${filename}`;
   document.getElementById('import-preview').classList.remove('hidden');
-  let html=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;"><div class="stat-pill"><span class="stat-label">New players</span><span class="stat-value" style="color:var(--green);">${newPlayers.length}</span></div><div class="stat-pill"><span class="stat-label">New hero PIDs</span><span class="stat-value" style="color:var(--green);">${newHeroes.length}</span></div><div class="stat-pill"><span class="stat-label">New parent PIDs</span><span class="stat-value" style="color:var(--amber);">${newParents.length}</span></div></div>`;
+  let html=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
+    <div class="stat-pill"><span class="stat-label">Rolled forward</span><span class="stat-value" style="color:var(--accent);">${rolledForward.length}</span></div>
+    <div class="stat-pill"><span class="stat-label">Brand new</span><span class="stat-value" style="color:var(--green);">${brandNew.length}</span></div>
+    <div class="stat-pill"><span class="stat-label">New hero PIDs</span><span class="stat-value" style="color:var(--green);">${newHeroes.length}</span></div>
+    <div class="stat-pill"><span class="stat-label">New parent PIDs</span><span class="stat-value" style="color:var(--amber);">${newParents.length}</span></div>
+  </div>`;
   if (existingPlayers.length>0) html+=`<div style="background:rgba(99,179,237,0.08);border:1px solid rgba(99,179,237,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:#63b3ed;margin-bottom:10px;">ℹ ${existingPlayers.length} player${existingPlayers.length>1?'s':''} already in database from another club (${existingPlayers.map(p=>p.name).join(', ')}) — PIDs will still be imported</div>`;
   if (dupHeroes>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${dupHeroes} duplicate hero PIDs will be skipped</div>`;
+  const missingMappingCount = newHeroes.filter(h => resolveMdmLinks('', h.clubId, h.seasonId, h.fontType, h.kitType).missingMapping).length;
+  if (missingMappingCount>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${missingMappingCount} hero PID${missingMappingCount!==1?'s':''} have no roster mapping — RosterID will be blank (flagged later in Data Health)</div>`;
   html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Sheets: ${d.sheets.join(', ')}</div>`;
   if (d.sectionsFound.length>0) html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Sections: ${d.sectionsFound.join(' · ')}</div>`;
 
@@ -3154,6 +3200,13 @@ async function confirmImport() {
   const newHeroes=d.heroes.filter(h=>!CACHE_MAPS.heroByPID.has(String(h.pid)));
   const _cachePlayerMap2 = new Map((CACHE.players||[]).map(p=>[p.Name+'|'+p.ClubID+'|'+p.SeasonID, p]));
   const _seenPK=new Set();const newPlayers=d.players.filter(p=>{const k=p.name+'|'+p.clubId+'|'+p.seasonId+'|'+p.fontType;if(_seenPK.has(k))return false;_seenPK.add(k);return !_cachePlayerMap2.has(p.name+'|'+p.clubId+'|'+p.seasonId);});
+  // playerMap must be declared before _cachePlayerMap2.forEach uses it
+  const playerMap={};
+  // Also populate playerMap for existing players right away
+  _cachePlayerMap2.forEach((player, key) => {
+    const parts = key.split('|');
+    playerMap[parts[0]+'_'+parts[1]+'_'+parts[2]] = player.id;
+  });
   try {
     const total = newParents.length + newPlayers.length + newHeroes.length;
     let done = 0;
@@ -3163,11 +3216,25 @@ async function confirmImport() {
       recs.forEach(r=>CACHE.parents.push({id:r.id,...r.fields}));
       done += newParents.length;
     }
-    const playerMap={};
+    // Build roll-forward map: Name+ClubID -> previous season player
+    const _prevPlayerRollMap = new Map((CACHE.players||[]).map(p=>[p.Name+'|'+p.ClubID, p]));
     for (let pi=0; pi<newPlayers.length; pi++) {
       const p = newPlayers[pi];
       setProgress(done+pi, total, `Writing player ${pi+1} of ${newPlayers.length}...`);
-      const rec=await atCreate(TABLES.players,{Name:toProperName(p.name),ShirtName:toShirtName(p.shirtName),SquadNumber:p.number,Type:p.type,ClubID:p.clubId,SeasonID:p.seasonId,Status:p.status,MDMActorID:p.mdmId||'',Goalkeeper:p.goalkeeper||false});
+      // Check for previous season template to roll forward
+      const prev = _prevPlayerRollMap.get(p.name+'|'+p.clubId);
+      const fields = {
+        Name: toProperName(p.name),
+        ShirtName: p.shirtName ? toShirtName(p.shirtName) : (prev?.ShirtName || toShirtName(p.name)),
+        SquadNumber: p.number || prev?.SquadNumber || null,
+        Type: p.type || prev?.Type || 'player',
+        ClubID: p.clubId,
+        SeasonID: p.seasonId,
+        Status: 'active',
+        MDMActorID: p.mdmId || prev?.MDMActorID || '',
+        Goalkeeper: p.goalkeeper || prev?.Goalkeeper || false,
+      };
+      const rec=await atCreate(TABLES.players, fields);
       _createdPlayers.push(rec);
       CACHE.players.push({id:rec.id,...rec.fields});
       playerMap[p.name+'_'+p.clubId+'_'+p.seasonId]=rec.id;
@@ -3178,7 +3245,9 @@ async function confirmImport() {
       const heroFields=newHeroes.map(h=>{
         const playerId=playerMap[h.playerName+'_'+h.clubId+'_'+h.seasonId];
         const parent=CACHE.parents.find(p=>String(p.PID)===String(h.parentPid));
-        return {PID:h.pid,PlayerID:playerId||'',ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.garmentRaw,KitType:h.kitType,Status:h.status,ParentPIDID:parent?parent.id:''};
+        const player=CACHE.players.find(p=>p.id===playerId);
+        const {actorId,rosterId}=resolveMdmLinks(player?.MDMActorID||'',h.clubId,h.seasonId,h.fontType,h.kitType);
+        return {PID:h.pid,PlayerID:playerId||'',ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.garmentRaw,KitType:h.kitType,Status:h.status,ParentPIDID:parent?parent.id:'',ActorID:actorId,RosterID:rosterId};
       });
       // Write in batches of 10 with progress
       for (let i=0; i<heroFields.length; i+=10) {
@@ -3480,6 +3549,8 @@ function showCreationPreview(fileNames) {
   let html=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;"><div class="stat-pill"><span class="stat-label">Hero PIDs</span><span class="stat-value" style="color:var(--green);">${d.heroes.length}</span></div><div class="stat-pill"><span class="stat-label">Provisional</span><span class="stat-value" style="color:var(--amber);">${d.provisional.length}</span></div><div class="stat-pill"><span class="stat-label">Duplicates</span><span class="stat-value" style="color:var(--text3);">${d.stats.duplicate}</span></div><div class="stat-pill"><span class="stat-label">New Parents</span><span class="stat-value" style="color:var(--accent);">${d.parents.length}</span></div></div>`;
   if (d.stats.matched>0) html+=`<div style="background:var(--green-bg);border:1px solid rgba(61,214,140,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--green);margin-bottom:10px;">✓ ${d.stats.matched} PIDs matched to existing parent PIDs</div>`;
   if (d.provisional.length>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${d.provisional.length} PIDs have no player name — stored as provisional.<button class="btn btn-ghost btn-sm" style="margin-left:8px;" onclick="exportProvisionalList()">⎘ Export for Homeplate</button></div>`;
+  const creationMissingMapping = (d.heroes||[]).filter(h => resolveMdmLinks('', h.clubId, h.seasonId, h.fontType, h.kitType).missingMapping).length;
+  if (creationMissingMapping>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${creationMissingMapping} hero PID${creationMissingMapping!==1?'s':''} have no roster mapping — RosterID will be blank (flagged later in Data Health)</div>`;
   if (d.duplicatePids&&d.duplicatePids.length>0) {
     const atDups=d.duplicatePids.filter(x=>x.reason==='already in Airtable');
     const fileDups=d.duplicatePids.filter(x=>x.reason==='within-file duplicate');
@@ -3551,7 +3622,7 @@ async function confirmCreationImport() {
       recs.forEach((r,i)=>{ CACHE.players.push({id:r.id,...r.fields}); playerMap[newPlayerKeys[i]]=r.id; });
     }
     if (d.heroes.length>0) {
-      const heroFields=d.heroes.map(h=>{const pId=parentIdMap[String(h.basePid)]||'';return {PID:h.pid,PlayerID:playerMap[h.playerName+'_'+h.clubId+'_'+h.seasonId]||'',ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.garmentRaw,KitType:h.kitType,Status:'active',...(pId?{ParentPIDID:pId}:{}),...(h.jerseyColour?{JerseyColour:h.jerseyColour}:{})};}).filter(h=>h.PlayerID);
+      const heroFields=d.heroes.map(h=>{const pId=parentIdMap[String(h.basePid)]||'';const playerId=playerMap[h.playerName+'_'+h.clubId+'_'+h.seasonId]||'';const player=CACHE.players.find(p=>p.id===playerId);const{actorId,rosterId}=resolveMdmLinks(player?.MDMActorID||'',h.clubId,h.seasonId,h.fontType,h.kitType);return {PID:h.pid,PlayerID:playerId,ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.garmentRaw,KitType:h.kitType,Status:'active',ActorID:actorId,RosterID:rosterId,...(pId?{ParentPIDID:pId}:{}),...(h.jerseyColour?{JerseyColour:h.jerseyColour}:{})};}).filter(h=>h.PlayerID);
       const recs=await atCreateBatch(TABLES.heroes,heroFields);
       _createdHeroes.push(...recs);
       recs.forEach(r=>CACHE.heroes.push({id:r.id,...r.fields}));
@@ -3669,8 +3740,9 @@ async function confirmHomeplateResolve() {
       const rec=await atCreate(TABLES.players,{Name:toProperName(r.playerName),ShirtName:toShirtName(r.playerName),SquadNumber:r.squadNumber||null,Type:'player',ClubID:r.clubId,SeasonID:r.seasonId,Status:'active'});
       CACHE.players.push({id:rec.id,...rec.fields}); player={id:rec.id,...rec.fields};
     }
-    await atUpdate(TABLES.heroes,r.heroId,{PlayerID:player.id,Status:'active'});
-    hero.PlayerID=player.id; hero.Status='active';
+    await atUpdate(TABLES.heroes,r.heroId,{PlayerID:player.id,Status:'active',ActorID:player.MDMActorID||'',...(()=>{const{rosterId}=resolveMdmLinks(player.MDMActorID||'',r.clubId,r.seasonId,hero.FontType||'',hero.KitType||'');return rosterId?{RosterID:rosterId}:{};})()});
+    const {rosterId} = resolveMdmLinks(player.MDMActorID||'',r.clubId,r.seasonId,hero.FontType||'',hero.KitType||'');
+    hero.PlayerID=player.id; hero.Status='active'; if(player.MDMActorID) hero.ActorID=player.MDMActorID; if(rosterId) hero.RosterID=rosterId;
     resolved++;
   }
   CACHE.players=CACHE.players.filter(p=>{if(p.Status!=='provisional')return true;return CACHE.heroes.some(h=>h.PlayerID===p.id&&h.Status==='provisional');});
