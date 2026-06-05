@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v183 -->
+<!-- HEROPID-BUILD-v184 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3237,12 +3237,46 @@ function parseCreationGarmentType(nameStr) {
 
 function parseCreationKitType(nameStr) {
   const n=nameStr.toUpperCase();
-  if (n.includes(' GK ')||n.includes('GOALKEEPER')) return 'GK';
+  const isGK = n.includes(' GK ')||n.includes('GOALKEEPER');
+  if (isGK && n.includes(' AWAY ')) return 'GK Away';
+  if (isGK && n.includes(' THIRD ')) return 'GK Third';
+  if (isGK) return 'GK Home';
   if (n.includes(' HOME ')) return 'Home';
   if (n.includes(' AWAY ')) return 'Away';
   if (n.includes(' THIRD ')) return 'Third';
   if (n.includes(' FOURTH ')) return 'Fourth';
   return 'Home';
+}
+
+function parseCreationJerseyColour(nameStr) {
+  // Only extract colour for GK products
+  const n = nameStr.toUpperCase();
+  if (!n.includes('GOALKEEPER') && !n.includes(' GK ')) return null;
+  // Find brand anchor position
+  let anchorIdx = -1;
+  for (const anchor of BRAND_ANCHORS) { const idx = n.indexOf(anchor); if (idx !== -1) { anchorIdx = idx; break; } }
+  if (anchorIdx === -1) return null;
+  // Get tokens before anchor: [version, fedCode, ...colour?, ...playerName]
+  const before = nameStr.substring(0, anchorIdx).trim();
+  const tokens = before.split(/\s+/);
+  if (tokens.length <= 2) return null;
+  // Player name comes from parseCreationPlayerName — get it to know where colour ends
+  const playerName = parseCreationPlayerName(nameStr);
+  if (!playerName) return null;
+  const playerTokens = playerName.toUpperCase().split(/\s+/);
+  // Find where player name starts in tokens (after token[0]=version, token[1]=fedCode)
+  const remaining = tokens.slice(2); // after version + fedCode
+  // Remove player name tokens from the end
+  let colourTokens = [...remaining];
+  for (let i = playerTokens.length; i > 0; i--) {
+    const tail = colourTokens.slice(-i).map(t=>t.toUpperCase());
+    if (tail.join(' ') === playerTokens.slice(0,i).join(' ')) {
+      colourTokens = colourTokens.slice(0, colourTokens.length - i);
+      break;
+    }
+  }
+  if (!colourTokens.length) return null;
+  return colourTokens.map(t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()).join(' ');
 }
 
 function parseCreationPlayerName(nameStr) {
@@ -3280,12 +3314,14 @@ function parseCreationRows(rows,seasonId,fontType,fileNames) {
     const kitType=parseCreationKitType(name);
     const garmentType=parseCreationGarmentType(name);
     const playerName=parseCreationPlayerName(name);
-    const knownParent=CACHE.parents.find(p=>String(p.PID)===String(basePid));
+    const jerseyColour=parseCreationJerseyColour(name);
+    // Include jerseyColour in parent lookup key so colour variants don't collapse
+    const knownParent=CACHE.parents.find(p=>String(p.PID)===String(basePid)&&(p.JerseyColour||'')===(jerseyColour||''));
     const parentRecordId=knownParent?knownParent.id:null;
     if (knownParent) creationImportData.stats.matched++;
-    else { creationImportData.stats.unmatched++; if(basePid&&!creationImportData.parents.find(p=>p.pid===basePid)) creationImportData.parents.push({pid:basePid,clubId,seasonId,kitType,garmentType}); }
-    if (!playerName) { creationImportData.stats.provisional++; creationImportData.provisional.push({pid,basePid,parentRecordId,clubId,seasonId,kitType,garmentType,fontType,name}); }
-    else { creationImportData.players.push({name:toProperName(playerName),clubId,seasonId,fontType,kitType}); creationImportData.heroes.push({pid,playerName:toProperName(playerName),basePid,parentRecordId,clubId,seasonId,fontType,kitType,garmentType,garmentRaw:name,status:'active'}); }
+    else { creationImportData.stats.unmatched++; if(basePid&&!creationImportData.parents.find(p=>p.pid===basePid&&(p.jerseyColour||'')===(jerseyColour||''))) creationImportData.parents.push({pid:basePid,clubId,seasonId,kitType,garmentType,jerseyColour}); }
+    if (!playerName) { creationImportData.stats.provisional++; creationImportData.provisional.push({pid,basePid,parentRecordId,clubId,seasonId,kitType,garmentType,fontType,name,jerseyColour}); }
+    else { creationImportData.players.push({name:toProperName(playerName),clubId,seasonId,fontType,kitType}); creationImportData.heroes.push({pid,playerName:toProperName(playerName),basePid,parentRecordId,clubId,seasonId,fontType,kitType,garmentType,garmentRaw:name,status:'active',jerseyColour}); }
     if (playerName && clubId) { const _pk=playerName+'_'+clubId+'_'+seasonId; if(!creationImportData.allParsedPlayers.find(p=>p._key===_pk)) creationImportData.allParsedPlayers.push({name:toProperName(playerName),clubId,seasonId,_key:_pk}); }
   });
   showCreationPreview(fileNames);
@@ -3328,7 +3364,7 @@ async function confirmCreationImport() {
     d.heroes.forEach(h=>{ if(h.parentRecordId) parentIdMap[h.basePid]=h.parentRecordId; });
     d.provisional.forEach(h=>{ if(h.parentRecordId) parentIdMap[h.basePid]=h.parentRecordId; });
     if (d.parents.length>0) {
-      const recs=await atCreateBatch(TABLES.parents,d.parents.map(p=>({PID:p.pid,ClubID:p.clubId,SeasonID:p.seasonId,KitType:p.kitType,GarmentType:p.garmentType})));
+      const recs=await atCreateBatch(TABLES.parents,d.parents.map(p=>({PID:p.pid,ClubID:p.clubId,SeasonID:p.seasonId,KitType:p.kitType,GarmentType:p.garmentType,...(p.jerseyColour?{JerseyColour:p.jerseyColour}:{})})));
       recs.forEach(r=>{ CACHE.parents.push({id:r.id,...r.fields}); if(r.fields&&r.fields.PID) parentIdMap[String(r.fields.PID)]=r.id; });
     }
     const playerMap={};
@@ -3355,7 +3391,7 @@ async function confirmCreationImport() {
       recs.forEach((r,i)=>{ CACHE.players.push({id:r.id,...r.fields}); playerMap[newPlayerKeys[i]]=r.id; });
     }
     if (d.heroes.length>0) {
-      const heroFields=d.heroes.map(h=>{const pId=parentIdMap[String(h.basePid)]||'';return {PID:h.pid,PlayerID:playerMap[h.playerName+'_'+h.clubId+'_'+h.seasonId]||'',ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.garmentRaw,KitType:h.kitType,Status:'active',...(pId?{ParentPIDID:pId}:{})};}).filter(h=>h.PlayerID);
+      const heroFields=d.heroes.map(h=>{const pId=parentIdMap[String(h.basePid)]||'';return {PID:h.pid,PlayerID:playerMap[h.playerName+'_'+h.clubId+'_'+h.seasonId]||'',ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.garmentRaw,KitType:h.kitType,Status:'active',...(pId?{ParentPIDID:pId}:{}),...(h.jerseyColour?{JerseyColour:h.jerseyColour}:{})};}).filter(h=>h.PlayerID);
       const recs=await atCreateBatch(TABLES.heroes,heroFields);
       _createdHeroes.push(...recs);
       recs.forEach(r=>CACHE.heroes.push({id:r.id,...r.fields}));
@@ -3385,7 +3421,7 @@ async function confirmCreationImport() {
         return {PID:h.pid, PlayerID:provPlayerMap[h.clubId+'_'+h.seasonId]||'',
           ClubID:h.clubId, SeasonID:h.seasonId, FontType:h.fontType,
           GarmentType:h.garmentType, GarmentRaw:h.name, KitType:h.kitType, Status:'provisional',
-          ...(pId?{ParentPIDID:pId}:{})};
+          ...(pId?{ParentPIDID:pId}:{}),...(h.jerseyColour?{JerseyColour:h.jerseyColour}:{})};
       }).filter(h => h.PlayerID);
       if (provHeroFields.length > 0) {
         const recs = await atCreateBatch(TABLES.heroes, provHeroFields);
