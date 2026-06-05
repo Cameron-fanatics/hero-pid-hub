@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v209 -->
+<!-- HEROPID-BUILD-v216 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -161,6 +161,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <div class="nav-item" onclick="showPage('clubs')" id="nav-clubs"><span class="icon">◈</span> Clubs</div>
     <div class="nav-item" onclick="showPage('seasons')" id="nav-seasons"><span class="icon">◷</span> Seasons</div>
     <div class="nav-item" onclick="showPage('fonts')" id="nav-fonts"><span class="icon">✦</span> Fonts</div>
+    <div class="nav-item" onclick="showPage('rostermappings')" id="nav-rostermappings"><span class="icon">⇄</span> Roster Mappings</div>
     <div class="nav-item" onclick="showPage('cleanup')" id="nav-cleanup"><span class="icon">⚠</span> Data Clean-up</div>
     <div class="nav-section" style="margin-top:8px;">Settings</div>
     <div class="nav-item" onclick="showPage('settings')" id="nav-settings"><span class="icon">⚙</span> Settings</div>
@@ -317,6 +318,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       <div class="tab" onclick="switchImportTab('homeplate')" id="import-tab-homeplate">Homeplate Resolver</div>
       <div class="tab" onclick="switchImportTab('mdmroster')" id="import-tab-mdmroster">Import MDM Roster Member</div>
       <div class="tab" onclick="switchImportTab('squadupdate')" id="import-tab-squadupdate">Squad Update</div>
+      <div class="tab" onclick="switchImportTab('mdmpreview')" id="import-tab-mdmpreview">MDM Preview</div>
     </div>
     <div id="import-content-storage" style="max-width:700px;margin:0 auto;">
       <div class="card" style="margin-bottom:20px;">
@@ -498,10 +500,31 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         </div>
       </div>
     </div>
+
+    <!-- MDM PREVIEW TAB -->
+    <div id="import-content-mdmpreview" class="hidden" style="max-width:1100px;margin:0 auto;">
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header"><span class="card-title">MDM Resolution Preview</span><span style="font-size:11px;color:var(--text3);margin-left:8px;">Read-only — shows linkage state between MDM Roster Members and Hero PIDs</span></div>
+        <div style="padding:16px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:flex-end;">
+            <div>
+              <label class="form-label">Club</label>
+              <select id="mdmp-club" class="form-select" onchange="mdmpOnClubChange()"></select>
+            </div>
+            <div>
+              <label class="form-label">Season</label>
+              <select id="mdmp-season" class="form-select" onchange="renderMdmPreview()"></select>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="renderMdmPreview()" style="margin-bottom:1px;">↻ Refresh</button>
+          </div>
+        </div>
+      </div>
+      <div id="mdmp-loading" style="display:none;padding:20px;text-align:center;color:var(--text3);font-size:13px;">Loading MDM roster members…</div>
+      <div id="mdmp-summary-pills" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
+      <div id="mdmp-content"></div>
+    </div>
   </div>
 </div>
-
-<!-- CLUBS PAGE -->
 <div id="page-fonts" class="hidden">
   <div class="topbar"><div class="page-title">Fonts</div>
     <button class="btn btn-ghost btn-sm" onclick="refreshFonts()" style="margin-right:8px;">↻ Refresh</button>
@@ -618,6 +641,28 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       </div>
     </div>
 
+    <!-- MDM BACKFILL -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">MDM Backfill — ActorID &amp; RosterID</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">
+        Populates <span class="mono" style="font-size:11px;">ActorID</span> and <span class="mono" style="font-size:11px;">RosterID</span> on Hero PIDs that are missing them, using the same match logic as imports (Player → MDMActorID → RosterMapping lookup).
+        Run <b>Dry Run</b> first to preview changes before committing.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+        <select id="backfill-club" class="filter-select" style="width:180px;font-size:12px;" onchange="onBackfillFilterChange()">
+          <option value="">All clubs</option>
+        </select>
+        <select id="backfill-season" class="filter-select" style="width:140px;font-size:12px;" onchange="onBackfillFilterChange()">
+          <option value="">All seasons</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="runMdmBackfill(true)">⊙ Dry Run</button>
+        <button class="btn btn-primary btn-sm" id="backfill-apply-btn" style="display:none;" onclick="runMdmBackfill(false)">✓ Apply Backfill</button>
+        <button class="btn btn-ghost btn-sm" id="backfill-cancel-btn" style="display:none;" onclick="clearBackfillPreview()">✕ Cancel</button>
+      </div>
+      <div id="backfill-status" style="display:none;font-size:11px;color:var(--accent);margin-bottom:8px;"></div>
+      <div id="backfill-preview" style="display:none;"></div>
+    </div>
+
     <!-- FULL DATA WIPE -->
     <div class="card" style="margin-bottom:16px;border-color:rgba(255,92,92,0.3);">
       <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--red);margin-bottom:4px;">Full Data Wipe</div>
@@ -625,6 +670,52 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       <button class="btn btn-danger btn-sm" onclick="openWipeModal('full','all Hero PIDs, Players and Parent PIDs')">⚠ Full Data Wipe</button>
     </div>
 
+  </div>
+</div>
+
+<!-- ROSTER MAPPINGS PAGE -->
+<div id="page-rostermappings" class="hidden">
+  <div class="topbar">
+    <div class="page-title">Roster Mappings</div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <a id="rm-at-link" href="https://airtable.com" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="font-size:11px;">↗ Open in Airtable</a>
+    </div>
+  </div>
+  <div class="content">
+    <div id="rm-dupe-banner" style="display:none;background:var(--red-bg,rgba(255,92,92,0.08));border:1px solid rgba(255,92,92,0.25);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--red);margin-bottom:14px;"></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
+      <select id="rm-filter-club" class="filter-select" style="width:180px;font-size:12px;" onchange="renderRosterMappings()">
+        <option value="">All clubs</option>
+      </select>
+      <select id="rm-filter-season" class="filter-select" style="width:140px;font-size:12px;" onchange="renderRosterMappings()">
+        <option value="">All seasons</option>
+      </select>
+      <select id="rm-filter-active" class="filter-select" style="width:130px;font-size:12px;" onchange="renderRosterMappings()">
+        <option value="">Active + inactive</option>
+        <option value="1">Active only</option>
+        <option value="0">Inactive only</option>
+      </select>
+      <span id="rm-count-label" style="font-size:11px;color:var(--text3);margin-left:4px;"></span>
+    </div>
+    <div id="rm-coverage-banner" style="margin-bottom:14px;"></div>
+    <div style="overflow-x:auto;">
+      <table class="data-table" style="font-size:12px;" id="rm-table">
+        <thead>
+          <tr>
+            <th>Club</th>
+            <th>Season</th>
+            <th>Font Type</th>
+            <th>Kit Type</th>
+            <th>Roster Name</th>
+            <th>Roster ID</th>
+            <th style="text-align:center;">Active</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody id="rm-tbody"></tbody>
+      </table>
+    </div>
+    <div id="rm-empty" style="display:none;padding:32px;text-align:center;color:var(--text3);font-size:13px;">No roster mappings found.</div>
   </div>
 </div>
 
@@ -927,14 +1018,14 @@ function buildCacheMaps() {
   CACHE_MAPS.rosterMappingByKey = new Map(
     (CACHE.rosterMappings||[])
       .filter(r => r.Active)
-      .map(r => [`${r.ClubID}|${r.SeasonID}|${(r.FontType||'').toLowerCase()}|${(r.KitType||'').toLowerCase()}`, r])
+      .map(r => [`${r.ClubID}|${r.SeasonID}|${String(r.FontType||'').trim().toLowerCase()}|${String(r.KitType||'').trim().toLowerCase()}`, r])
   );
 }
 
 // Resolve ActorID / RosterID for a hero PID at import time
 // actorId = player's MDMActorID; clubId/seasonId/fontType/kitType from the hero row
 function resolveMdmLinks(actorId, clubId, seasonId, fontType, kitType) {
-  const rmKey = `${clubId}|${seasonId}|${(fontType||'').toLowerCase()}|${(kitType||'').toLowerCase()}`;
+  const rmKey = `${clubId}|${seasonId}|${String(fontType||'').trim().toLowerCase()}|${String(kitType||'').trim().toLowerCase()}`;
   const rm = CACHE_MAPS.rosterMappingByKey.get(rmKey);
   return {
     actorId: actorId || '',
@@ -948,7 +1039,7 @@ function resolveMdmLinks(actorId, clubId, seasonId, fontType, kitType) {
 function validateRosterMappingDuplicates() {
   const counts = new Map();
   (CACHE.rosterMappings||[]).filter(r=>r.Active).forEach(r => {
-    const k = `${r.ClubID}|${r.SeasonID}|${(r.FontType||'').toLowerCase()}|${(r.KitType||'').toLowerCase()}`;
+    const k = `${r.ClubID}|${r.SeasonID}|${String(r.FontType||'').trim().toLowerCase()}|${String(r.KitType||'').trim().toLowerCase()}`;
     if (!counts.has(k)) counts.set(k, []);
     counts.get(k).push(r);
   });
@@ -1234,7 +1325,7 @@ async function loadCache(force, dataOnly=false){
 
 // ─── PAGES ────────────────────────────────────────────────────────────────────
 function showPage(page) {
-  ['search','manage','import','clubs','seasons','settings','cleanup','bulkexport','fonts'].forEach(p => {
+  ['search','manage','import','clubs','seasons','settings','cleanup','bulkexport','fonts','rostermappings'].forEach(p => {
     document.getElementById('page-'+p)?.classList.add('hidden');
     document.getElementById('nav-'+p)?.classList.remove('active');
   });
@@ -1247,6 +1338,8 @@ function showPage(page) {
   if (page==='settings') refreshSettingsStatus();
   if (page==='bulkexport') initBulkExport();
   if (page==='fonts') renderFontsPage();
+  if (page==='rostermappings') initRosterMappingsPage();
+  if (page==='cleanup') initBackfillSelects();
   if (page==='search') {
     const sf = document.getElementById('filter-status');
     if (sf && sf.value === '') sf.value = 'active';
@@ -1263,7 +1356,7 @@ function switchTab(tab) {
 }
 
 function switchImportTab(tab) {
-  ['storage','creation','homeplate','mdmroster','squadupdate'].forEach(t => {
+  ['storage','creation','homeplate','mdmroster','squadupdate','mdmpreview'].forEach(t => {
     document.getElementById('import-content-'+t)?.classList.add('hidden');
     document.getElementById('import-tab-'+t)?.classList.remove('active');
   });
@@ -1274,6 +1367,7 @@ function switchImportTab(tab) {
     const lbl = document.getElementById('provisional-count-label');
     if (lbl) lbl.textContent = provisionals.length ? `${provisionals.length} provisional PID${provisionals.length!==1?'s':''} currently in AT` : 'No provisional PIDs in AT';
   }
+  if (tab === 'mdmpreview') initMdmPreviewTab();
 }
 
 // ─── MODALS ───────────────────────────────────────────────────────────────────
@@ -2772,6 +2866,8 @@ function calcDataHealth() {
   const incompleteParents = CACHE.parents.filter(p => !p.PID || (isUSSport(p.ClubID) && !p.CustomSKU)).length;
   const incompleteHeroes = CACHE.heroes.filter(h => !h.ParentPIDID || !h.KitType || !h.GarmentType || (isUSSport(h.ClubID) && (!h.ProductTitle || !h.Gender || !h.JerseyColour))).length;
   const incompleteMdm = (CACHE.mdmRosterMembers||[]).filter(m => !m.RosterMemberID || String(m.RosterMemberID)==='0' || !m.RosterID).length;
+  const missingRosterLink = CACHE.heroes.filter(h => h.Status==='active' && !h.RosterID).length;
+  const missingActorId = CACHE.heroes.filter(h => h.Status==='active' && !h.ActorID).length;
   const provisionalHeroes = CACHE.heroes.filter(h => h.Status === 'provisional').length;
   const total = CACHE.players.length + CACHE.parents.length + CACHE.heroes.length;
   const totalIncomplete = incompletePlayers + incompleteParents + incompleteHeroes + incompleteMdm;
@@ -2806,10 +2902,12 @@ function calcDataHealth() {
       if (incompletePlayers > 0) parts.push(`${incompletePlayers} player${incompletePlayers !== 1 ? 's' : ''}`);
       if (incompleteParents > 0) parts.push(`${incompleteParents} parent PID${incompleteParents !== 1 ? 's' : ''}`);
       if (incompleteHeroes > 0) parts.push(`${incompleteHeroes} hero PID${incompleteHeroes !== 1 ? 's' : ''}`);
+      if (missingRosterLink > 0) parts.push(`<a href="#" onclick="showPage('cleanup');return false;" style="color:${colour};">${missingRosterLink} hero PID${missingRosterLink !== 1 ? 's' : ''} missing RosterID</a>`);
+      if (missingActorId > 0) parts.push(`<a href="#" onclick="showPage('cleanup');return false;" style="color:${colour};">${missingActorId} hero PID${missingActorId !== 1 ? 's' : ''} missing ActorID</a>`);
       banner.innerHTML = `<span style="color:${colour};font-weight:600;">${icon} ${totalIssues} item${totalIssues !== 1 ? 's' : ''} need attention</span><span style="color:var(--text2);margin-left:8px;">— ${parts.join(', ')}.</span>`;
     }
   }
-  return { totalIncomplete, incompletePlayers, incompleteParents, incompleteHeroes, provisionalHeroes, level };
+  return { totalIncomplete, incompletePlayers, incompleteParents, incompleteHeroes, provisionalHeroes, missingRosterLink, missingActorId, level };
 }
 
 function isEntryIncomplete(type, id) {
@@ -4959,6 +5057,561 @@ async function deleteFontRecord(id) {
     renderFontsPage();
     toast('Font deleted');
   } catch(e) { toast('Error: '+e.message,'error'); }
+}
+
+// ─── MDM RESOLUTION PREVIEW ───────────────────────────────────────────────────
+function initMdmPreviewTab() {
+  const clubSel = document.getElementById('mdmp-club');
+  const prevClub = clubSel.value;
+  clubSel.innerHTML = '<option value="">— Select club —</option>' +
+    CACHE.clubs.map(c=>`<option value="${c.id}">${c.Name||c.id}</option>`).join('');
+  if (prevClub) clubSel.value = prevClub;
+  mdmpOnClubChange();
+}
+
+function mdmpOnClubChange() {
+  const clubId = document.getElementById('mdmp-club')?.value || '';
+  const seasonSel = document.getElementById('mdmp-season');
+  const prevSeason = seasonSel.value;
+  // Show only seasons that have roster mappings for this club
+  const relevantSeasonIds = clubId
+    ? [...new Set((CACHE.rosterMappings||[]).filter(r=>r.ClubID===clubId).map(r=>r.SeasonID))]
+    : [...new Set((CACHE.rosterMappings||[]).map(r=>r.SeasonID))];
+  const seasons = relevantSeasonIds.map(id=>CACHE.seasons.find(s=>s.id===id)).filter(Boolean);
+  seasonSel.innerHTML = '<option value="">— Select season —</option>' +
+    seasons.map(s=>`<option value="${s.id}">${s.Label||s.id}</option>`).join('');
+  if (prevSeason && seasons.find(s=>s.id===prevSeason)) seasonSel.value = prevSeason;
+  document.getElementById('mdmp-content').innerHTML = '';
+  document.getElementById('mdmp-summary-pills').innerHTML = '';
+}
+
+async function renderMdmPreview() {
+  const clubId = document.getElementById('mdmp-club')?.value || '';
+  const seasonId = document.getElementById('mdmp-season')?.value || '';
+  if (!clubId || !seasonId) {
+    document.getElementById('mdmp-content').innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:13px;">Select a club and season to preview.</div>';
+    document.getElementById('mdmp-summary-pills').innerHTML = '';
+    return;
+  }
+  // Ensure mdmRosterMembers loaded
+  const loading = document.getElementById('mdmp-loading');
+  loading.style.display = '';
+  document.getElementById('mdmp-content').innerHTML = '';
+  document.getElementById('mdmp-summary-pills').innerHTML = '';
+  if (!CACHE.mdmRosterMembers) {
+    try {
+      const recs = await atGetAll(TABLES.mdmRosterMembers);
+      CACHE.mdmRosterMembers = recs.map(x=>({id:x.id,...x.fields}));
+    } catch(e) {
+      loading.style.display = 'none';
+      document.getElementById('mdmp-content').innerHTML = `<div style="padding:20px;text-align:center;color:var(--red);font-size:13px;">Failed to load MDM roster members: ${e.message}</div>`;
+      return;
+    }
+  }
+  loading.style.display = 'none';
+
+  // Get active roster mappings for this club+season
+  const activeMappings = (CACHE.rosterMappings||[]).filter(r=>r.ClubID===clubId && r.SeasonID===seasonId && r.Active);
+  const rosterIds = [...new Set(activeMappings.map(r=>r.RosterID).filter(Boolean))];
+
+  // Hero PIDs for this club+season
+  const heroesForScope = (CACHE.heroes||[]).filter(h=>h.ClubID===clubId && h.SeasonID===seasonId && h.Status==='active');
+
+  // Build index maps for fast lookup
+  const heroByRosterMemberId = new Map();
+  const heroByActorId = new Map();
+  heroesForScope.forEach(h => {
+    if (h.RosterMemberID) heroByRosterMemberId.set(String(h.RosterMemberID), h);
+    if (h.ActorID) {
+      if (!heroByActorId.has(h.ActorID)) heroByActorId.set(h.ActorID, []);
+      heroByActorId.get(h.ActorID).push(h);
+    }
+  });
+
+  // Track which heroes get matched (to find orphans)
+  const matchedHeroIds = new Set();
+
+  // Counters
+  let cntMatched=0, cntUnmatched=0, cntMismatch=0;
+
+  // Build sections per rosterID
+  let html = '';
+
+  // Collect all MDM members for this club+season
+  const allMdmMembers = (CACHE.mdmRosterMembers||[]).filter(m => rosterIds.includes(m.RosterID));
+
+  if (rosterIds.length === 0) {
+    html = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:13px;">No active roster mappings found for this club + season. Add rows in the Roster Mappings page first.</div>';
+  } else {
+    for (const rosterId of rosterIds) {
+      const mapping = activeMappings.find(r=>r.RosterID===rosterId);
+      const rosterName = mapping?.RosterName || rosterId;
+      const fontType = mapping?.FontType || '';
+      const kitType = mapping?.KitType || '';
+      const members = allMdmMembers.filter(m=>m.RosterID===rosterId)
+        .sort((a,b)=>{ const na=parseInt(a.JerseyNumber||'99999'); const nb=parseInt(b.JerseyNumber||'99999'); return na-nb; });
+
+      let rowsHtml = '';
+      for (const m of members) {
+        const rmid = String(m.RosterMemberID||'');
+        const actorId = String(m.ActorID||'');
+
+        // Match: RosterMemberID first, ActorID fallback
+        let hero = null;
+        let matchMethod = 'none';
+        if (rmid && rmid !== '0' && heroByRosterMemberId.has(rmid)) {
+          hero = heroByRosterMemberId.get(rmid);
+          matchMethod = 'RosterMemberID';
+        } else if (actorId && heroByActorId.has(actorId)) {
+          const candidates = heroByActorId.get(actorId);
+          // Prefer hero whose FontType+KitType matches this roster mapping
+          hero = candidates.find(h=>(h.FontType||'').toLowerCase()===(fontType||'').toLowerCase() && (h.KitType||'').toLowerCase()===(kitType||'').toLowerCase())
+              || candidates[0];
+          matchMethod = 'ActorID';
+        }
+
+        // Determine status
+        let status, statusStyle;
+        if (hero) {
+          matchedHeroIds.add(hero.id);
+          // Check for mismatch: hero has a populated RosterID that differs from this MDM roster
+          if (hero.RosterID && hero.RosterID !== rosterId) {
+            status = 'Mismatch';
+            statusStyle = 'background:rgba(255,92,92,0.12);color:var(--red);border:1px solid rgba(255,92,92,0.25);';
+            cntMismatch++;
+          } else {
+            status = 'Matched';
+            statusStyle = 'background:var(--green-bg);color:var(--green);border:1px solid rgba(61,214,140,0.2);';
+            cntMatched++;
+          }
+        } else {
+          status = 'Unmatched MDM';
+          statusStyle = 'background:var(--amber-bg);color:var(--amber);border:1px solid rgba(255,179,64,0.2);';
+          cntUnmatched++;
+        }
+
+        const player = hero ? CACHE_MAPS.playerById.get(hero.PlayerID) : null;
+        const rStatusBadge = m.RosterStatus==='A' ? '<span style="color:var(--green);font-size:10px;">A</span>' : `<span style="color:var(--text3);font-size:10px;">${m.RosterStatus||'—'}</span>`;
+        const dStatusBadge = m.DisplayStatus==='V' ? '<span style="color:var(--green);font-size:10px;">V</span>' : `<span style="color:var(--amber);font-size:10px;">${m.DisplayStatus||'—'}</span>`;
+
+        rowsHtml += `<tr>
+          <td style="text-align:center;"><span class="badge" style="${statusStyle}font-size:10px;">${status}</span></td>
+          <td style="text-align:center;font-size:10px;color:var(--text3);">${matchMethod==='none'?'—':`<span style="font-size:10px;font-family:'DM Mono',monospace;color:var(--text3);">${matchMethod}</span>`}</td>
+          <td class="mono" style="font-size:11px;">${escHtml(m.RosterMemberID||'—')}</td>
+          <td class="mono" style="font-size:11px;color:var(--text3);">${escHtml(m.ActorID||'—')}</td>
+          <td style="color:var(--text);">${escHtml(m.JerseyName||'—')}</td>
+          <td class="mono" style="text-align:center;">${m.JerseyNumber||'—'}</td>
+          <td style="text-align:center;">${rStatusBadge} / ${dStatusBadge}</td>
+          <td class="mono" style="font-size:11px;color:${hero?'var(--text)':'var(--text3)'};">${hero?escHtml(String(hero.PID||'')):'—'}</td>
+          <td style="color:var(--text2);font-size:11px;">${player?escHtml(player.Name||''):'—'}</td>
+          <td class="mono" style="font-size:10px;color:var(--text3);">${hero?escHtml(hero.ActorID||''):'—'}</td>
+          <td class="mono" style="font-size:10px;color:var(--text3);">${hero?escHtml(hero.RosterID||''):'—'}</td>
+          <td style="font-size:10px;color:var(--text3);">${hero?escHtml(hero.FontType||''):'—'}</td>
+          <td style="font-size:10px;color:var(--text3);">${hero?escHtml(hero.KitType||''):'—'}</td>
+          <td style="font-size:10px;color:var(--text3);">${hero?escHtml(hero.GarmentType||''):'—'}</td>
+        </tr>`;
+      }
+
+      html += `<div style="margin-bottom:24px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <span style="font-size:12px;font-weight:600;color:var(--text);">${escHtml(rosterName)}</span>
+          <span class="mono" style="font-size:10px;color:var(--text3);">${escHtml(rosterId)}</span>
+          <span style="font-size:10px;color:var(--text3);">${escHtml(fontType)} · ${escHtml(kitType)}</span>
+          <span style="font-size:10px;color:var(--text3);margin-left:4px;">${members.length} member${members.length!==1?'s':''}</span>
+        </div>
+        ${members.length===0
+          ? '<div style="font-size:12px;color:var(--text3);padding:8px 0;">No MDM roster members found for this RosterID.</div>'
+          : `<div style="overflow-x:auto;"><table class="data-table" style="font-size:11px;min-width:900px;">
+          <thead><tr>
+            <th>Status</th><th>Match method</th>
+            <th colspan="2" style="text-align:center;border-bottom:1px solid var(--border);">— MDM —</th>
+            <th>Jersey name</th><th>#</th><th style="text-align:center;">R/D</th>
+            <th colspan="6" style="text-align:center;border-bottom:1px solid var(--border);">— Hero PID —</th>
+            <th>Garment</th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table></div>`}
+      </div>`;
+    }
+  }
+
+  // Orphaned heroes: active hero PIDs for this scope not matched to any MDM member
+  const orphans = heroesForScope.filter(h=>!matchedHeroIds.has(h.id));
+  let cntOrphaned = orphans.length;
+  if (orphans.length > 0) {
+    let orphanRows = orphans.map(h=>{
+      const player = CACHE_MAPS.playerById.get(h.PlayerID);
+      return `<tr>
+        <td colspan="2" style="text-align:center;"><span class="badge" style="background:rgba(99,179,237,0.12);color:#63b3ed;border:1px solid rgba(99,179,237,0.2);font-size:10px;">Orphaned Hero</span></td>
+        <td class="mono" style="font-size:11px;color:var(--text3);">—</td>
+        <td class="mono" style="font-size:11px;color:var(--text3);">—</td>
+        <td style="color:var(--text3);">—</td><td>—</td><td>—</td>
+        <td class="mono" style="font-size:11px;color:var(--text);">${escHtml(String(h.PID||''))}</td>
+        <td style="font-size:11px;">${escHtml(player?.Name||'—')}</td>
+        <td class="mono" style="font-size:10px;color:var(--text3);">${escHtml(h.ActorID||'—')}</td>
+        <td class="mono" style="font-size:10px;color:var(--text3);">${escHtml(h.RosterID||'—')}</td>
+        <td style="font-size:10px;color:var(--text3);">${escHtml(h.FontType||'')}</td>
+        <td style="font-size:10px;color:var(--text3);">${escHtml(h.KitType||'')}</td>
+        <td style="font-size:10px;color:var(--text3);">${escHtml(h.GarmentType||'')}</td>
+      </tr>`;
+    }).join('');
+    html += `<div style="margin-bottom:24px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <span style="font-size:12px;font-weight:600;color:#63b3ed;">Orphaned Hero PIDs</span>
+        <span style="font-size:10px;color:var(--text3);">Active hero PIDs with no matching MDM roster member</span>
+      </div>
+      <div style="overflow-x:auto;"><table class="data-table" style="font-size:11px;min-width:900px;">
+        <thead><tr><th>Status</th><th>Match method</th><th colspan="2">MDM</th><th>Jersey name</th><th>#</th><th>R/D</th><th colspan="6">Hero PID</th><th>Garment</th></tr></thead>
+        <tbody>${orphanRows}</tbody>
+      </table></div>
+    </div>`;
+  }
+
+  // Summary pills
+  const total = allMdmMembers.length;
+  document.getElementById('mdmp-summary-pills').innerHTML = `
+    <div class="stat-pill"><span class="stat-label">MDM members</span><span class="stat-value">${total}</span></div>
+    <div class="stat-pill"><span class="stat-label">Matched</span><span class="stat-value" style="color:var(--green);">${cntMatched}</span></div>
+    <div class="stat-pill"><span class="stat-label">Unmatched MDM</span><span class="stat-value" style="color:var(--amber);">${cntUnmatched}</span></div>
+    <div class="stat-pill"><span class="stat-label">Mismatch</span><span class="stat-value" style="color:var(--red);">${cntMismatch}</span></div>
+    <div class="stat-pill"><span class="stat-label">Orphaned hero</span><span class="stat-value" style="color:#63b3ed;">${cntOrphaned}</span></div>`;
+
+  document.getElementById('mdmp-content').innerHTML = html || '<div style="padding:20px;text-align:center;color:var(--text3);font-size:13px;">Nothing to display.</div>';
+}
+
+// ─── MDM BACKFILL ─────────────────────────────────────────────────────────────
+function initBackfillSelects() {
+  const clubSel = document.getElementById('backfill-club');
+  const seasonSel = document.getElementById('backfill-season');
+  if (!clubSel || clubSel.options.length > 1) return; // already populated
+  CACHE.clubs.forEach(c => {
+    const o = document.createElement('option'); o.value=c.id; o.textContent=c.Name||c.id;
+    clubSel.appendChild(o);
+  });
+  CACHE.seasons.forEach(s => {
+    const o = document.createElement('option'); o.value=s.id; o.textContent=s.Label||s.id;
+    seasonSel.appendChild(o);
+  });
+}
+
+async function runMdmBackfill(dryRun) {
+  initBackfillSelects();
+  const clubFilter = document.getElementById('backfill-club')?.value || '';
+  const seasonFilter = document.getElementById('backfill-season')?.value || '';
+  const statusEl = document.getElementById('backfill-status');
+  const previewEl = document.getElementById('backfill-preview');
+  const applyBtn = document.getElementById('backfill-apply-btn');
+  const cancelBtn = document.getElementById('backfill-cancel-btn');
+
+  // Guard: apply must use the reviewed dry-run snapshot
+  if (!dryRun) {
+    if (!window._backfillPending) {
+      toast('Run dry run first before applying.', 'error');
+      return;
+    }
+    // Apply from snapshot — do not recompute candidates
+    applyBtn.disabled = true;
+    applyBtn.textContent = 'Applying…';
+    statusEl.style.display = '';
+    statusEl.textContent = 'Applying backfill…';
+    const pending = window._backfillPending;
+    let done = 0, failed = 0;
+    for (let i = 0; i < pending.length; i += 10) {
+      const chunk = pending.slice(i, i+10);
+      statusEl.textContent = `Applying… ${i}/${pending.length}`;
+      await Promise.all(chunk.map(async u => {
+        try {
+          await atUpdate(TABLES.heroes, u.hero.id, u.fields);
+          Object.assign(u.hero, u.fields);
+          done++;
+        } catch(e) { failed++; }
+      }));
+    }
+    buildCacheMaps();
+    updateStats();
+    previewEl.style.display = 'none';
+    applyBtn.style.display = 'none';
+    applyBtn.disabled = false;
+    applyBtn.textContent = '✓ Apply Backfill';
+    cancelBtn.style.display = 'none';
+    window._backfillPending = null; // always clear — whether success or partial failure
+    if (failed > 0) {
+      statusEl.textContent = `⚠ Backfill partial — ${done} updated, ${failed} failed. Run dry run again to see remaining.`;
+      toast(`MDM backfill: ${done} updated, ${failed} failed`, 'error');
+    } else {
+      statusEl.textContent = `✓ Backfill complete — ${done} updated.`;
+      toast(`MDM backfill: ${done} hero PID${done!==1?'s':''} updated`);
+    }
+    return;
+  }
+
+  // Dry run
+  statusEl.style.display = '';
+  statusEl.textContent = 'Analysing…';
+  previewEl.style.display = 'none';
+  applyBtn.style.display = 'none';
+  cancelBtn.style.display = 'none';
+  window._backfillPending = null;
+
+  // Scope: active hero PIDs missing ActorID or RosterID
+  const candidates = (CACHE.heroes||[]).filter(h => {
+    if (h.Status !== 'active') return false;
+    if (clubFilter && h.ClubID !== clubFilter) return false;
+    if (seasonFilter && h.SeasonID !== seasonFilter) return false;
+    return !h.ActorID || !h.RosterID;
+  });
+
+  if (candidates.length === 0) {
+    statusEl.textContent = `✓ No active hero PIDs missing ActorID or RosterID${clubFilter||seasonFilter?' in this scope':''}.`;
+    return;
+  }
+
+  // Build proposed updates — track skipped reason buckets
+  const updates = [];
+  let skippedNoActor = 0, skippedNoMapping = 0;
+  for (const hero of candidates) {
+    const player = CACHE_MAPS.playerById.get(hero.PlayerID);
+    const actorId = player?.MDMActorID || hero.ActorID || '';
+    const {rosterId, missingMapping} = resolveMdmLinks(actorId, hero.ClubID, hero.SeasonID, hero.FontType||'', hero.KitType||'');
+    const fields = {};
+    if (!hero.ActorID && actorId) fields.ActorID = actorId;
+    if (!hero.RosterID && rosterId) fields.RosterID = rosterId;
+    if (Object.keys(fields).length === 0) {
+      // Track why we're skipping
+      if (!actorId) skippedNoActor++;
+      else if (missingMapping) skippedNoMapping++;
+      else skippedNoActor++; // fallback bucket
+      continue;
+    }
+    updates.push({hero, player, actorId, rosterId, missingMapping, fields});
+  }
+
+  const totalSkipped = skippedNoActor + skippedNoMapping;
+
+  if (updates.length === 0) {
+    const reasons = [];
+    if (skippedNoActor > 0) reasons.push(`${skippedNoActor} have no MDMActorID on player`);
+    if (skippedNoMapping > 0) reasons.push(`${skippedNoMapping} have no active roster mapping`);
+    statusEl.textContent = `ℹ ${candidates.length} hero PID${candidates.length!==1?'s':''} missing links, but none could be resolved. Skipped: ${reasons.join(', ')}.`;
+    return;
+  }
+
+  // Show preview table
+  const missingMappingCount = updates.filter(u=>u.missingMapping).length;
+  const skipParts = [];
+  if (skippedNoActor > 0) skipParts.push(`${skippedNoActor} no MDMActorID`);
+  if (skippedNoMapping > 0) skipParts.push(`${skippedNoMapping} no roster mapping`);
+  let html = `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
+    <b>${updates.length}</b> hero PID${updates.length!==1?'s':''} will be updated
+    ${totalSkipped>0?`· <span style="color:var(--text3);">skipped ${totalSkipped}: ${skipParts.join(', ')}</span>`:''}
+    ${missingMappingCount>0?`· <span style="color:var(--amber);">⚠ ${missingMappingCount} still have no active roster mapping — RosterID will remain blank</span>`:''}
+  </div>`;
+  html += `<div style="max-height:320px;overflow-y:auto;"><table class="data-table" style="font-size:11px;">
+    <thead><tr><th>PID</th><th>Player</th><th>Club</th><th>Font · Kit</th><th>ActorID → fill</th><th>RosterID → fill</th></tr></thead>
+    <tbody>${updates.slice(0,200).map(u => {
+      const club = CACHE.clubs.find(c=>c.id===u.hero.ClubID);
+      return `<tr>
+        <td class="mono">${escHtml(String(u.hero.PID||''))}</td>
+        <td>${escHtml(u.player?.Name||'—')}</td>
+        <td>${escHtml(club?.Name||'—')}</td>
+        <td style="font-size:10px;color:var(--text3);">${escHtml(u.hero.FontType||'')} · ${escHtml(u.hero.KitType||'')}</td>
+        <td class="mono" style="font-size:10px;">${u.fields.ActorID?`<span style="color:var(--green);">+${escHtml(u.fields.ActorID)}</span>`:'<span style="color:var(--text3);">—</span>'}</td>
+        <td class="mono" style="font-size:10px;">${u.fields.RosterID?`<span style="color:var(--green);">+${escHtml(u.fields.RosterID)}</span>`:'<span style="color:var(--amber);">no mapping</span>'}</td>
+      </tr>`;
+    }).join('')}${updates.length>200?`<tr><td colspan="6" style="color:var(--text3);font-size:11px;padding:8px;">… and ${updates.length-200} more</td></tr>`:''}</tbody>
+  </table></div>`;
+  previewEl.innerHTML = html;
+  previewEl.style.display = '';
+  applyBtn.disabled = false;
+  applyBtn.textContent = '✓ Apply Backfill';
+  applyBtn.style.display = '';
+  cancelBtn.style.display = '';
+  statusEl.textContent = `Dry run complete — ${updates.length} update${updates.length!==1?'s':''} proposed. Review above then click Apply.`;
+  // Store reviewed snapshot
+  window._backfillPending = updates;
+}
+
+function clearBackfillPreview() {
+  document.getElementById('backfill-preview').style.display = 'none';
+  document.getElementById('backfill-apply-btn').style.display = 'none';
+  document.getElementById('backfill-apply-btn').disabled = false;
+  document.getElementById('backfill-apply-btn').textContent = '✓ Apply Backfill';
+  document.getElementById('backfill-cancel-btn').style.display = 'none';
+  document.getElementById('backfill-status').style.display = 'none';
+  window._backfillPending = null;
+}
+
+function onBackfillFilterChange() {
+  // Filters changed — invalidate pending snapshot so Apply can't fire stale data
+  if (window._backfillPending) {
+    window._backfillPending = null;
+    const applyBtn = document.getElementById('backfill-apply-btn');
+    if (applyBtn) applyBtn.style.display = 'none';
+    const previewEl = document.getElementById('backfill-preview');
+    if (previewEl) previewEl.style.display = 'none';
+    const cancelBtn = document.getElementById('backfill-cancel-btn');
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    const statusEl = document.getElementById('backfill-status');
+    if (statusEl) { statusEl.style.display = ''; statusEl.textContent = 'Filters changed — run dry run again.'; }
+  }
+}
+
+// ─── ROSTER MAPPINGS PAGE ─────────────────────────────────────────────────────
+function initRosterMappingsPage() {
+  // Populate filter dropdowns
+  const clubSel = document.getElementById('rm-filter-club');
+  const seasonSel = document.getElementById('rm-filter-season');
+  // Rebuild club options from unique clubs present in rosterMappings
+  const clubIds = [...new Set((CACHE.rosterMappings||[]).map(r=>r.ClubID))];
+  const clubsSorted = clubIds.map(id=>CACHE.clubs.find(c=>c.id===id)).filter(Boolean).sort((a,b)=>(a.Name||'').localeCompare(b.Name||''));
+  const prevClub = clubSel.value;
+  clubSel.innerHTML = '<option value="">All clubs</option>' + clubsSorted.map(c=>`<option value="${c.id}">${c.Name||c.id}</option>`).join('');
+  if (prevClub) clubSel.value = prevClub;
+  const seasonIds = [...new Set((CACHE.rosterMappings||[]).map(r=>r.SeasonID))];
+  const seasonsSorted = seasonIds.map(id=>CACHE.seasons.find(s=>s.id===id)).filter(Boolean);
+  const prevSeason = seasonSel.value;
+  seasonSel.innerHTML = '<option value="">All seasons</option>' + seasonsSorted.map(s=>`<option value="${s.id}">${s.Label||s.id}</option>`).join('');
+  if (prevSeason) seasonSel.value = prevSeason;
+  // Airtable deep link
+  const atLink = document.getElementById('rm-at-link');
+  if (atLink) atLink.href = `https://airtable.com/${AT_BASE}/${TABLES.rosterMappings}`;
+  // Dupe banner
+  const dupes = validateRosterMappingDuplicates();
+  const dupeBanner = document.getElementById('rm-dupe-banner');
+  if (dupes.length > 0) {
+    dupeBanner.style.display = '';
+    dupeBanner.innerHTML = `⚠ ${dupes.length} duplicate active mapping${dupes.length!==1?'s':''} detected — same Club/Season/FontType/KitType has multiple active rows. Fix in Airtable before importing.<br><span style="font-size:11px;color:var(--text3);">${dupes.map(d=>`<span class="mono">${d.key}</span> (${d.count} rows)`).join(' · ')}</span>`;
+  } else {
+    dupeBanner.style.display = 'none';
+  }
+  renderRosterMappings();
+}
+
+function renderRosterMappings() {
+  const clubFilter = document.getElementById('rm-filter-club')?.value || '';
+  const seasonFilter = document.getElementById('rm-filter-season')?.value || '';
+  const activeFilter = document.getElementById('rm-filter-active')?.value || '';
+  let rows = (CACHE.rosterMappings||[]).filter(r => {
+    if (clubFilter && r.ClubID !== clubFilter) return false;
+    if (seasonFilter && r.SeasonID !== seasonFilter) return false;
+    if (activeFilter === '1' && !r.Active) return false;
+    if (activeFilter === '0' && r.Active) return false;
+    return true;
+  });
+  // Sort: club name → season → fontType → kitType
+  rows = rows.slice().sort((a,b) => {
+    const ca = CACHE.clubs.find(c=>c.id===a.ClubID)?.Name||'';
+    const cb = CACHE.clubs.find(c=>c.id===b.ClubID)?.Name||'';
+    if (ca!==cb) return ca.localeCompare(cb);
+    const sa = CACHE.seasons.find(s=>s.id===a.SeasonID)?.Label||'';
+    const sb = CACHE.seasons.find(s=>s.id===b.SeasonID)?.Label||'';
+    if (sa!==sb) return sa.localeCompare(sb);
+    if ((a.FontType||'')!==(b.FontType||'')) return (a.FontType||'').localeCompare(b.FontType||'');
+    return (a.KitType||'').localeCompare(b.KitType||'');
+  });
+  const tbody = document.getElementById('rm-tbody');
+  const empty = document.getElementById('rm-empty');
+  const countLabel = document.getElementById('rm-count-label');
+  if (!tbody) return;
+  if (rows.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = '';
+    countLabel.textContent = '0 rows';
+  } else {
+    empty.style.display = 'none';
+    countLabel.textContent = `${rows.length} row${rows.length!==1?'s':''}`;
+    tbody.innerHTML = rows.map(r => {
+      const club = CACHE.clubs.find(c=>c.id===r.ClubID);
+      const season = CACHE.seasons.find(s=>s.id===r.SeasonID);
+      const activeChecked = r.Active ? 'checked' : '';
+      const rowStyle = r.Active ? '' : 'opacity:0.45;';
+      return `<tr style="${rowStyle}" id="rmrow-${r.id}">
+        <td style="color:var(--text);">${club?.Name||r.ClubID||'—'}</td>
+        <td>${season?.Label||r.SeasonID||'—'}</td>
+        <td><span class="badge" style="background:rgba(99,179,237,0.12);color:#63b3ed;border:1px solid rgba(99,179,237,0.2);font-size:10px;">${r.FontType||'—'}</span></td>
+        <td>${r.KitType||'—'}</td>
+        <td style="color:var(--text2);">${r.RosterName||'—'}</td>
+        <td class="mono" style="color:var(--text3);font-size:11px;">${r.RosterID||'—'}</td>
+        <td style="text-align:center;">
+          <input type="checkbox" ${activeChecked} onchange="rmToggleActive('${r.id}',this.checked)" style="cursor:pointer;accent-color:var(--accent);">
+        </td>
+        <td id="rmrow-notes-${r.id}" style="color:var(--text3);font-size:11px;" title="Double-click to edit">${escHtml(r.Notes||'')}</td>
+      </tr>`;
+    }).join('');
+    // Wire up notes inline edit
+    rows.forEach(r => {
+      const cell = document.getElementById(`rmrow-notes-${r.id}`);
+      if (cell) makeEditable(cell, r.id, 'Notes', (val) => rmSaveNotes(r.id, val));
+    });
+  }
+  // Coverage banner: hero PIDs per club+season that have no active mapping
+  renderRmCoverageBanner(clubFilter, seasonFilter);
+}
+
+function renderRmCoverageBanner(clubFilter, seasonFilter) {
+  const banner = document.getElementById('rm-coverage-banner');
+  if (!banner) return;
+  // Group active heroes by ClubID+SeasonID+FontType+KitType and check mapping
+  const missingByClubSeason = new Map();
+  (CACHE.heroes||[]).filter(h => h.Status === 'active' && !h.RosterID).forEach(h => {
+    const clubId = h.ClubID || '';
+    const seasonId = h.SeasonID || '';
+    if (clubFilter && clubId !== clubFilter) return;
+    if (seasonFilter && seasonId !== seasonFilter) return;
+    const key = `${clubId}|${seasonId}`;
+    missingByClubSeason.set(key, (missingByClubSeason.get(key)||0) + 1);
+  });
+  if (missingByClubSeason.size === 0) {
+    banner.innerHTML = `<div style="background:var(--green-bg);border:1px solid rgba(61,214,140,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--green);">✓ All active hero PIDs${clubFilter||seasonFilter?' in this view':''} have a RosterID linked</div>`;
+    return;
+  }
+  const lines = [];
+  missingByClubSeason.forEach((count, key) => {
+    const [clubId, seasonId] = key.split('|');
+    const club = CACHE.clubs.find(c=>c.id===clubId);
+    const season = CACHE.seasons.find(s=>s.id===seasonId);
+    lines.push(`${club?.Name||clubId} / ${season?.Label||seasonId}: ${count} PID${count!==1?'s':''}`);
+  });
+  const total = [...missingByClubSeason.values()].reduce((a,b)=>a+b,0);
+  banner.innerHTML = `<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);">⚠ ${total} active hero PID${total!==1?'s':''} have no RosterID yet — run the upcoming MDM backfill to populate them. Rows with no active roster mapping will remain blank and be flagged in Data Health.<br><span style="font-size:11px;color:var(--text3);margin-top:4px;display:block;">${lines.join(' · ')}</span></div>`;
+}
+
+async function rmToggleActive(recordId, newVal) {
+  const rm = (CACHE.rosterMappings||[]).find(r=>r.id===recordId);
+  if (!rm) return;
+  const prev = rm.Active;
+  rm.Active = newVal;
+  buildCacheMaps();
+  try {
+    await atUpdate(TABLES.rosterMappings, recordId, {Active: newVal});
+    const row = document.getElementById(`rmrow-${recordId}`);
+    if (row) row.style.opacity = newVal ? '' : '0.45';
+    renderRmCoverageBanner(document.getElementById('rm-filter-club')?.value||'', document.getElementById('rm-filter-season')?.value||'');
+  } catch(e) {
+    rm.Active = prev; buildCacheMaps();
+    const cb = document.querySelector(`#rmrow-${recordId} input[type=checkbox]`);
+    if (cb) cb.checked = prev;
+    toast('Error saving: '+e.message,'error');
+  }
+}
+
+async function rmSaveNotes(recordId, newVal) {
+  const rm = (CACHE.rosterMappings||[]).find(r=>r.id===recordId);
+  if (!rm) return;
+  const prev = rm.Notes;
+  rm.Notes = newVal;
+  try {
+    await atUpdate(TABLES.rosterMappings, recordId, {Notes: newVal});
+  } catch(e) {
+    rm.Notes = prev;
+    const cell = document.getElementById(`rmrow-notes-${recordId}`);
+    if (cell) cell.textContent = prev||'';
+    toast('Error saving: '+e.message,'error');
+  }
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ─── IMAGE EXPORT ─────────────────────────────────────────────────────────────
