@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v194 -->
+<!-- HEROPID-BUILD-v196 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -386,7 +386,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       <div class="card" style="margin-bottom:20px;">
         <div class="card-header"><span class="card-title">Resolve provisional PIDs</span></div>
         <div style="padding:20px;">
-          <div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:12px 14px;font-size:12px;color:var(--amber);margin-bottom:16px;">Use this after exporting provisional PIDs from Homeplate.</div>
+          <div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:12px 14px;font-size:12px;color:var(--amber);margin-bottom:16px;">Use this after exporting provisional PIDs from Homeplate.<button class="btn btn-ghost btn-sm" style="margin-left:10px;" onclick="exportProvisionalFromCache()">⎘ Export provisional PIDs</button><span id="provisional-count-label" style="margin-left:8px;color:var(--text3);font-size:11px;"></span></div>
           <div class="drop-zone" id="drop-zone-homeplate" onclick="document.getElementById('file-input-homeplate').click()">
             <input type="file" id="file-input-homeplate" accept=".xlsx,.xls" style="display:none" onchange="handleHomeplateFileSelect(event)" />
             <div class="drop-zone-icon">↑</div>
@@ -1221,6 +1221,11 @@ function switchImportTab(tab) {
   });
   document.getElementById('import-content-'+tab).classList.remove('hidden');
   document.getElementById('import-tab-'+tab).classList.add('active');
+  if (tab === 'homeplate') {
+    const provisionals = (CACHE.heroes||[]).filter(h => h.Status === 'provisional');
+    const lbl = document.getElementById('provisional-count-label');
+    if (lbl) lbl.textContent = provisionals.length ? `${provisionals.length} provisional PID${provisionals.length!==1?'s':''} currently in AT` : 'No provisional PIDs in AT';
+  }
 }
 
 // ─── MODALS ───────────────────────────────────────────────────────────────────
@@ -2705,21 +2710,29 @@ function calcDataHealth() {
   const incompleteParents = CACHE.parents.filter(p => !p.PID || (isUSSport(p.ClubID) && !p.CustomSKU)).length;
   const incompleteHeroes = CACHE.heroes.filter(h => !h.ParentPIDID || !h.KitType || !h.GarmentType || (isUSSport(h.ClubID) && (!h.ProductTitle || !h.Gender || !h.JerseyColour))).length;
   const incompleteMdm = (CACHE.mdmRosterMembers||[]).filter(m => !m.RosterMemberID || String(m.RosterMemberID)==='0' || !m.RosterID).length;
+  const provisionalHeroes = CACHE.heroes.filter(h => h.Status === 'provisional').length;
   const total = CACHE.players.length + CACHE.parents.length + CACHE.heroes.length;
   const totalIncomplete = incompletePlayers + incompleteParents + incompleteHeroes + incompleteMdm;
+  const totalIssues = totalIncomplete + provisionalHeroes;
   const pct = total > 0 ? (totalIncomplete / total) * 100 : 0;
-  const level = totalIncomplete === 0 ? 'green' : pct <= 2 ? 'amber' : 'red';
+  const level = totalIssues === 0 ? 'green' : pct <= 2 && provisionalHeroes < 10 ? 'amber' : 'red';
   const colour = level === 'green' ? 'var(--green)' : level === 'amber' ? 'var(--amber)' : 'var(--red,#fc8181)';
   // Update nav icon colour
   const navCleanup = document.getElementById('nav-cleanup');
   if (navCleanup) {
     const icon = navCleanup.querySelector('.icon');
-    if (icon) icon.style.color = totalIncomplete === 0 ? '' : colour;
+    if (icon) icon.style.color = totalIssues === 0 ? '' : colour;
+  }
+  // Update Homeplate Resolver tab badge
+  const hpTab = document.getElementById('import-tab-homeplate');
+  if (hpTab) {
+    hpTab.textContent = provisionalHeroes > 0 ? `Homeplate Resolver (${provisionalHeroes})` : 'Homeplate Resolver';
+    hpTab.style.color = provisionalHeroes > 0 ? 'var(--amber)' : '';
   }
   // Update cleanup page banner
   const banner = document.getElementById('data-health-banner');
   if (banner) {
-    if (totalIncomplete === 0) {
+    if (totalIssues === 0) {
       banner.style.display = 'none';
     } else {
       banner.style.display = 'block';
@@ -2727,13 +2740,14 @@ function calcDataHealth() {
       banner.style.background = level === 'red' ? 'rgba(252,129,129,0.08)' : level === 'amber' ? 'rgba(255,179,64,0.08)' : 'rgba(72,199,142,0.08)';
       const icon = level === 'red' ? '🔴' : '🟡';
       const parts = [];
+      if (provisionalHeroes > 0) parts.push(`<a href="#" onclick="showPage('import');switchImportTab('homeplate');return false;" style="color:${colour};">${provisionalHeroes} provisional hero PID${provisionalHeroes !== 1 ? 's' : ''} need resolving</a>`);
       if (incompletePlayers > 0) parts.push(`${incompletePlayers} player${incompletePlayers !== 1 ? 's' : ''}`);
       if (incompleteParents > 0) parts.push(`${incompleteParents} parent PID${incompleteParents !== 1 ? 's' : ''}`);
       if (incompleteHeroes > 0) parts.push(`${incompleteHeroes} hero PID${incompleteHeroes !== 1 ? 's' : ''}`);
-      banner.innerHTML = `<span style="color:${colour};font-weight:600;">${icon} ${totalIncomplete} incomplete entr${totalIncomplete !== 1 ? 'ies' : 'y'} (${pct.toFixed(1)}%)</span><span style="color:var(--text2);margin-left:8px;">— ${parts.join(', ')} need attention. Use the exports below to find and fix them.</span>`;
+      banner.innerHTML = `<span style="color:${colour};font-weight:600;">${icon} ${totalIssues} item${totalIssues !== 1 ? 's' : ''} need attention</span><span style="color:var(--text2);margin-left:8px;">— ${parts.join(', ')}.</span>`;
     }
   }
-  return { totalIncomplete, incompletePlayers, incompleteParents, incompleteHeroes, level };
+  return { totalIncomplete, incompletePlayers, incompleteParents, incompleteHeroes, provisionalHeroes, level };
 }
 
 function isEntryIncomplete(type, id) {
@@ -3413,6 +3427,20 @@ function exportProvisionalList() {
   const a=document.createElement('a');
   a.href=url;a.download='provisional_pids_for_homeplate.csv';a.click();URL.revokeObjectURL(url);
   toast(`Exported ${creationImportData.provisional.length} provisional PIDs`);
+}
+
+function exportProvisionalFromCache() {
+  const provisionals = (CACHE.heroes||[]).filter(h => h.Status === 'provisional');
+  if (!provisionals.length) { toast('No provisional hero PIDs found','error'); return; }
+  const csv = 'productId\n' + provisionals.map(h => h.PID).join('\n');
+  const blob = new Blob([csv],{type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `provisional_pids_for_homeplate_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast(`Exported ${provisionals.length} provisional PID${provisionals.length!==1?'s':''}`);
 }
 
 async function confirmCreationImport() {
