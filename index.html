@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v188 -->
+<!-- HEROPID-BUILD-v194 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -902,7 +902,7 @@ const KIT_WORDS_DETECT = ['home','away','third','gk','fourth','fifth'];
 const GARMENT_KEYWORDS = ['pro shirt','pro kids','mens ss','mens s/s','mens ls','mens l/s','dri fit adv mens','dri-fit adv mens','dri fit adv womens','dri-fit adv womens','authentic shirt','authentic l/s','authentic kids','authentic womens','womens authentic','womens pro shirt','womens ss','womens s/s','womens','kids ss','kids s/s','minikit','mini kit','babykit','baby kit','cropped','little kids','infants','gk','goalkeeper','dri fit','dri-fit','authentic','outsize','infant','baby kit','babykit','unsponsored','pro mens','infant/baby','retro','dri fit adv','dri-fit adv','womens shirt','youth kit'];
 const GARMENT_ALIASES = {'mens ss':'mens_ss','mens s/s':'mens_ss','mens short sleeve':'mens_ss','mens jersey':'mens_ss','mens shirt':'mens_ss','jersey':'mens_ss','dri fit adv mens ss':'pro_shirt','dri-fit adv mens ss':'pro_shirt','dri fit adv shirt':'pro_shirt','dri-fit adv shirt':'pro_shirt','dri-fit adv':'pro_shirt','dri fit adv':'pro_shirt','dri fit adv womens ss':'womens_pro','dri-fit adv womens ss':'womens_pro','dri-fit adv womens':'womens_pro','dri fit adv kids ss':'pro_kids','dri-fit adv kids ss':'pro_kids','dri-fit adv kids':'pro_kids','authentic shirt ls':'pro_shirt_ls','authentic ls':'pro_shirt_ls','womens shirt':'womens','youth kit':'youth_kit','mens ls':'mens_ls','mens l/s':'mens_ls','mens long sleeve':'mens_ls','mens ls jersey':'mens_ls','pro shirt':'pro_shirt','pro':'pro_shirt','authentic':'pro_shirt','dri fit':'pro_shirt','dri-fit':'pro_shirt','adv':'pro_shirt','dri fit adv':'pro_shirt','dri-fit adv':'pro_shirt','authentic shirt':'pro_shirt','authentic l/s':'pro_shirt_ls','authentic long sleeve':'pro_shirt_ls','authentic ls':'pro_shirt_ls','womens':'womens','womens ss':'womens','womens s/s':'womens','womens jersey':'womens','womens shirt':'womens','womens pro':'womens_pro','womens pro shirt':'womens_pro','dri fit adv womens ss':'womens_pro','womens authentic':'womens_pro','authentic womens':'womens_pro','womens cropped':'womens_cropped','cropped':'womens_cropped','kids ss':'kids_ss','kids s/s':'kids_ss','kids':'kids_ss','pro kids':'pro_kids','dri fit adv kids ss':'pro_kids','authentic kids':'pro_kids','vapor kids':'pro_kids','aero-fit kids':'pro_kids','dri-fit adv kids':'pro_kids','pro kids ls':'pro_kids_ls','authentic kids ls':'pro_kids_ls','authentic kids l/s':'pro_kids_ls','kids l/s':'kids_ls','kids ls':'kids_ls','kids long sleeve':'kids_ls','womens ls':'womens_ls','womens l/s':'womens_ls','womens long sleeve':'womens_ls','womens pro ls':'womens_pro_ls','womens pro l/s':'womens_pro_ls','authentic womens ls':'womens_pro_ls','authentic womens l/s':'womens_pro_ls','little kids':'little_kids','lk':'little_kids','mini kit little kids':'little_kids','minikit':'little_kids','mini kit':'little_kids','babykit':'infants','baby kit':'infants','infants':'infants','baby':'infants','mini kit infants':'infants','gk shirt':'pro_shirt','goalkeeper shirt':'pro_shirt','gk authentic':'pro_shirt','gk':'pro_shirt','outsize':'mens_outsize','infant':'infants','infant kit':'infants','baby kit':'infants','babykit':'infants','infant/babykit':'infants','infant/baby kit':'infants','mini kit infants':'infants','mini kit little kids':'little_kids','womens ss':'womens','womens s/s':'womens','dri fit adv mens ss':'pro_shirt','dri-fit adv mens ss':'pro_shirt','dri fit adv shirt':'pro_shirt','dri-fit adv shirt':'pro_shirt','dri-fit adv':'pro_shirt','dri fit adv':'pro_shirt','dri fit adv womens ss':'womens_pro','dri-fit adv womens ss':'womens_pro','dri-fit adv womens':'womens_pro','dri fit adv kids ss':'pro_kids','dri-fit adv kids ss':'pro_kids','dri-fit adv kids':'pro_kids','authentic shirt ls':'pro_shirt_ls','authentic ls':'pro_shirt_ls','womens shirt':'womens','youth kit':'youth_kit','dri fit adv womens ss':'womens_pro','dri-fit adv womens ss':'womens_pro','dri fit adv kids ss':'pro_kids','dri-fit adv kids ss':'pro_kids','retro ss':'retro_ss','retro s/s':'retro_ss','mens ss unsponsored':'mens_unsponsored','mens s/s unsponsored':'mens_unsponsored','pro mens l/s':'pro_shirt_ls','pro mens ls':'pro_shirt_ls','pro unsponsored':'pro_unsponsored','unsponsored':'mens_unsponsored','womens unsponsored':'womens_unsponsored'};
 const FED_MAP = {'FRNC':'FFF','FRANCE':'FFF','GERM':'DFB','GERMANY':'DFB','ENG':'England','ENGL':'England','SPAN':'Spain','ITAL':'Italy','PORT':'Portugal','NETH':'Netherlands','BELG':'Belgium','BELGM':'Belgium','BRAZ':'Brazil','ARG':'Argentina','ARGEN':'Argentina'};
-const BRAND_ANCHORS = ['FRANCE NIKE','FRANCE ADIDAS','FRANCE PUMA','DFB ADIDAS','DFB NIKE','DFB PUMA','ENGLAND NIKE','SPAIN ADIDAS','ITALY PUMA','PORTUGAL NIKE','NETHERLANDS NIKE','BELGIUM ADIDAS','BELGIUM NIKE','BELGIUM PUMA'];
+const BRAND_ANCHORS = ['FRANCE NIKE','FRANCE ADIDAS','FRANCE PUMA','DFB ADIDAS','DFB NIKE','DFB PUMA','ENGLAND NIKE','SPAIN ADIDAS','ITALY PUMA','PORTUGAL NIKE','NETHERLANDS NIKE','BELGIUM ADIDAS','BELGIUM NIKE','BELGIUM PUMA','LEEDS UNITED ADIDAS','LEEDS UNITED NIKE','LEEDS UNITED PUMA'];
 
 // Local cache for search performance
 let CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null,catalogues:[],fonts:[]};
@@ -3201,12 +3201,14 @@ async function processCreationFiles(files) {
   try {
     // Always fetch fresh heroes before checking duplicates
     try {
-      if (dzText) dzText.textContent = 'Checking for duplicates...';
+    if (!CACHE.heroes || CACHE.heroes.length === 0) {
+      if (dzText) dzText.textContent = 'Loading heroes...';
       localStorage.removeItem(CACHE_KEYS.heroes);
       const freshHeroes = await atGetAll(TABLES.heroes);
       CACHE.heroes = freshHeroes.map(x=>({id:x.id,...x.fields}));
-      if (dzText) dzText.textContent = 'Parsing rows...';
-    } catch(e) { /* proceed with existing cache */ }
+    }
+    if (dzText) dzText.textContent = 'Parsing rows...';
+  } catch(e) { /* proceed with existing cache */ }
     const allRows=[];
     for (const file of files) {
       const text=await file.text();
@@ -3221,6 +3223,7 @@ async function processCreationFiles(files) {
         allRows.push(row);
       }
     }
+    if (!allRows.length) { toast('No valid rows found — is this a creation CSV?', 'error'); return; }
     parseCreationRows(allRows, seasonId, fontType, files.map(f=>f.name));
   } finally {
     _resetCreation();
@@ -3251,12 +3254,28 @@ function parseCreationGarmentType(nameStr) {
   return 'mens_ss';
 }
 
-function parseCreationKitType(nameStr) {
+function parseCreationKitType(nameStr, basePid) {
   const n=nameStr.toUpperCase();
   const isGK = n.includes(' GK ')||n.includes('GOALKEEPER');
   if (isGK && n.includes(' AWAY ')) return 'GK Away';
   if (isGK && n.includes(' THIRD ')) return 'GK Third';
-  if (isGK) return 'GK Home';
+  if (isGK && n.includes(' HOME ')) return 'GK Home';
+  if (isGK) {
+    // No direction in name — try to infer from known parent PID KitType in cache
+    if (basePid) {
+      const knownParent = CACHE.parents.find(p => String(p.PID) === String(basePid));
+      if (knownParent?.KitType) {
+        const pk = (knownParent.KitType||'').toLowerCase();
+        if (pk.includes('away')) return 'GK Away';
+        if (pk.includes('third')) return 'GK Third';
+        if (pk.includes('home')) return 'GK Home';
+      }
+    }
+    // Fallback: if name has colour tokens it's likely a colourway Away variant
+    const colourCount = _countColourTokens(nameStr.toUpperCase().split(/\s+/).slice(2));
+    if (colourCount > 0) return 'GK Away';
+    return 'GK Home';
+  }
   if (n.includes(' HOME ')) return 'Home';
   if (n.includes(' AWAY ')) return 'Away';
   if (n.includes(' THIRD ')) return 'Third';
@@ -3272,27 +3291,17 @@ function parseCreationJerseyColour(nameStr) {
   let anchorIdx = -1;
   for (const anchor of BRAND_ANCHORS) { const idx = n.indexOf(anchor); if (idx !== -1) { anchorIdx = idx; break; } }
   if (anchorIdx === -1) return null;
-  // Get tokens before anchor: [version, fedCode, ...colour?, ...playerName]
+  // Get tokens before anchor: [version, fedCode, ...colour+player]
   const before = nameStr.substring(0, anchorIdx).trim();
   const tokens = before.split(/\s+/);
   if (tokens.length <= 2) return null;
-  // Player name comes from parseCreationPlayerName — get it to know where colour ends
-  const playerName = parseCreationPlayerName(nameStr);
-  if (!playerName) return null;
-  const playerTokens = playerName.toUpperCase().split(/\s+/);
-  // Find where player name starts in tokens (after token[0]=version, token[1]=fedCode)
-  const remaining = tokens.slice(2); // after version + fedCode
-  // Remove player name tokens from the end
-  let colourTokens = [...remaining];
-  for (let i = playerTokens.length; i > 0; i--) {
-    const tail = colourTokens.slice(-i).map(t=>t.toUpperCase());
-    if (tail.join(' ') === playerTokens.slice(0,i).join(' ')) {
-      colourTokens = colourTokens.slice(0, colourTokens.length - i);
-      break;
-    }
-  }
-  if (!colourTokens.length) return null;
-  return colourTokens.map(t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()).join(' ');
+  const remaining = tokens.slice(2).map(t => t.toUpperCase()); // after version + fedCode
+  // Use shared allowlist helper
+  const colourCount = _countColourTokens(remaining);
+  if (colourCount === 0) return null;
+  // Guard: only treat as colour if player name tokens follow (at least 1 token after colour)
+  if (remaining.length - colourCount < 2) return null;
+  return tokens.slice(2, 2 + colourCount).map(t => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase()).join(' ');
 }
 
 function parseCreationPlayerName(nameStr) {
@@ -3303,7 +3312,41 @@ function parseCreationPlayerName(nameStr) {
   const before=nameStr.substring(0,anchorIdx).trim();
   const tokens=before.split(/\s+/);
   if (tokens.length<=3) return '';
-  return fixEncoding(tokens.slice(3).join(' ').trim());
+  // For GK colourway variants, strip colour tokens before player name
+  const isGKProduct = upper.includes('GOALKEEPER') || upper.includes(' GK ');
+  const colourTokenCount = isGKProduct ? _countColourTokens(tokens.slice(2)) : 0;
+  const nameStartIdx = 2 + colourTokenCount;
+  if (tokens.length - nameStartIdx < 1) return '';
+  return fixEncoding(tokens.slice(nameStartIdx).join(' ').trim());
+}
+
+// Known GK jersey colour phrases — longest match wins
+const GK_COLOUR_PHRASES = [
+  'LIGHT ROYAL BLUE', 'ROYAL BLUE', 'LIGHT BLUE', 'DARK BLUE', 'NAVY BLUE',
+  'LIGHT GREEN', 'DARK GREEN', 'NEON GREEN', 'BRIGHT GREEN',
+  'LIGHT YELLOW', 'NEON YELLOW', 'BRIGHT YELLOW',
+  'LIGHT ORANGE', 'NEON ORANGE', 'BRIGHT ORANGE',
+  'LIGHT PINK', 'HOT PINK', 'NEON PINK',
+  'LIGHT PURPLE', 'DARK PURPLE',
+  'LIGHT GREY', 'DARK GREY', 'LIGHT GRAY', 'DARK GRAY',
+  'BLACK', 'WHITE', 'PINK', 'RED', 'BLUE', 'GREEN', 'YELLOW',
+  'ORANGE', 'PURPLE', 'GREY', 'GRAY', 'GOLD', 'SILVER',
+  'TURQUOISE', 'TEAL', 'MAROON', 'CORAL', 'LIME', 'NAVY',
+  'CYAN', 'INDIGO', 'VIOLET', 'MAGENTA', 'AMBER', 'CRIMSON',
+];
+
+function _countColourTokens(remainingTokens) {
+  // Match against known colour phrases — longest match wins
+  const upper = remainingTokens.map(t => t.toUpperCase());
+  const joined = upper.join(' ');
+  // Try longest phrases first
+  const sorted = [...GK_COLOUR_PHRASES].sort((a,b) => b.split(' ').length - a.split(' ').length);
+  for (const phrase of sorted) {
+    if (joined.startsWith(phrase + ' ') || joined === phrase) {
+      return phrase.split(' ').length;
+    }
+  }
+  return 0;
 }
 
 function parseCreationFedCode(nameStr) {
@@ -3327,7 +3370,7 @@ function parseCreationRows(rows,seasonId,fontType,fileNames) {
     const clubName=parseCreationFedCode(name);
     const club=CACHE.clubs.find(c=>(c.Name||'').toLowerCase()===clubName.toLowerCase());
     const clubId=club?club.id:null;
-    const kitType=parseCreationKitType(name);
+    const kitType=parseCreationKitType(name,basePid);
     const garmentType=parseCreationGarmentType(name);
     const playerName=parseCreationPlayerName(name);
     const jerseyColour=parseCreationJerseyColour(name);
@@ -3345,6 +3388,10 @@ function parseCreationRows(rows,seasonId,fontType,fileNames) {
 
 function showCreationPreview(fileNames) {
   const d=creationImportData;
+  if (d.heroes.length===0 && d.provisional.length===0 && d.stats.duplicate===0) {
+    toast('No valid creation CSV rows found — check the file format (needs productId, name, baseProductId columns)', 'error');
+    return;
+  }
   document.getElementById('creation-preview-title').textContent=`Preview — ${fileNames.length} file${fileNames.length!==1?'s':''}`;
   document.getElementById('creation-preview').classList.remove('hidden');
   let html=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;"><div class="stat-pill"><span class="stat-label">Hero PIDs</span><span class="stat-value" style="color:var(--green);">${d.heroes.length}</span></div><div class="stat-pill"><span class="stat-label">Provisional</span><span class="stat-value" style="color:var(--amber);">${d.provisional.length}</span></div><div class="stat-pill"><span class="stat-label">Duplicates</span><span class="stat-value" style="color:var(--text3);">${d.stats.duplicate}</span></div><div class="stat-pill"><span class="stat-label">New Parents</span><span class="stat-value" style="color:var(--accent);">${d.parents.length}</span></div></div>`;
