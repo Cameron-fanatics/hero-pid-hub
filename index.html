@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v196 -->
+<!-- HEROPID-BUILD-v199 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -906,6 +906,23 @@ const BRAND_ANCHORS = ['FRANCE NIKE','FRANCE ADIDAS','FRANCE PUMA','DFB ADIDAS',
 
 // Local cache for search performance
 let CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null,catalogues:[],fonts:[]};
+// O(1) lookup maps — rebuilt whenever CACHE arrays change
+let CACHE_MAPS = {
+  heroByPID: new Map(),       // String(PID) -> hero
+  parentByPID: new Map(),     // String(PID) -> parent
+  parentById: new Map(),      // AT record id -> parent
+  playerById: new Map(),      // AT record id -> player
+  clubById: new Map(),        // AT record id -> club
+  seasonById: new Map(),      // AT record id -> season
+};
+function buildCacheMaps() {
+  CACHE_MAPS.heroByPID = new Map((CACHE.heroes||[]).map(h => [String(h.PID), h]));
+  CACHE_MAPS.parentByPID = new Map((CACHE.parents||[]).map(p => [String(p.PID), p]));
+  CACHE_MAPS.parentById = new Map((CACHE.parents||[]).map(p => [p.id, p]));
+  CACHE_MAPS.playerById = new Map((CACHE.players||[]).map(p => [p.id, p]));
+  CACHE_MAPS.clubById = new Map((CACHE.clubs||[]).map(c => [c.id, c]));
+  CACHE_MAPS.seasonById = new Map((CACHE.seasons||[]).map(s => [s.id, s]));
+}
 
 // ─── NAME NORMALISATION ───────────────────────────────────────────────────────
 const toProperName = s => (s||'').trim().replace(/\s+/g,' ')
@@ -1180,7 +1197,7 @@ async function loadCache(force, dataOnly=false){
     CACHE.players=players; CACHE.parents=parents; CACHE.heroes=heroes;
     // Load fonts (lightweight, no cache needed)
     if (TABLES.fonts) { try { const fr=await atGetAll(TABLES.fonts); CACHE.fonts=fr.map(x=>({id:x.id,...x.fields})); } catch(e){} }
-    cacheLoaded=true; updateStats(); refreshFilterSelects(); refreshClubs(); refreshSeasons();
+    buildCacheMaps(); cacheLoaded=true; updateStats(); refreshFilterSelects(); refreshClubs(); refreshSeasons();
   }catch(e){toast('Failed to load data: '+e.message,'error');}
 }
 
@@ -1266,6 +1283,7 @@ async function saveClub() {
     const rec = await atCreate(TABLES.clubs, {Name:name,Short:document.getElementById('club-short').value.trim(),League:document.getElementById('club-league').value.trim(),Sport:document.getElementById('club-sport').value,Country:document.getElementById('club-country').value.trim()});
     CACHE.clubs.push({id:rec.id,...rec.fields});
     CACHE.clubs.sort((a,b)=>(a.Name||'').localeCompare(b.Name||''));
+    buildCacheMaps();
     closeModal('modal-add-club');
     ['club-name','club-short','club-league','club-country'].forEach(id=>document.getElementById(id).value='');
     refreshClubs(); refreshFilterSelects(); updateStats();
@@ -1284,7 +1302,9 @@ async function saveEditClub() {
   try {
     await atUpdate(TABLES.clubs, id, {Name:name,Short:document.getElementById('edit-club-short').value.trim(),League:document.getElementById('edit-club-league').value.trim(),Sport:document.getElementById('edit-club-sport').value,Country:document.getElementById('edit-club-country').value.trim()});
     const idx = CACHE.clubs.findIndex(c=>c.id===id);
-    if (idx!==-1) CACHE.clubs[idx] = {...CACHE.clubs[idx],Name:name};
+    if (idx!==-1) CACHE.clubs[idx] = {...CACHE.clubs[idx],Name:name,Short:document.getElementById('edit-club-short').value.trim(),League:document.getElementById('edit-club-league').value.trim(),Sport:document.getElementById('edit-club-sport').value,Country:document.getElementById('edit-club-country').value.trim()};
+    CACHE.clubs.sort((a,b)=>(a.Name||'').localeCompare(b.Name||''));
+    buildCacheMaps();
     closeModal('modal-edit-club');
     refreshClubs(); refreshFilterSelects();
     toast(`Club "${name}" updated`);
@@ -1308,6 +1328,7 @@ async function deleteClub(id) {
   try {
     await atDelete(TABLES.clubs, id);
     CACHE.clubs = CACHE.clubs.filter(c=>c.id!==id);
+    buildCacheMaps();
     refreshClubs(); refreshFilterSelects(); updateStats();
     toast('Club deleted');
   } catch(e) { toast('Error: '+e.message,'error'); }
@@ -1319,6 +1340,7 @@ async function saveSeason() {
   try {
     const rec = await atCreate(TABLES.seasons, {Label:label,StartYear:parseInt(document.getElementById('season-start').value)||null,EndYear:parseInt(document.getElementById('season-end').value)||null,Sport:document.getElementById('season-sport').value});
     CACHE.seasons.push({id:rec.id,...rec.fields});
+    buildCacheMaps();
     closeModal('modal-add-season');
     ['season-label','season-start','season-end'].forEach(id=>document.getElementById(id).value='');
     refreshSeasons(); refreshFilterSelects();
@@ -1331,6 +1353,7 @@ async function deleteSeason(id) {
   try {
     await atDelete(TABLES.seasons, id);
     CACHE.seasons = CACHE.seasons.filter(s=>s.id!==id);
+    buildCacheMaps();
     refreshSeasons(); refreshFilterSelects();
     toast('Season deleted');
   } catch(e) { toast('Error: '+e.message,'error'); }
@@ -1345,6 +1368,7 @@ async function savePlayer() {
   try {
     const rec = await atCreate(TABLES.players, {Name:toProperName(name),ShirtName:toShirtName(shirt),SquadNumber:parseInt(document.getElementById('player-number').value)||null,Type:document.getElementById('player-type').value,ClubID:clubId,SeasonID:seasonId,Status:document.getElementById('player-status').value,MDMActorID:document.getElementById('player-mdm').value.trim()});
     CACHE.players.push({id:rec.id,...rec.fields});
+    buildCacheMaps();
     closeModal('modal-add-player');
     ['player-name','player-shirt','player-number','player-mdm'].forEach(id=>document.getElementById(id).value='');
     updateStats();
@@ -1357,6 +1381,7 @@ async function deletePlayer(id) {
   try {
     await atDelete(TABLES.players, id);
     CACHE.players = CACHE.players.filter(p=>p.id!==id);
+    buildCacheMaps();
     if (document.getElementById('tabcontent-players')) refreshManage();
     updateStats();
     toast('Player deleted');
@@ -1370,6 +1395,7 @@ async function saveParent() {
   try {
     const rec = await atCreate(TABLES.parents, {PID:pid,ClubID:clubId,SeasonID:document.getElementById('parent-season').value||null,KitType:document.getElementById('parent-kit').value.trim(),GarmentType:document.getElementById('parent-garment').value.trim()});
     CACHE.parents.push({id:rec.id,...rec.fields});
+    buildCacheMaps();
     closeModal('modal-add-parent');
     ['parent-pid','parent-kit','parent-garment'].forEach(id=>document.getElementById(id).value='');
     toast(`Parent PID ${pid} added`);
@@ -1381,6 +1407,7 @@ async function deleteParent(id) {
   try {
     await atDelete(TABLES.parents, id);
     CACHE.parents = CACHE.parents.filter(p=>p.id!==id);
+    buildCacheMaps();
     toast('Parent PID deleted');
   } catch(e) { toast('Error: '+e.message,'error'); }
 }
@@ -1395,6 +1422,7 @@ async function saveHero() {
   try {
     const rec = await atCreate(TABLES.heroes, {PID:pid,PlayerID:playerId,ClubID:clubId,SeasonID:seasonId,FontType:document.getElementById('hero-font').value,GarmentType:document.getElementById('hero-garment').value,KitType:document.getElementById('hero-kit').value.trim(),Status:document.getElementById('hero-status').value});
     CACHE.heroes.push({id:rec.id,...rec.fields});
+    buildCacheMaps();
     closeModal('modal-add-hero');
     ['hero-pid','hero-kit'].forEach(id=>document.getElementById(id).value='');
     updateStats();
@@ -1407,6 +1435,7 @@ async function deleteHero(id) {
   try {
     await atDelete(TABLES.heroes, id);
     CACHE.heroes = CACHE.heroes.filter(h=>h.id!==id);
+    buildCacheMaps();
     updateStats(); runSearch();
     toast('Hero PID deleted');
   } catch(e) { toast('Error: '+e.message,'error'); }
@@ -1988,6 +2017,7 @@ async function saveSquadNumbers() {
       const cached = CACHE.players.find(p => p.id === u.id);
       if (cached) cached.SquadNumber = u.number;
     }
+    buildCacheMaps();
     closeModal('modal-squad-numbers');
     toast(`${updates.length} squad number${updates.length!==1?'s':''} saved`);
   } catch(e) { toast('Error saving numbers: ' + e.message, 'error'); }
@@ -2031,6 +2061,7 @@ async function saveEditPlayer() {
     const gkChanged = goalkeeper !== oldGoalkeeper;
     await atUpdate(TABLES.players, id, {Name:toProperName(name), ShirtName:toShirtName(shirt), SquadNumber:number, Status:status, Type:type, ClubID:clubId, SeasonID:seasonId, Goalkeeper:goalkeeper});
     if (cached) { cached.Name=name; cached.ShirtName=shirt.toUpperCase(); cached.SquadNumber=number; cached.Status=status; cached.Type=type; cached.ClubID=clubId; cached.SeasonID=seasonId; cached.Goalkeeper=goalkeeper; }
+    buildCacheMaps();
     closeModal('modal-edit-player');
     refreshManage();
     toast(`${name} updated`);
@@ -2096,6 +2127,7 @@ async function deactivatePlayer(id) {
   const newStatus = p.Status === 'archived' ? 'active' : 'archived';
   await atUpdate(TABLES.players, id, {Status: newStatus});
   p.Status = newStatus;
+  buildCacheMaps();
   refreshManage();
   toast(`${p.Name} ${newStatus === 'archived' ? 'archived' : 'reactivated'}`);
 }
@@ -2156,7 +2188,7 @@ function importCorrectedPlayers(file){
         const p=CACHE.players.find(x=>x.id===id);
         if(p){if(fields.Name)p.Name=fields.Name;if(fields.ShirtName)p.ShirtName=fields.ShirtName;}
       }));
-      await loadCache(true);
+      buildCacheMaps();
       setStatus(`Done — ${updates.length} updated${skipped?' ('+skipped+' skipped)':''}`);
       updateStats();
       setTimeout(()=>setStatus(''),5000);
@@ -2188,7 +2220,7 @@ function exportExclusionsFromSelection(){
   ws['!cols']=[{wch:14},{wch:14}];
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Sheet1');
   const firstHero=CACHE.heroes.find(h=>selected.has(h.PID));
-  const club=firstHero?(CACHE.clubs.find(c=>c.id===firstHero.ClubID)?.Name||''):'';
+  const club=firstHero?(CACHE_MAPS.clubById.get(firstHero.ClubID)?.Name||''):'';
   const today=new Date();
   const d=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
   XLSX.writeFile(wb,`${d}${club?' '+club:''} exclusions.xlsx`);
@@ -2390,7 +2422,7 @@ async function importCleanup(tableKey, file) {
         setStatus(`Saving ${done} of ${updates.length}...`);
       }
 
-      await loadCache(true);
+      buildCacheMaps();
       if (tableKey === 'clubs') { refreshClubs(); refreshFilterSelects(); }
       else if (tableKey === 'seasons') { refreshSeasons(); refreshFilterSelects(); }
       else if (tableKey === 'players') { refreshManage(); }
@@ -2457,7 +2489,7 @@ function exportFootballContent(playerIds) {
   if(!heroList.length){toast('No hero PIDs found','error');return;}
   const sheets={};
   heroList.forEach(hero=>{
-    const player=CACHE.players.find(p=>p.id===hero.PlayerID);
+    const player=CACHE_MAPS.playerById.get(hero.PlayerID);
     const isGK=player?.Goalkeeper||false;
     const kitLabel=(hero.KitType||'').toLowerCase();
     // GK players get routed to GK sheet unless already on a GK kit type
@@ -2466,7 +2498,7 @@ function exportFootballContent(playerIds) {
     if(!sheets[key])sheets[key]=[];sheets[key].push(hero);
   });
   const firstHero=heroList[0];
-  const club=firstHero?(CACHE.clubs.find(c=>c.id===firstHero.ClubID)?.Name||''):'';
+  const club=firstHero?(CACHE_MAPS.clubById.get(firstHero.ClubID)?.Name||''):'';
   const wb=new ExcelJS.Workbook();wb.creator="HeroPID Hub";
   const thin={style:'thin'};const allB={top:thin,left:thin,bottom:thin,right:thin};
   const grey={style:'thin',color:{argb:'FFD3D3D3'}};const hairB={top:grey,left:grey,bottom:grey,right:grey};
@@ -2477,7 +2509,7 @@ function exportFootballContent(playerIds) {
     heroes.forEach(h=>{if(!pm[h.PlayerID]){const pl=CACHE.players.find(p=>p.id===h.PlayerID);if(pl?.Status==='archived')return;pm[h.PlayerID]={pl,sn:(pl?.ShirtName||'').toUpperCase(),num:pl?.SquadNumber||9999,hs:[]};}if(pm[h.PlayerID])pm[h.PlayerID].hs.push(h);});
     const players=Object.values(pm).sort((a,b)=>a.num-b.num);
     const pr=new Array(18).fill(null);
-    heroes.forEach(h=>{if(!h.ParentPIDID)return;const par=CACHE.parents.find(p=>p.id===h.ParentPIDID);if(!par)return;const ci=FOOTBALL_COL_MAP[h.GarmentType];if(ci!==undefined&&!pr[ci])pr[ci]=par.PID?Number(par.PID):null;if(h.GarmentType==='infants'&&!pr[BABY_COL])pr[BABY_COL]=par.PID?Number(par.PID):null;});
+    heroes.forEach(h=>{if(!h.ParentPIDID)return;const par=CACHE_MAPS.parentById.get(h.ParentPIDID);if(!par)return;const ci=FOOTBALL_COL_MAP[h.GarmentType];if(ci!==undefined&&!pr[ci])pr[ci]=par.PID?Number(par.PID):null;if(h.GarmentType==='infants'&&!pr[BABY_COL])pr[BABY_COL]=par.PID?Number(par.PID):null;});
     const fl=FONT_LABELS[ft]||ft,kl=kt.charAt(0).toUpperCase()+kt.slice(1);
     const rows=[
       [club,...new Array(17).fill(null)],
@@ -2617,6 +2649,7 @@ async function archiveSelected() {
   if (btn) { btn.textContent = 'Archive selected'; btn.disabled = false; }
   toast(`Archived ${playerIds.size} player${playerIds.size !== 1 ? 's' : ''}`);
   window._selectedPids = new Set();
+  buildCacheMaps();
   runSearch();
 }
 
@@ -3153,6 +3186,7 @@ async function confirmImport() {
     }
     // Invalidate localStorage cache so next full load gets fresh data
     Object.values(CACHE_KEYS).forEach(k=>localStorage.removeItem(k));
+    buildCacheMaps();
     updateStats(); refreshFilterSelects();
     const _importedPlayerList = d.players.map(p=>({name:p.name,clubId:p.clubId,seasonId:p.seasonId}));
     clearImport();
@@ -3520,7 +3554,7 @@ async function confirmCreationImport() {
         recs.forEach(r => CACHE.heroes.push({id:r.id,...r.fields}));
       }
     }
-    await loadCache(true);
+    buildCacheMaps();
     updateStats();refreshFilterSelects();
     const _csvPlayerList = (d.allParsedPlayers||[]);
     const _heroCount = d.heroes.length, _provCount = d.provisional.length;
@@ -3605,6 +3639,7 @@ async function confirmHomeplateResolve() {
     resolved++;
   }
   CACHE.players=CACHE.players.filter(p=>{if(p.Status!=='provisional')return true;return CACHE.heroes.some(h=>h.PlayerID===p.id&&h.Status==='provisional');});
+  buildCacheMaps();
   updateStats(); clearHomeplateImport();
   toast(`Resolved ${resolved} provisional PIDs`);
 }
@@ -3652,8 +3687,8 @@ function renderSelBar(key,dL,aL){const el=document.getElementById(key+'-selectio
 function refreshAll(){refreshManage();refreshClubs();refreshSeasons();}
 function manageToggleAll(key,checked,ids){ids.forEach(id=>{if(checked)manageState[key].selected.add(id);else manageState[key].selected.delete(id);});refreshAll();}
 function manageToggleOne(key,id,checked){if(checked)manageState[key].selected.add(id);else manageState[key].selected.delete(id);refreshAll();}
-async function manageDeleteSelected(key){const sel=manageState[key].selected;if(!sel.size)return;if(!confirm('Delete '+sel.size+' '+key+'? This cannot be undone.'))return;const tbls={players:TABLES.players,parents:TABLES.parents,heroes:TABLES.heroes,clubs:TABLES.clubs,seasons:TABLES.seasons};const caches={players:CACHE.players,parents:CACHE.parents,heroes:CACHE.heroes,clubs:CACHE.clubs,seasons:CACHE.seasons};toast('Deleting '+sel.size+'...');const dIds=[...sel];for(let i=0;i<dIds.length;i+=5){await Promise.all(dIds.slice(i,i+5).map(id=>atDelete(tbls[key],id)));if(i+5<dIds.length)await new Promise(r=>setTimeout(r,200));}const arr=caches[key];[...sel].forEach(id=>{const i=arr.findIndex(r=>r.id===id);if(i>-1)arr.splice(i,1);});sel.clear();invalidateCache();refreshAll();updateStats();refreshFilterSelects();toast('Deleted');}
-async function manageArchiveSelected(key){const sel=manageState[key].selected;if(!sel.size)return;const arr=key==='players'?CACHE.players:CACHE.heroes;const anyActive=[...sel].some(id=>(arr.find(r=>r.id===id)?.Status||'active')==='active');const ns=anyActive?'archived':'active';toast((anyActive?'Archiving':'Activating')+' '+sel.size+'...');await Promise.all([...sel].map(id=>atUpdate(TABLES[key],id,{Status:ns})));[...sel].forEach(id=>{const r=arr.find(x=>x.id===id);if(r)r.Status=ns;});sel.clear();refreshManage();toast('Done');}
+async function manageDeleteSelected(key){const sel=manageState[key].selected;if(!sel.size)return;if(!confirm('Delete '+sel.size+' '+key+'? This cannot be undone.'))return;const tbls={players:TABLES.players,parents:TABLES.parents,heroes:TABLES.heroes,clubs:TABLES.clubs,seasons:TABLES.seasons};const caches={players:CACHE.players,parents:CACHE.parents,heroes:CACHE.heroes,clubs:CACHE.clubs,seasons:CACHE.seasons};toast('Deleting '+sel.size+'...');const dIds=[...sel];for(let i=0;i<dIds.length;i+=5){await Promise.all(dIds.slice(i,i+5).map(id=>atDelete(tbls[key],id)));if(i+5<dIds.length)await new Promise(r=>setTimeout(r,200));}const arr=caches[key];[...sel].forEach(id=>{const i=arr.findIndex(r=>r.id===id);if(i>-1)arr.splice(i,1);});sel.clear();invalidateCache();buildCacheMaps();refreshAll();updateStats();refreshFilterSelects();toast('Deleted');}
+async function manageArchiveSelected(key){const sel=manageState[key].selected;if(!sel.size)return;const arr=key==='players'?CACHE.players:CACHE.heroes;const anyActive=[...sel].some(id=>(arr.find(r=>r.id===id)?.Status||'active')==='active');const ns=anyActive?'archived':'active';toast((anyActive?'Archiving':'Activating')+' '+sel.size+'...');await Promise.all([...sel].map(id=>atUpdate(TABLES[key],id,{Status:ns})));[...sel].forEach(id=>{const r=arr.find(x=>x.id===id);if(r)r.Status=ns;});sel.clear();buildCacheMaps();refreshManage();toast('Done');}
 let _wipeTarget=null;
 function openWipeModal(target,label){
   _wipeTarget=target;
@@ -3700,7 +3735,7 @@ async function executeWipe(){
     if(target==='parents'||target==='full')await wb2(TABLES.parents,CACHE.parents,'parent PIDs'+lbl);
     if(target==='clubs')await wb2(TABLES.clubs,CACHE.clubs,'clubs');
     if(target==='seasons')await wb2(TABLES.seasons,CACHE.seasons,'seasons');
-    invalidateCache();refreshAll();updateStats();refreshFilterSelects();
+    invalidateCache();buildCacheMaps();refreshAll();updateStats();refreshFilterSelects();
     toast(scopeClub ? (scopeClub.Name+' data cleared') : (target==='full'?'Full wipe complete':'Cleared'));
   }catch(e){toast('Error: '+e.message,'error');}
 }
@@ -3997,6 +4032,7 @@ async function importMdmRoster() {
   mdmRosterData = null;
   // Auto-refresh so search/manage reflect latest data without manual sync
   await loadCache(true);
+  buildCacheMaps();
 }
 
 // ─── SQUAD UPDATE ──────────────────────────────────────────
@@ -4409,6 +4445,7 @@ async function applySquadUpdate() {
   squadUpdateData=null;
   // Auto-refresh so search/manage reflect latest data without manual sync
   await loadCache(true);
+  buildCacheMaps();
 }
 
 function exportSquadUpdateCSV() {
@@ -4832,7 +4869,7 @@ async function exportImageFromFilters() {
   const pids = getFilteredHeroPids('img');
   if (!pids.length) { toast('No PIDs match current filters','error'); return; }
   const clubId = document.getElementById('exp-img-club')?.value || '';
-  const heroList = pids.map(pid=>CACHE.heroes.find(h=>h.PID===pid)).filter(Boolean);
+  const heroList = pids.map(pid=>CACHE_MAPS.heroByPID.get(String(pid))).filter(Boolean);
   if (!heroList.length) { toast('No hero PIDs found','error'); return; }
   const btn = document.getElementById('exp-img-btn');
   btn.disabled=true; btn.textContent='Building...';
@@ -4840,7 +4877,7 @@ async function exportImageFromFilters() {
     // Build xlsx (same logic as exportFootballContent but with font metadata in row 1)
     const sheets={};
     heroList.forEach(hero=>{
-      const player=CACHE.players.find(p=>p.id===hero.PlayerID);
+      const player=CACHE_MAPS.playerById.get(hero.PlayerID);
       const isGK=player?.Goalkeeper||false;
       const kitLabel=(hero.KitType||'').toLowerCase();
       const effectiveKit=isGK&&!kitLabel.startsWith('gk')?('gk '+kitLabel):kitLabel;
@@ -4848,7 +4885,7 @@ async function exportImageFromFilters() {
       if(!sheets[key])sheets[key]=[];sheets[key].push(hero);
     });
     const firstHero=heroList[0];
-    const club=firstHero?(CACHE.clubs.find(c=>c.id===firstHero.ClubID)?.Name||''):'';
+    const club=firstHero?(CACHE_MAPS.clubById.get(firstHero.ClubID)?.Name||''):'';
     const wb=new ExcelJS.Workbook(); wb.creator='HeroPID Hub';
     const thin={style:'thin'};const allB={top:thin,left:thin,bottom:thin,right:thin};
     const grey={style:'thin',color:{argb:'FFD3D3D3'}};const hairB={top:grey,left:grey,bottom:grey,right:grey};
@@ -4905,7 +4942,7 @@ async function exportImageFromFilters() {
       heroes.forEach(h=>{if(!pm[h.PlayerID]){const pl=CACHE.players.find(p=>p.id===h.PlayerID);if(pl?.Status==='archived')return;pm[h.PlayerID]={pl,sn:(pl?.ShirtName||'').toUpperCase(),num:pl?.SquadNumber||9999,hs:[]};}if(pm[h.PlayerID])pm[h.PlayerID].hs.push(h);});
       const players=Object.values(pm).sort((a,b)=>a.num-b.num);
       const pr=new Array(18).fill(null);
-      heroes.forEach(h=>{if(!h.ParentPIDID)return;const par=CACHE.parents.find(p=>p.id===h.ParentPIDID);if(!par)return;const ci=FOOTBALL_COL_MAP[h.GarmentType];if(ci!==undefined&&!pr[ci])pr[ci]=par.PID?Number(par.PID):null;if(h.GarmentType==='infants'&&!pr[BABY_COL])pr[BABY_COL]=par.PID?Number(par.PID):null;});
+      heroes.forEach(h=>{if(!h.ParentPIDID)return;const par=CACHE_MAPS.parentById.get(h.ParentPIDID);if(!par)return;const ci=FOOTBALL_COL_MAP[h.GarmentType];if(ci!==undefined&&!pr[ci])pr[ci]=par.PID?Number(par.PID):null;if(h.GarmentType==='infants'&&!pr[BABY_COL])pr[BABY_COL]=par.PID?Number(par.PID):null;});
       const fl=FONT_LABELS[ft]||ft,kl=kt.charAt(0).toUpperCase()+kt.slice(1);
       const rows=[
         [club, letterStyle, letterColour, fontName, ktFromKey.charAt(0).toUpperCase()+ktFromKey.slice(1), ...new Array(13).fill(null)], // Row 1: metadata
