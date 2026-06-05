@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v184 -->
+<!-- HEROPID-BUILD-v188 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3188,27 +3188,43 @@ async function processCreationFiles(files) {
   const fontType=document.getElementById('creation-font').value;
   if (!seasonId){toast('Please select a season','error');return;}
   document.getElementById('creation-preview').classList.add('hidden');
-  // Always fetch fresh heroes before checking duplicates — stale localStorage cache can cause false positives
+  // Show loading state on drop zone
+  const dz = document.getElementById('drop-zone-creation');
+  const dzText = dz?.querySelector('.drop-zone-text');
+  const dzIcon = dz?.querySelector('.drop-zone-icon');
+  if (dzText) dzText.textContent = 'Reading files...';
+  if (dzIcon) dzIcon.textContent = '⟳';
+  const _resetCreation = () => {
+    if (dzText) dzText.textContent = 'Drop creation CSVs here — multiple files supported';
+    if (dzIcon) dzIcon.textContent = '↑';
+  };
   try {
-    localStorage.removeItem(CACHE_KEYS.heroes);
-    const freshHeroes = await atGetAll(TABLES.heroes);
-    CACHE.heroes = freshHeroes.map(x=>({id:x.id,...x.fields}));
-  } catch(e) { /* proceed with existing cache */ }
-  const allRows=[];
-  for (const file of files) {
-    const text=await file.text();
-    const lines=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').trim().split('\n');
-    if (lines.length<2) continue;
-    const headers=parseCSVLine(lines[0]);
-    for (let i=1;i<lines.length;i++) {
-      const vals=parseCSVLine(lines[i]);
-      if (vals.length<2) continue;
-      const row={};
-      headers.forEach((h,idx)=>row[h.trim()]=(vals[idx]||'').trim());
-      allRows.push(row);
+    // Always fetch fresh heroes before checking duplicates
+    try {
+      if (dzText) dzText.textContent = 'Checking for duplicates...';
+      localStorage.removeItem(CACHE_KEYS.heroes);
+      const freshHeroes = await atGetAll(TABLES.heroes);
+      CACHE.heroes = freshHeroes.map(x=>({id:x.id,...x.fields}));
+      if (dzText) dzText.textContent = 'Parsing rows...';
+    } catch(e) { /* proceed with existing cache */ }
+    const allRows=[];
+    for (const file of files) {
+      const text=await file.text();
+      const lines=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').trim().split('\n');
+      if (lines.length<2) continue;
+      const headers=parseCSVLine(lines[0]);
+      for (let i=1;i<lines.length;i++) {
+        const vals=parseCSVLine(lines[i]);
+        if (vals.length<2) continue;
+        const row={};
+        headers.forEach((h,idx)=>row[h.trim()]=(vals[idx]||'').trim());
+        allRows.push(row);
+      }
     }
+    parseCreationRows(allRows, seasonId, fontType, files.map(f=>f.name));
+  } finally {
+    _resetCreation();
   }
-  parseCreationRows(allRows, seasonId, fontType, files.map(f=>f.name));
 }
 
 function parseCSVLine(line) {
@@ -3447,10 +3463,24 @@ let homeplateData=null;
 function handleHomeplateFileSelect(e){const f=e.target.files[0];if(f)processHomeplateFile(f);}
 
 function processHomeplateFile(file) {
+  const _hpdz = document.getElementById('drop-zone-homeplate');
+  const _hpdzt = _hpdz?.querySelector('.drop-zone-text');
+  const _hpdzi = _hpdz?.querySelector('.drop-zone-icon');
+  if (_hpdzt) _hpdzt.textContent = 'Reading file...';
+  if (_hpdzi) _hpdzi.textContent = '⟳';
   const reader=new FileReader();
+  reader.onerror = () => {
+    if (_hpdzt) _hpdzt.textContent = 'Drop Homeplate export here';
+    if (_hpdzi) _hpdzi.textContent = '↑';
+    toast('Could not read file','error');
+  };
   reader.onload=e=>{
     try{const wb=XLSX.read(e.target.result,{type:'array',codepage:65001});parseHomeplateWorkbook(wb,file.name);}
     catch(err){toast('Could not read file: '+err.message,'error');}
+    finally {
+      if (_hpdzt) _hpdzt.textContent = 'Drop Homeplate export here';
+      if (_hpdzi) _hpdzi.textContent = '↑';
+    }
   };
   reader.readAsArrayBuffer(file);
 }
@@ -3621,13 +3651,25 @@ function processImportFile(file) {
   const clubId = document.getElementById('import-club').value;
   const seasonId = document.getElementById('import-season').value;
   if (!clubId||!seasonId) { toast('Please select a club and season','error'); return; }
+  const _sdz = document.getElementById('drop-zone-storage');
+  const _sdzt = _sdz?.querySelector('.drop-zone-text');
+  const _sdzi = _sdz?.querySelector('.drop-zone-icon');
+  if (_sdzt) _sdzt.textContent = 'Reading file...';
+  if (_sdzi) _sdzi.textContent = '⟳';
+  const _resetStorage = () => {
+    if (_sdzt) _sdzt.textContent = 'Drop your storage sheet here';
+    if (_sdzi) _sdzi.textContent = '↑';
+  };
   const reader = new FileReader();
+  reader.onerror = () => { _resetStorage(); toast('Could not read file','error'); };
   reader.onload = e => {
     try {
       const wb = XLSX.read(e.target.result, {type:'array', cellText:false, cellDates:false, codepage:1252});
       parseImportWorkbook(wb, clubId, seasonId, file.name);
     } catch(err) {
       toast('Could not read file: ' + err.message, 'error');
+    } finally {
+      _resetStorage();
     }
   };
   reader.readAsArrayBuffer(file);
@@ -3639,6 +3681,7 @@ let mdmRosterData = null;
 function mdmRosterClubChanged() {}
 
 function parseMdmRosterUpload(file) {
+  toast('Reading MDM roster file...');
   if (!file) return;
   const clubId = document.getElementById('mdm-roster-club').value;
   const seasonId = document.getElementById('mdm-roster-season').value;
@@ -3886,6 +3929,7 @@ let squadUpdateData = null;
 
 
 function parseSquadUpdateUpload(file) {
+  toast('Reading squad update file...');
   if (!file) return;
   const clubId = document.getElementById('squad-update-club').value;
   const seasonId = document.getElementById('squad-update-season').value;
@@ -4371,6 +4415,7 @@ function parseCataloguePids() {
 }
 
 function parseCataloguePidFile(file) {
+  toast('Reading catalogue PID file...');
   if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
