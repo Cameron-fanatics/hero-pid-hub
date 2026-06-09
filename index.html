@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v219 -->
+<!-- HEROPID-BUILD-v221 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5453,7 +5453,7 @@ async function runMdmBackfill(dryRun) {
         <td class="mono" style="font-size:10px;">${u.fields.ActorID?`<span style="color:var(--green);">+${escHtml(u.fields.ActorID)}</span>`:'<span style="color:var(--text3);">—</span>'}</td>
         <td class="mono" style="font-size:10px;">${u.fields.RosterID?`<span style="color:var(--green);">+${escHtml(u.fields.RosterID)}</span>`:'<span style="color:var(--amber);">no mapping</span>'}</td>
       </tr>`;
-    }).join('')}${updates.length>200?`<tr><td colspan="6" style="color:var(--text3);font-size:11px;padding:8px;">… and ${updates.length-200} more</td></tr>`:''}</tbody>
+    }).join('')}${updates.length>200?`<tr><td colspan="6" style="color:var(--text3);font-size:11px;padding:8px;">… and ${updates.length-200} more — <a href="#" onclick="event.preventDefault();showAllBackfillPreviewRows(this)" style="color:var(--accent);">Show all ${updates.length}</a></td></tr>`:''}</tbody>
   </table></div>`;
   previewEl.innerHTML = html;
   previewEl.style.display = '';
@@ -5489,6 +5489,24 @@ function onBackfillFilterChange() {
     const statusEl = document.getElementById('backfill-status');
     if (statusEl) { statusEl.style.display = ''; statusEl.textContent = 'Filters changed — run dry run again.'; }
   }
+}
+
+function renderBackfillPreviewRow(u) {
+  const club = CACHE.clubs.find(c => c.id === u.hero.ClubID);
+  const tr = document.createElement('tr');
+  tr.innerHTML = `<td class="mono">${escHtml(String(u.hero.PID||''))}</td>
+    <td>${escHtml(u.player?.Name||'—')}</td>
+    <td>${escHtml(club?.Name||'—')}</td>
+    <td style="font-size:10px;color:var(--text3);">${escHtml(u.hero.FontType||'')} · ${escHtml(u.hero.KitType||'')}</td>
+    <td class="mono" style="font-size:10px;">${u.fields.ActorID ? `<span style="color:var(--green);">+${escHtml(u.fields.ActorID)}</span>` : '<span style="color:var(--text3);">—</span>'}</td>
+    <td class="mono" style="font-size:10px;">${u.fields.RosterID ? `<span style="color:var(--green);">+${escHtml(u.fields.RosterID)}</span>` : '<span style="color:var(--amber);">no mapping</span>'}</td>`;
+  return tr;
+}
+
+function showAllBackfillPreviewRows(linkEl) {
+  const pending = window._backfillPending || [];
+  const rows = pending.slice(200).map(renderBackfillPreviewRow);
+  linkEl.closest('tr').replaceWith(...rows);
 }
 
 // ─── ROSTER MAPPINGS PAGE ─────────────────────────────────────────────────────
