@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v218 -->
+<!-- HEROPID-BUILD-v219 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2900,7 +2900,10 @@ function calcDataHealth() {
   const totalIncomplete = incompletePlayers + incompleteParents + incompleteHeroes + incompleteMdm;
   const totalIssues = totalIncomplete + provisionalHeroes;
   const pct = total > 0 ? (totalIncomplete / total) * 100 : 0;
-  const level = totalIssues === 0 ? 'green' : pct <= 2 && provisionalHeroes < 10 ? 'amber' : 'red';
+  const level = totalIssues === 0 && missingRosterLink === 0 && missingActorId === 0 ? 'green'
+    : missingRosterLink > 1000 || missingActorId > 1000 ? 'red'
+    : pct <= 2 && provisionalHeroes < 10 && missingRosterLink < 100 && missingActorId < 100 ? 'amber'
+    : 'red';
   const colour = level === 'green' ? 'var(--green)' : level === 'amber' ? 'var(--amber)' : 'var(--red,#fc8181)';
   // Update nav icon colour
   const navCleanup = document.getElementById('nav-cleanup');
