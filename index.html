@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v217 -->
+<!-- HEROPID-BUILD-v218 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -3274,9 +3274,11 @@ function showImportPreview(club, season, filename) {
   // Build a PID count map for O(1) lookup
   const _pidCountMap = new Map();
   newHeroes.forEach(h=>{ const k=h.playerName+'|'+h.fontType; _pidCountMap.set(k,(_pidCountMap.get(k)||0)+1); });
-  html+=`<div style="max-height:480px;overflow-y:auto;margin-top:8px;"><table class="data-table" style="font-size:11px;" id="import-preview-table"><thead><tr><th>Player</th><th>Font</th><th>PIDs</th><th>Status</th></tr></thead><tbody id="import-preview-tbody">${previewPlayers.map((p,pi)=>{const cnt=_pidCountMap.get(p.name+'|'+p.fontType)||0;const gkStyle=p.goalkeeper?'background:rgba(99,179,237,0.15);color:#63b3ed;border:1px solid rgba(99,179,237,0.3);':'background:transparent;color:var(--text3);border:1px solid var(--border);';const gkBtn=`<button onclick="window._previewToggleGK(${pi})" style="font-size:10px;padding:2px 6px;border-radius:4px;cursor:pointer;margin-left:6px;${gkStyle}">GK</button>`;return`<tr><td style="color:var(--text);">${p.name}${gkBtn}</td><td>${FONT_LABELS[p.fontType]||p.fontType}</td><td class="mono">${cnt}</td><td><span class="badge badge-active">New</span></td></tr>`;}).join('')}</tbody></table>${hiddenCount>0?`<div style="padding:8px 0;font-size:12px;color:var(--text3);">Showing first ${PREVIEW_CAP} of ${newPlayers.length} rows — <a href="#" onclick="event.preventDefault();showAllImportPreview()" style="color:var(--accent);">Show all ${newPlayers.length}</a></div>`:''}</div>`;
+  const _rolledSet = new Set(rolledForward.map(p=>p.name+'|'+p.clubId));
+  html+=`<div style="max-height:480px;overflow-y:auto;margin-top:8px;"><table class="data-table" style="font-size:11px;" id="import-preview-table"><thead><tr><th>Player</th><th>Font</th><th>PIDs</th><th>Status</th></tr></thead><tbody id="import-preview-tbody">${previewPlayers.map((p,pi)=>{const cnt=_pidCountMap.get(p.name+'|'+p.fontType)||0;const gkStyle=p.goalkeeper?'background:rgba(99,179,237,0.15);color:#63b3ed;border:1px solid rgba(99,179,237,0.3);':'background:transparent;color:var(--text3);border:1px solid var(--border);';const gkBtn=`<button onclick="window._previewToggleGK(${pi})" style="font-size:10px;padding:2px 6px;border-radius:4px;cursor:pointer;margin-left:6px;${gkStyle}">GK</button>`;const isRolled=_rolledSet.has(p.name+'|'+p.clubId);const statusBadge=isRolled?'<span class="badge" style="background:rgba(99,179,237,0.12);color:#63b3ed;border:1px solid rgba(99,179,237,0.2);">Rolled</span>':'<span class="badge badge-active">New</span>';return`<tr><td style="color:var(--text);">${p.name}${gkBtn}</td><td>${FONT_LABELS[p.fontType]||p.fontType}</td><td class="mono">${cnt}</td><td>${statusBadge}</td></tr>`;}).join('')}</tbody></table>${hiddenCount>0?`<div style="padding:8px 0;font-size:12px;color:var(--text3);">Showing first ${PREVIEW_CAP} of ${newPlayers.length} rows — <a href="#" onclick="event.preventDefault();showAllImportPreview()" style="color:var(--accent);">Show all ${newPlayers.length}</a></div>`:''}</div>`;
   window._importPreviewAllPlayers = newPlayers;
   window._importPreviewPidCountMap = _pidCountMap;
+  window._importPreviewRolledSet = _rolledSet;
   window._importPreviewShowAll = false;
   document.getElementById('import-preview-content').innerHTML=html;
 }
@@ -3286,11 +3288,14 @@ function showAllImportPreview() {
   const _pidCountMap = window._importPreviewPidCountMap || new Map();
   const tbody = document.getElementById('import-preview-tbody');
   if (!tbody) return;
+  const _rolledSet = window._importPreviewRolledSet || new Set();
   tbody.innerHTML = allPlayers.map((p,pi)=>{
     const cnt=_pidCountMap.get(p.name+'|'+p.fontType)||0;
     const gkStyle=p.goalkeeper?'background:rgba(99,179,237,0.15);color:#63b3ed;border:1px solid rgba(99,179,237,0.3);':'background:transparent;color:var(--text3);border:1px solid var(--border);';
     const gkBtn=`<button onclick="window._previewToggleGK(${pi})" style="font-size:10px;padding:2px 6px;border-radius:4px;cursor:pointer;margin-left:6px;${gkStyle}">GK</button>`;
-    return `<tr><td style="color:var(--text);">${p.name}${gkBtn}</td><td>${FONT_LABELS[p.fontType]||p.fontType}</td><td class="mono">${cnt}</td><td><span class="badge badge-active">New</span></td></tr>`;
+    const isRolled=_rolledSet.has(p.name+'|'+p.clubId);
+    const statusBadge=isRolled?'<span class="badge" style="background:rgba(99,179,237,0.12);color:#63b3ed;border:1px solid rgba(99,179,237,0.2);">Rolled</span>':'<span class="badge badge-active">New</span>';
+    return `<tr><td style="color:var(--text);">${p.name}${gkBtn}</td><td>${FONT_LABELS[p.fontType]||p.fontType}</td><td class="mono">${cnt}</td><td>${statusBadge}</td></tr>`;
   }).join('');
   window._importPreviewShowAll = true;
   // Hide the "show all" link
