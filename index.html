@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v222 -->
+<!-- HEROPID-BUILD-v223 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5403,7 +5403,7 @@ async function runMdmBackfill(dryRun) {
 
   // Build proposed updates — track skipped reason buckets
   const updates = [];
-  let skippedNoActor = 0, skippedNoMapping = 0;
+  let skippedNoActor = 0, skippedNoMapping = 0, skippedAlreadyComplete = 0, skippedOther = 0;
   for (const hero of candidates) {
     const player = CACHE_MAPS.playerById.get(hero.PlayerID);
     const actorId = player?.MDMActorID || hero.ActorID || '';
@@ -5412,22 +5412,24 @@ async function runMdmBackfill(dryRun) {
     if (!hero.ActorID && actorId) fields.ActorID = actorId;
     if (!hero.RosterID && rosterId) fields.RosterID = rosterId;
     if (Object.keys(fields).length === 0) {
-      // Track why we're skipping
       if (!actorId) skippedNoActor++;
-      else if (missingMapping) skippedNoMapping++;
-      else skippedNoActor++; // fallback bucket
+      else if (missingMapping && !hero.RosterID) skippedNoMapping++;
+      else if (hero.ActorID && hero.RosterID) skippedAlreadyComplete++;
+      else skippedOther++;
       continue;
     }
     updates.push({hero, player, actorId, rosterId, missingMapping, fields});
   }
 
-  const totalSkipped = skippedNoActor + skippedNoMapping;
+  const totalSkipped = skippedNoActor + skippedNoMapping + skippedAlreadyComplete + skippedOther;
 
   if (updates.length === 0) {
     const reasons = [];
+    if (skippedAlreadyComplete > 0) reasons.push(`${skippedAlreadyComplete} already complete`);
     if (skippedNoActor > 0) reasons.push(`${skippedNoActor} have no MDMActorID on player`);
     if (skippedNoMapping > 0) reasons.push(`${skippedNoMapping} have no active roster mapping`);
-    statusEl.textContent = `ℹ ${candidates.length} hero PID${candidates.length!==1?'s':''} missing links, but none could be resolved. Skipped: ${reasons.join(', ')}.`;
+    if (skippedOther > 0) reasons.push(`${skippedOther} other`);
+    statusEl.textContent = `ℹ ${candidates.length} hero PID${candidates.length!==1?'s':''} checked. ${reasons.length ? 'Skipped: '+reasons.join(', ')+'.' : 'Nothing to update.'}`;
     return;
   }
 
@@ -5443,8 +5445,10 @@ async function runMdmBackfill(dryRun) {
     missingKeyGroups[label] = (missingKeyGroups[label]||0) + 1;
   });
   const skipParts = [];
+  if (skippedAlreadyComplete > 0) skipParts.push(`${skippedAlreadyComplete} already complete`);
   if (skippedNoActor > 0) skipParts.push(`${skippedNoActor} no MDMActorID`);
   if (skippedNoMapping > 0) skipParts.push(`${skippedNoMapping} no roster mapping`);
+  if (skippedOther > 0) skipParts.push(`${skippedOther} other`);
   let html = `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
     <b>${updates.length}</b> hero PID${updates.length!==1?'s':''} will be updated
     ${totalSkipped>0?`· <span style="color:var(--text3);">skipped ${totalSkipped}: ${skipParts.join(', ')}</span>`:''}
