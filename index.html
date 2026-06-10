@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v221 -->
+<!-- HEROPID-BUILD-v222 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -5433,6 +5433,15 @@ async function runMdmBackfill(dryRun) {
 
   // Show preview table
   const missingMappingCount = updates.filter(u=>u.missingMapping).length;
+  // Group missing mappings by lookup key
+  const missingKeyGroups = {};
+  updates.filter(u=>u.missingMapping).forEach(u=>{
+    const k = `${u.hero.ClubID}|${u.hero.SeasonID}|${String(u.hero.FontType||'').trim().toLowerCase()}|${String(u.hero.KitType||'').trim().toLowerCase()}`;
+    const club = CACHE.clubs.find(c=>c.id===u.hero.ClubID);
+    const season = CACHE.seasons.find(s=>s.id===u.hero.SeasonID);
+    const label = `${club?.Name||u.hero.ClubID} | ${season?.Label||u.hero.SeasonID} | ${u.hero.FontType||'?'} | ${u.hero.KitType||'?'}`;
+    missingKeyGroups[label] = (missingKeyGroups[label]||0) + 1;
+  });
   const skipParts = [];
   if (skippedNoActor > 0) skipParts.push(`${skippedNoActor} no MDMActorID`);
   if (skippedNoMapping > 0) skipParts.push(`${skippedNoMapping} no roster mapping`);
@@ -5440,7 +5449,11 @@ async function runMdmBackfill(dryRun) {
     <b>${updates.length}</b> hero PID${updates.length!==1?'s':''} will be updated
     ${totalSkipped>0?`· <span style="color:var(--text3);">skipped ${totalSkipped}: ${skipParts.join(', ')}</span>`:''}
     ${missingMappingCount>0?`· <span style="color:var(--amber);">⚠ ${missingMappingCount} still have no active roster mapping — RosterID will remain blank</span>`:''}
-  </div>`;
+  </div>
+  ${missingMappingCount>0?`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">
+    <b>Missing mapping keys:</b><br>
+    ${Object.entries(missingKeyGroups).map(([k,n])=>`<span class="mono" style="font-size:10px;">${escHtml(k)}</span> <span style="color:var(--text3);">(${n} PID${n!==1?'s':''})</span>`).join('<br>')}
+  </div>`:''}`;
   html += `<div style="max-height:320px;overflow-y:auto;"><table class="data-table" style="font-size:11px;">
     <thead><tr><th>PID</th><th>Player</th><th>Club</th><th>Font · Kit</th><th>ActorID → fill</th><th>RosterID → fill</th></tr></thead>
     <tbody>${updates.slice(0,200).map(u => {
@@ -5451,7 +5464,7 @@ async function runMdmBackfill(dryRun) {
         <td>${escHtml(club?.Name||'—')}</td>
         <td style="font-size:10px;color:var(--text3);">${escHtml(u.hero.FontType||'')} · ${escHtml(u.hero.KitType||'')}</td>
         <td class="mono" style="font-size:10px;">${u.fields.ActorID?`<span style="color:var(--green);">+${escHtml(u.fields.ActorID)}</span>`:'<span style="color:var(--text3);">—</span>'}</td>
-        <td class="mono" style="font-size:10px;">${u.fields.RosterID?`<span style="color:var(--green);">+${escHtml(u.fields.RosterID)}</span>`:'<span style="color:var(--amber);">no mapping</span>'}</td>
+        <td class="mono" style="font-size:10px;">${u.fields.RosterID?`<span style="color:var(--green);">+${escHtml(u.fields.RosterID)}</span>`:u.missingMapping?`<span style="color:var(--amber);" title="${escHtml(u.hero.ClubID+'|'+u.hero.SeasonID+'|'+(u.hero.FontType||'')+'|'+(u.hero.KitType||''))}">no mapping</span>`:'<span style="color:var(--text3);">—</span>'}</td>
       </tr>`;
     }).join('')}${updates.length>200?`<tr><td colspan="6" style="color:var(--text3);font-size:11px;padding:8px;">… and ${updates.length-200} more — <a href="#" onclick="event.preventDefault();showAllBackfillPreviewRows(this)" style="color:var(--accent);">Show all ${updates.length}</a></td></tr>`:''}</tbody>
   </table></div>`;
@@ -5499,7 +5512,7 @@ function renderBackfillPreviewRow(u) {
     <td>${escHtml(club?.Name||'—')}</td>
     <td style="font-size:10px;color:var(--text3);">${escHtml(u.hero.FontType||'')} · ${escHtml(u.hero.KitType||'')}</td>
     <td class="mono" style="font-size:10px;">${u.fields.ActorID ? `<span style="color:var(--green);">+${escHtml(u.fields.ActorID)}</span>` : '<span style="color:var(--text3);">—</span>'}</td>
-    <td class="mono" style="font-size:10px;">${u.fields.RosterID ? `<span style="color:var(--green);">+${escHtml(u.fields.RosterID)}</span>` : '<span style="color:var(--amber);">no mapping</span>'}</td>`;
+    <td class="mono" style="font-size:10px;">${u.fields.RosterID ? `<span style="color:var(--green);">+${escHtml(u.fields.RosterID)}</span>` : u.missingMapping ? `<span style="color:var(--amber);" title="${escHtml(u.hero.ClubID+'|'+u.hero.SeasonID+'|'+(u.hero.FontType||'')+'|'+(u.hero.KitType||''))}">no mapping</span>` : '<span style="color:var(--text3);">—</span>'}</td>`;
   return tr;
 }
 
