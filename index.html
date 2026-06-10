@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v223 -->
+<!-- HEROPID-BUILD-v226 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -325,7 +325,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         <div class="card-header"><span class="card-title">Upload storage sheet</span></div>
         <div style="padding:20px;">
           <div class="form-row" style="margin-bottom:16px;">
-            <div class="form-group" style="margin:0;"><label class="form-label">Club</label><select class="form-select" id="import-club"><option value="">Select club...</option></select></div>
+            <div class="form-group" style="margin:0;"><label class="form-label">Club</label><select class="form-select" id="import-club" onchange="filterSeasonDropdown('import-season', this.value, {blankLabel:'Select season...'})"><option value="">Select club...</option></select></div>
             <div class="form-group" style="margin:0;"><label class="form-label">Season</label><select class="form-select" id="import-season"><option value="">Select season...</option></select></div>
           </div>
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);">
@@ -641,6 +641,14 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       </div>
     </div>
 
+    <!-- MDM ROSTER MEMBER DUPLICATES -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">MDM Roster Member Duplicates</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Scans cached MDM Roster Members for duplicate <span class="mono" style="font-size:11px;">RosterMemberID</span> values. Duplicates can cause incorrect backfill matches.</div>
+      <button class="btn btn-ghost btn-sm" onclick="runMdmDupeCheck()">⊙ Check for duplicates</button>
+      <div id="mdm-dupe-result" style="margin-top:10px;font-size:12px;"></div>
+    </div>
+
     <!-- MDM BACKFILL -->
     <div class="card" style="margin-bottom:16px;">
       <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">MDM Backfill — ActorID &amp; RosterID</div>
@@ -684,7 +692,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
   <div class="content">
     <div id="rm-dupe-banner" style="display:none;background:var(--red-bg,rgba(255,92,92,0.08));border:1px solid rgba(255,92,92,0.25);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--red);margin-bottom:14px;"></div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;">
-      <select id="rm-filter-club" class="filter-select" style="width:180px;font-size:12px;" onchange="renderRosterMappings()">
+      <select id="rm-filter-club" class="filter-select" style="width:180px;font-size:12px;" onchange="filterSeasonDropdown('rm-filter-season', this.value, {allLabel:'All seasons', source:'rosterMappings'});renderRosterMappings()">
         <option value="">All clubs</option>
       </select>
       <select id="rm-filter-season" class="filter-select" style="width:140px;font-size:12px;" onchange="renderRosterMappings()">
@@ -1034,7 +1042,22 @@ function resolveMdmLinks(actorId, clubId, seasonId, fontType, kitType) {
   };
 }
 
-// Validate for duplicate active roster mappings (same ClubID+SeasonID+FontType+KitType, Active=true)
+// Validate for duplicate RosterMemberIDs in the MDM Roster Members cache
+// Returns array of {rosterMemberId, count, records} for any duplicates found
+function validateMdmRosterMemberDuplicates() {
+  const counts = new Map();
+  (CACHE.mdmRosterMembers||[]).forEach(m => {
+    const rmid = String(m.RosterMemberID||'').trim();
+    if (!rmid || rmid === '0' || rmid === '-999') return; // skip placeholder values
+    if (!counts.has(rmid)) counts.set(rmid, []);
+    counts.get(rmid).push(m);
+  });
+  const dupes = [];
+  counts.forEach((records, rosterMemberId) => {
+    if (records.length > 1) dupes.push({rosterMemberId, count: records.length, records});
+  });
+  return dupes;
+}
 // Returns array of {key, count, rows} for any duplicates found
 function validateRosterMappingDuplicates() {
   const counts = new Map();
@@ -5106,16 +5129,7 @@ function initMdmPreviewTab() {
 
 function mdmpOnClubChange() {
   const clubId = document.getElementById('mdmp-club')?.value || '';
-  const seasonSel = document.getElementById('mdmp-season');
-  const prevSeason = seasonSel.value;
-  // Show only seasons that have roster mappings for this club
-  const relevantSeasonIds = clubId
-    ? [...new Set((CACHE.rosterMappings||[]).filter(r=>r.ClubID===clubId).map(r=>r.SeasonID))]
-    : [...new Set((CACHE.rosterMappings||[]).map(r=>r.SeasonID))];
-  const seasons = relevantSeasonIds.map(id=>CACHE.seasons.find(s=>s.id===id)).filter(Boolean);
-  seasonSel.innerHTML = '<option value="">— Select season —</option>' +
-    seasons.map(s=>`<option value="${s.id}">${s.Label||s.id}</option>`).join('');
-  if (prevSeason && seasons.find(s=>s.id===prevSeason)) seasonSel.value = prevSeason;
+  filterSeasonDropdown('mdmp-season', clubId, {blankLabel:'— Select season —', source:'rosterMappings'});
   document.getElementById('mdmp-content').innerHTML = '';
   document.getElementById('mdmp-summary-pills').innerHTML = '';
 }
@@ -5323,10 +5337,8 @@ function initBackfillSelects() {
     const o = document.createElement('option'); o.value=c.id; o.textContent=c.Name||c.id;
     clubSel.appendChild(o);
   });
-  CACHE.seasons.forEach(s => {
-    const o = document.createElement('option'); o.value=s.id; o.textContent=s.Label||s.id;
-    seasonSel.appendChild(o);
-  });
+  // Populate seasons filtered by current club selection (initially all)
+  filterSeasonDropdown('backfill-season', clubSel.value, {allLabel:'All seasons'});
 }
 
 async function runMdmBackfill(dryRun) {
@@ -5483,6 +5495,30 @@ async function runMdmBackfill(dryRun) {
   window._backfillPending = updates;
 }
 
+function runMdmDupeCheck() {
+  const el = document.getElementById('mdm-dupe-result');
+  if (!CACHE.mdmRosterMembers) {
+    el.innerHTML = '<span style="color:var(--amber);">⚠ MDM roster members not loaded — open the MDM Preview tab first to load them.</span>';
+    return;
+  }
+  const dupes = validateMdmRosterMemberDuplicates();
+  const placeholders = (CACHE.mdmRosterMembers||[]).filter(m => String(m.RosterMemberID||'').trim() === '-999');
+  let html = '';
+  if (placeholders.length > 0) {
+    html += `<div style="color:var(--amber);margin-bottom:8px;">⚠ ${placeholders.length} roster member${placeholders.length!==1?'s':''} have placeholder ID <span class="mono">-999</span> — these may be temporary/invalid MDM entries.</div>`;
+  }
+  if (dupes.length === 0) {
+    html += '<span style="color:var(--green);">✓ No duplicate RosterMemberIDs found across ' + CACHE.mdmRosterMembers.length + ' records.</span>';
+  } else {
+    const rows = dupes.map(d => {
+      const detail = d.records.map(r => `<span class="mono" style="font-size:10px;">RosterID ${r.RosterID} · ${r.JerseyName||'?'} · ActorID ${r.ActorID}</span>`).join('<br>');
+      return `<div style="margin-bottom:8px;"><span style="color:var(--red);">RosterMemberID <span class="mono">${escHtml(d.rosterMemberId)}</span> — ${d.count} duplicates:</span><br>${detail}</div>`;
+    }).join('');
+    html += `<div style="color:var(--red);margin-bottom:8px;">⚠ ${dupes.length} duplicate RosterMemberID${dupes.length!==1?'s':''} found:</div>${rows}`;
+  }
+  el.innerHTML = html;
+}
+
 function clearBackfillPreview() {
   document.getElementById('backfill-preview').style.display = 'none';
   document.getElementById('backfill-apply-btn').style.display = 'none';
@@ -5494,7 +5530,10 @@ function clearBackfillPreview() {
 }
 
 function onBackfillFilterChange() {
-  // Filters changed — invalidate pending snapshot so Apply can't fire stale data
+  // Filter season dropdown based on selected club
+  const clubId = document.getElementById('backfill-club')?.value || '';
+  filterSeasonDropdown('backfill-season', clubId, {allLabel:'All seasons'});
+  // Invalidate pending snapshot so Apply can't fire stale data
   if (window._backfillPending) {
     window._backfillPending = null;
     const applyBtn = document.getElementById('backfill-apply-btn');
@@ -5933,6 +5972,27 @@ function getExportSeasonsForClub(clubId) {
   // Return only seasons that have at least one hero PID for this club
   const seasonIds = new Set((CACHE.heroes||[]).filter(h=>h.ClubID===clubId).map(h=>h.SeasonID).filter(Boolean));
   return (CACHE.seasons||[]).filter(s=>seasonIds.has(s.id));
+}
+
+// Generic: filter a season <select> based on a club selection
+// source: data source — 'heroes' (default) or 'rosterMappings'
+function filterSeasonDropdown(seasonSelId, clubId, {allLabel='All seasons', blankLabel=null, source='heroes'}={}) {
+  const seasonSel = document.getElementById(seasonSelId);
+  if (!seasonSel) return;
+  let seasons;
+  if (!clubId) {
+    seasons = CACHE.seasons||[];
+  } else if (source === 'rosterMappings') {
+    const ids = new Set((CACHE.rosterMappings||[]).filter(r=>r.ClubID===clubId).map(r=>r.SeasonID).filter(Boolean));
+    seasons = (CACHE.seasons||[]).filter(s=>ids.has(s.id));
+  } else {
+    const ids = new Set((CACHE.heroes||[]).filter(h=>h.ClubID===clubId).map(h=>h.SeasonID).filter(Boolean));
+    seasons = (CACHE.seasons||[]).filter(s=>ids.has(s.id));
+  }
+  const prev = seasonSel.value;
+  const firstOpt = blankLabel ? `<option value="">${blankLabel}</option>` : `<option value="">${allLabel}</option>`;
+  seasonSel.innerHTML = firstOpt + seasons.map(s=>`<option value="${s.id}">${s.Label||s.id}</option>`).join('');
+  if (prev && seasons.find(s=>s.id===prev)) seasonSel.value = prev;
 }
 
 function populateExportFilters() {
