@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v226 -->
+<!-- HEROPID-BUILD-v228 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -639,6 +639,26 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         <button class="btn btn-ghost btn-sm" onclick="exportIncomplete('mdmRosterMembers')">⬇ Export Incomplete</button>
         <span class="cleanup-status" id="cleanup-status-mdmRosterMembers" style="display:none;font-size:11px;color:var(--accent);"></span>
       </div>
+    </div>
+
+    <!-- HERO PID BULK CORRECTION IMPORT -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Apply Hero PID Corrections</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">
+        Upload a corrected AT export XLSX to apply KitType, ActorID, RosterID and RosterMemberID fixes in bulk.
+        Expected columns: <span class="mono" style="font-size:11px;">PID (col A) · KitType (col H) · ActorID (col L) · RosterID (col M) · RosterMemberID (col N)</span>.
+        Run <b>Dry Run</b> first to preview changes.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+        <input type="file" id="correction-file-input" accept=".xlsx" style="display:none;" onchange="onCorrectionFileSelected(this)">
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('correction-file-input').click()">⊕ Upload XLSX</button>
+        <span id="correction-file-label" style="font-size:11px;color:var(--text3);">No file selected</span>
+        <button class="btn btn-ghost btn-sm" id="correction-dryrun-btn" style="display:none;" onclick="runCorrectionImport(true)">⊙ Dry Run</button>
+        <button class="btn btn-primary btn-sm" id="correction-apply-btn" style="display:none;" onclick="runCorrectionImport(false)">✓ Apply Corrections</button>
+        <button class="btn btn-ghost btn-sm" id="correction-cancel-btn" style="display:none;" onclick="clearCorrectionImport()">✕ Cancel</button>
+      </div>
+      <div id="correction-status" style="display:none;font-size:11px;color:var(--accent);margin-bottom:8px;"></div>
+      <div id="correction-preview" style="display:none;"></div>
     </div>
 
     <!-- MDM ROSTER MEMBER DUPLICATES -->
@@ -5326,6 +5346,201 @@ async function renderMdmPreview() {
     <div class="stat-pill"><span class="stat-label">Orphaned hero</span><span class="stat-value" style="color:#63b3ed;">${cntOrphaned}</span></div>`;
 
   document.getElementById('mdmp-content').innerHTML = html || '<div style="padding:20px;text-align:center;color:var(--text3);font-size:13px;">Nothing to display.</div>';
+}
+
+// ─── HERO PID BULK CORRECTION IMPORT ────────────────────────────────────────
+let _correctionPending = null;
+let _correctionFileData = null;
+
+function onCorrectionFileSelected(input) {
+  const file = input.files[0];
+  if (!file) return;
+  document.getElementById('correction-file-label').textContent = file.name;
+  document.getElementById('correction-status').style.display = 'none';
+  document.getElementById('correction-preview').style.display = 'none';
+  document.getElementById('correction-apply-btn').style.display = 'none';
+  document.getElementById('correction-cancel-btn').style.display = 'none';
+  _correctionPending = null;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
+      _correctionFileData = data;
+      document.getElementById('correction-dryrun-btn').style.display = '';
+      const statusEl = document.getElementById('correction-status');
+      statusEl.style.display = '';
+      statusEl.textContent = `✓ File loaded — ${data.length - 1} rows. Run dry run to preview changes.`;
+    } catch(e) {
+      document.getElementById('correction-status').style.display = '';
+      document.getElementById('correction-status').textContent = `Error reading file: ${e.message}`;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function safeMdmId(val) {
+  if (val == null || val === '') return '';
+  const n = Number(val);
+  if (isNaN(n) || !isFinite(n)) return '';
+  return String(Math.round(n));
+}
+
+function parseCorrectionRow(row) {
+  const pid = safeMdmId(row[0]);
+  const kitType = row[7] != null ? String(row[7]).trim() : null;
+  const actorId = safeMdmId(row[11]);
+  const rosterId = safeMdmId(row[12]);
+  const rosterMemberId = safeMdmId(row[13]);
+  return {pid: pid || null, kitType, actorId: actorId || null, rosterId: rosterId || null, rosterMemberId: rosterMemberId || null};
+}
+
+async function runCorrectionImport(dryRun) {
+  const statusEl = document.getElementById('correction-status');
+  const previewEl = document.getElementById('correction-preview');
+  const applyBtn = document.getElementById('correction-apply-btn');
+  const cancelBtn = document.getElementById('correction-cancel-btn');
+
+  if (!dryRun) {
+    if (!_correctionPending) { toast('Run dry run first.', 'error'); return; }
+    // Apply snapshot
+    applyBtn.disabled = true;
+    applyBtn.textContent = 'Applying…';
+    statusEl.style.display = '';
+    statusEl.textContent = 'Applying corrections…';
+    const pending = _correctionPending;
+    let done = 0, failed = 0;
+    for (let i = 0; i < pending.length; i += 10) {
+      const chunk = pending.slice(i, i + 10);
+      statusEl.textContent = `Applying… ${i}/${pending.length}`;
+      await Promise.all(chunk.map(async u => {
+        try {
+          await atUpdate(TABLES.heroes, u.hero.id, u.fields);
+          Object.assign(u.hero, u.fields);
+          done++;
+        } catch(e) { failed++; }
+      }));
+    }
+    buildCacheMaps();
+    updateStats();
+    previewEl.style.display = 'none';
+    applyBtn.style.display = 'none';
+    applyBtn.disabled = false;
+    applyBtn.textContent = '✓ Apply Corrections';
+    cancelBtn.style.display = 'none';
+    _correctionPending = null;
+    statusEl.textContent = `✓ Complete — ${done} updated${failed > 0 ? `, ${failed} failed` : ''}.`;
+    if (failed > 0) {
+      toast(`Hero PID corrections: ${done} updated, ${failed} failed`, 'error');
+    } else {
+      toast(`Hero PID corrections: ${done} updated`);
+    }
+    return;
+  }
+
+  // Dry run
+  if (!_correctionFileData) { toast('Upload a file first.', 'error'); return; }
+  statusEl.style.display = '';
+  statusEl.textContent = 'Analysing…';
+  previewEl.style.display = 'none';
+  applyBtn.style.display = 'none';
+  cancelBtn.style.display = 'none';
+  _correctionPending = null;
+
+  const rows = _correctionFileData.slice(1).filter(r => r[0] != null); // skip header
+  const updates = [];
+  const missing = [];
+  const pidCounts = {};
+  const unmatched = [];
+
+  // Check for duplicate PIDs in file
+  rows.forEach(row => {
+    const {pid} = parseCorrectionRow(row);
+    if (pid) pidCounts[pid] = (pidCounts[pid] || 0) + 1;
+  });
+  const dupPIDs = Object.entries(pidCounts).filter(([,c]) => c > 1).map(([pid]) => pid);
+  if (dupPIDs.length > 0) {
+    statusEl.textContent = `⚠ ${dupPIDs.length} duplicate PIDs in file — fix before applying: ${dupPIDs.slice(0,5).join(', ')}${dupPIDs.length > 5 ? '…' : ''}`;
+    return;
+  }
+
+  for (const row of rows) {
+    const {pid, kitType, actorId, rosterId, rosterMemberId} = parseCorrectionRow(row);
+    if (!pid) continue;
+    const hero = CACHE_MAPS.heroByPID.get(pid);
+    if (!hero) { unmatched.push(pid); continue; }
+
+    const fields = {};
+    const changes = [];
+    if (kitType && kitType !== hero.KitType) { fields.KitType = kitType; changes.push(`KitType: ${hero.KitType||'—'} → ${kitType}`); }
+    if (actorId && actorId !== hero.ActorID) { fields.ActorID = actorId; changes.push(`ActorID: ${hero.ActorID||'—'} → ${actorId}`); }
+    if (rosterId && rosterId !== hero.RosterID) { fields.RosterID = rosterId; changes.push(`RosterID: ${hero.RosterID||'—'} → ${rosterId}`); }
+    if (rosterMemberId && rosterMemberId !== String(hero.RosterMemberID||'')) { fields.RosterMemberID = rosterMemberId; changes.push(`RosterMemberID: ${hero.RosterMemberID||'—'} → ${rosterMemberId}`); }
+
+    if (Object.keys(fields).length > 0) updates.push({hero, fields, pid, changes});
+    else missing.push({pid, reason: 'No changes'});
+  }
+
+  // Build preview
+  const player = (hero) => {
+    const p = CACHE_MAPS.playerById.get(hero.PlayerID);
+    return p?.Name || '—';
+  };
+  const noChanges = rows.length - updates.length - unmatched.length;
+  let html = `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
+    <b>${updates.length}</b> updates · <span style="color:var(--text3);">${noChanges} already correct · ${unmatched.length} unmatched PIDs</span>
+  </div>`;
+
+  if (updates.length > 0) {
+    html += `<div style="max-height:320px;overflow-y:auto;"><table class="data-table" style="font-size:11px;">
+      <thead><tr><th>PID</th><th>Player</th><th>Changes</th></tr></thead>
+      <tbody>${updates.slice(0, 200).map(u => `<tr>
+        <td class="mono">${u.pid}</td>
+        <td>${escHtml(player(u.hero))}</td>
+        <td style="font-size:10px;color:var(--text2);">${u.changes.map(c => escHtml(c)).join('<br>')}</td>
+      </tr>`).join('')}${updates.length > 200 ? `<tr><td colspan="3" style="color:var(--text3);font-size:11px;padding:8px;">… and ${updates.length - 200} more</td></tr>` : ''}</tbody>
+    </table></div>`;
+  }
+
+  if (unmatched.length > 0) {
+    html += `<div style="margin-top:10px;font-size:11px;color:var(--amber);">⚠ ${unmatched.length} PIDs not found in cache: ${unmatched.slice(0,10).join(', ')}${unmatched.length > 10 ? `… <button class="btn btn-ghost btn-sm" onclick="exportUnmatchedCorrections()">Export all</button>` : ''}</div>`;
+    window._correctionUnmatched = unmatched;
+  }
+
+  previewEl.innerHTML = html;
+  previewEl.style.display = '';
+  statusEl.textContent = `Dry run complete — ${updates.length} updates proposed.`;
+
+  if (updates.length > 0) {
+    applyBtn.style.display = '';
+    applyBtn.disabled = false;
+    cancelBtn.style.display = '';
+    _correctionPending = updates;
+  }
+}
+
+function exportUnmatchedCorrections() {
+  const unmatched = window._correctionUnmatched || [];
+  const csv = 'PID\n' + unmatched.join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'unmatched_correction_pids.csv';
+  a.click();
+}
+
+function clearCorrectionImport() {
+  _correctionPending = null;
+  _correctionFileData = null;
+  document.getElementById('correction-file-input').value = '';
+  document.getElementById('correction-file-label').textContent = 'No file selected';
+  document.getElementById('correction-dryrun-btn').style.display = 'none';
+  document.getElementById('correction-apply-btn').style.display = 'none';
+  document.getElementById('correction-cancel-btn').style.display = 'none';
+  document.getElementById('correction-status').style.display = 'none';
+  document.getElementById('correction-preview').style.display = 'none';
 }
 
 // ─── MDM BACKFILL ─────────────────────────────────────────────────────────────
