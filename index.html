@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v229 -->
+<!-- HEROPID-BUILD-v230 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -4344,6 +4344,51 @@ async function importMdmRoster() {
   }
   document.getElementById('mdm-roster-preview').classList.add('hidden');
   toast(`MDM Roster: ${toCreate.length} created, ${toUpdate.length} updated${playerUpdates.length ? `, ${playerUpdates.length} player statuses synced` : ''}`,'success');
+  setStatus('');
+
+  // ── Step 8: Populate RosterMemberID on Hero PIDs ──────────────────────────
+  // Build actorId|rosterId → RosterMemberID map from this import's rows
+  // Key includes rosterId because the same actor can appear on multiple rosters
+  // with different RosterMemberIDs (e.g. same player across Home/Away/Third rosters)
+  const actorRosterToRMID = {};
+  const actorRosterDupes = new Set();
+  rows.forEach(r => {
+    if (r.actorId && r.id && r.rosterId) {
+      const key = `${r.actorId}|${r.rosterId}`;
+      if (actorRosterToRMID[key] && actorRosterToRMID[key] !== String(r.id)) {
+        actorRosterDupes.add(key);
+      }
+      actorRosterToRMID[key] = String(r.id);
+    }
+  });
+  if (actorRosterDupes.size > 0) console.warn('[MDM] Duplicate actorId|rosterId keys in import:', [...actorRosterDupes]);
+
+  // Find Hero PIDs for this club where ActorID+RosterID matches but RosterMemberID is blank
+  const heroUpdates = [];
+  (CACHE.heroes||[]).forEach(h => {
+    if (h.ClubID !== clubId) return;
+    if (!h.ActorID || !h.RosterID) return;
+    if (h.RosterMemberID && String(h.RosterMemberID) !== '0') return; // already set
+    const rmid = actorRosterToRMID[`${h.ActorID}|${h.RosterID}`];
+    if (rmid) heroUpdates.push({hero: h, rmid});
+  });
+
+  if (heroUpdates.length > 0) {
+    setStatus(`⟳ Writing RosterMemberID to ${heroUpdates.length} Hero PIDs...`);
+    let heroDone = 0;
+    for (let i = 0; i < heroUpdates.length; i += 10) {
+      const batch = heroUpdates.slice(i, i + 10);
+      await Promise.all(batch.map(({hero, rmid}) =>
+        atUpdate(TABLES.heroes, hero.id, {RosterMemberID: rmid}).then(() => {
+          hero.RosterMemberID = rmid;
+          heroDone++;
+        }).catch(() => {})
+      ));
+      setStatus(`⟳ Writing RosterMemberID to Hero PIDs... ${Math.min(i+10, heroUpdates.length)}/${heroUpdates.length}`);
+    }
+    toast(`MDM Roster: ${toCreate.length} created, ${toUpdate.length} updated, ${heroDone} Hero PIDs linked`, 'success');
+  }
+
   setStatus('');
   mdmRosterData = null;
   // Auto-refresh so search/manage reflect latest data without manual sync
