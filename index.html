@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v231 -->
+<!-- HEROPID-BUILD-v232 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -163,14 +163,15 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <div class="nav-item" onclick="showPage('fonts')" id="nav-fonts"><span class="icon">✦</span> Fonts</div>
     <div class="nav-item" onclick="showPage('rostermappings')" id="nav-rostermappings"><span class="icon">⇄</span> Roster Mappings</div>
     <div class="nav-item" onclick="showPage('cleanup')" id="nav-cleanup"><span class="icon">⚠</span> Data Clean-up</div>
-    <div class="nav-item" onclick="showPage('analytics')" id="nav-analytics"><span class="icon">◎</span> Analytics</div>
+    <div class="nav-item" onclick="showPage('datahealth')" id="nav-datahealth"><span class="icon">◎</span> Data Health</div>
+    <div class="nav-item" onclick="showPage('analytics')" id="nav-analytics"><span class="icon">▦</span> Analytics</div>
     <div class="nav-section" style="margin-top:8px;">Settings</div>
     <div class="nav-item" onclick="showPage('settings')" id="nav-settings"><span class="icon">⚙</span> Settings</div>
   </nav>
   <div class="sidebar-stats">
     <div class="stat-pill"><span class="stat-label">Hero PIDs</span><span class="stat-value" id="stat-hero">—</span></div>
     <div class="stat-pill"><span class="stat-label">MDM Linked</span><span class="stat-value" id="stat-mdm-linked">—</span></div>
-    <div class="stat-pill" style="cursor:pointer;" onclick="showPage('cleanup')"><span class="stat-label">Data Health</span><span class="stat-value" id="stat-health">—</span></div>
+    <div class="stat-pill" style="cursor:pointer;" onclick="showPage('datahealth')"><span class="stat-label">Data Health</span><span class="stat-value" id="stat-health">—</span></div>
   </div>
 </aside>
 
@@ -553,7 +554,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 <div id="page-seasons" class="hidden">
   <div class="topbar"><div class="page-title">Seasons</div><button class="btn btn-primary" onclick="openModal('modal-add-season')">+ Add Season</button></div>
   <div class="content"><div id="seasons-selection-bar"></div><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div id="seasons-perpage"></div><div id="seasons-pager" style="margin-left:auto;"></div></div>
-    <div class="card"><table class="data-table"><thead><tr><th id="seasons-th-chk" style="width:32px;padding:8px 4px;"></th><th>Label</th><th>Sport</th><th>Start</th><th>End</th><th></th></tr></thead><tbody id="seasons-tbody"><tr><td colspan="5" class="loading"><div class="loading-spinner"></div><br>Loading...</td></tr></tbody></table></div>
+    <div class="card"><table class="data-table"><thead><tr><th id="seasons-th-chk" style="width:32px;padding:8px 4px;"></th><th>Label</th><th>Sport</th><th>Competition Type</th><th>Start</th><th>End</th><th></th></tr></thead><tbody id="seasons-tbody"><tr><td colspan="7" class="loading"><div class="loading-spinner"></div><br>Loading...</td></tr></tbody></table></div>
   </div>
 </div>
 
@@ -716,7 +717,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 </div>
 
 <!-- ROSTER MAPPINGS PAGE -->
-<div id="page-analytics" class="hidden">
+<div id="page-datahealth" class="hidden">
   <div class="topbar"><div class="page-title">Data Nerd Dashboard</div></div>
   <div class="content">
 
@@ -773,6 +774,14 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       <div id="an-roster-output" style="display:none;"></div>
     </div>
 
+  </div>
+</div>
+
+<!-- ANALYTICS PAGE -->
+<div id="page-analytics" class="hidden">
+  <div class="topbar"><div class="page-title">Analytics</div></div>
+  <div class="content" id="analytics-content">
+    <div id="analytics-loading" style="padding:40px;text-align:center;color:var(--text3);font-size:13px;">Loading analytics…</div>
   </div>
 </div>
 
@@ -1029,6 +1038,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       <div class="form-group"><label class="form-label">Label *</label><input class="form-input" id="season-label" placeholder="e.g. 2025-26 or World Cup 2026" /></div>
       <div class="form-row"><div class="form-group"><label class="form-label">Start Year</label><input class="form-input" id="season-start" type="number" placeholder="2025" /></div><div class="form-group"><label class="form-label">End Year</label><input class="form-input" id="season-end" type="number" placeholder="2026" /></div></div>
       <div class="form-group"><label class="form-label">Sport</label><select class="form-select" id="season-sport"><option value="football">Football</option><option value="us_sports">US Sports</option><option value="other">Other</option></select></div>
+      <div class="form-group"><label class="form-label">Competition Type</label><select class="form-select" id="season-competition-type"><option value="Club">Club</option><option value="International">International</option><option value="Other">Other</option></select></div>
     </div>
     <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-add-season')">Cancel</button><button class="btn btn-primary" onclick="saveSeason()">Save Season</button></div>
   </div>
@@ -1104,6 +1114,8 @@ const BRAND_ANCHORS = ['FRANCE NIKE','FRANCE ADIDAS','FRANCE PUMA','DFB ADIDAS',
 
 // Local cache for search performance
 let CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null,catalogues:[],fonts:[],rosterMappings:[],kitColours:[]};
+let ANALYTICS_CACHE = null;
+function invalidateDerivedReports() { ANALYTICS_CACHE = null; }
 // O(1) lookup maps — rebuilt whenever CACHE arrays change
 let CACHE_MAPS = {
   heroByPID: new Map(),       // String(PID) -> hero
@@ -1117,6 +1129,7 @@ let CACHE_MAPS = {
   kitColourByKey: new Map(),     // `${clubName}|${seasonLabel}|${kitType}` -> {BadgeColour, BadgeTextColour}
 };
 function buildCacheMaps() {
+  invalidateDerivedReports();
   CACHE_MAPS.heroByPID = new Map((CACHE.heroes||[]).map(h => [String(h.PID), h]));
   CACHE_MAPS.heroById = new Map((CACHE.heroes||[]).map(h => [h.id, h]));
   CACHE_MAPS.parentByPID = new Map((CACHE.parents||[]).map(p => [String(p.PID), p]));
@@ -1305,6 +1318,7 @@ function disconnectAirtable() {
   localStorage.removeItem('at_fields_init');
   AT_TOKEN = ''; AT_BASE = ''; TABLES = {};
   CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null,catalogues:[],fonts:[],rosterMappings:[],kitColours:[]};
+  invalidateDerivedReports();
   updateStats();
   refreshSettingsStatus();
   toast('Disconnected from Airtable');
@@ -1437,7 +1451,7 @@ async function loadCachedOrFetch(key,tid){const c=getCachedTable(key);if(c)retur
 async function loadCache(force, dataOnly=false){
   // dataOnly=true: only refresh players/parents/heroes (skip clubs/seasons/catalogues)
   // This is much faster after imports since those tables don't change
-  if(force) { Object.values(CACHE_KEYS).forEach(k=>localStorage.removeItem(k)); CACHE.rosterMappings=[]; CACHE.kitColours=[]; }
+  if(force) { Object.values(CACHE_KEYS).forEach(k=>localStorage.removeItem(k)); CACHE.rosterMappings=[]; CACHE.kitColours=[]; invalidateDerivedReports(); }
   try{
     if (!dataOnly) {
       // Full load - fetch everything
@@ -1464,7 +1478,7 @@ async function loadCache(force, dataOnly=false){
 
 // ─── PAGES ────────────────────────────────────────────────────────────────────
 function showPage(page) {
-  ['search','manage','import','clubs','seasons','settings','cleanup','bulkexport','fonts','rostermappings','analytics'].forEach(p => {
+  ['search','manage','import','clubs','seasons','settings','cleanup','bulkexport','fonts','rostermappings','datahealth','analytics'].forEach(p => {
     document.getElementById('page-'+p)?.classList.add('hidden');
     document.getElementById('nav-'+p)?.classList.remove('active');
   });
@@ -1479,6 +1493,8 @@ function showPage(page) {
   if (page==='fonts') renderFontsPage();
   if (page==='rostermappings') initRosterMappingsPage();
   if (page==='cleanup') initBackfillSelects();
+  if (page==='datahealth') calcDataHealth();
+  if (page==='analytics') initAnalyticsPage();
   if (page==='search') {
     const sf = document.getElementById('filter-status');
     if (sf && sf.value === '') sf.value = 'active';
@@ -1602,11 +1618,12 @@ async function saveSeason() {
   const label = document.getElementById('season-label').value.trim();
   if (!label) { toast('Season label required','error'); return; }
   try {
-    const rec = await atCreate(TABLES.seasons, {Label:label,StartYear:parseInt(document.getElementById('season-start').value)||null,EndYear:parseInt(document.getElementById('season-end').value)||null,Sport:document.getElementById('season-sport').value});
+    const rec = await atCreate(TABLES.seasons, {Label:label,StartYear:parseInt(document.getElementById('season-start').value)||null,EndYear:parseInt(document.getElementById('season-end').value)||null,Sport:document.getElementById('season-sport').value,CompetitionType:document.getElementById('season-competition-type').value||''});
     CACHE.seasons.push({id:rec.id,...rec.fields});
     buildCacheMaps();
     closeModal('modal-add-season');
     ['season-label','season-start','season-end'].forEach(id=>document.getElementById(id).value='');
+    document.getElementById('season-competition-type').value='Club';
     refreshSeasons(); refreshFilterSelects();
     toast(`Season "${label}" added`);
   } catch(e) { toast('Error: '+e.message,'error'); }
@@ -3002,7 +3019,7 @@ function refreshSeasons() {
   const s=manageState.seasons,all=CACHE.seasons,total=all.length;const pg=all.slice(s.page*s.perPage,(s.page+1)*s.perPage);const pgIds=pg.map(x=>x.id),allSel=pgIds.length>0&&pgIds.every(id=>s.selected.has(id));
   renderSelBar('seasons','Delete Selected');renderPager('seasons',total);renderPerPage('seasons');
   const thc=document.getElementById('seasons-th-chk');if(thc)thc.innerHTML=`<input type="checkbox" ${allSel?'checked':''} onchange="manageToggleAll('seasons',this.checked,${JSON.stringify(pgIds)})" style="cursor:pointer;accent-color:var(--accent);">`;
-  tbody.innerHTML=total===0?`<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:32px;">No seasons yet</td></tr>`:pg.map(se=>{const sel=s.selected.has(se.id);return `<tr style="${sel?'background:rgba(79,124,255,0.06);':''}"><td style="padding:8px 4px;"><input type="checkbox" ${sel?'checked':''} onchange="manageToggleOne('seasons','${se.id}',this.checked)" style="cursor:pointer;accent-color:var(--accent);"></td><td style="font-weight:500;color:var(--text);">${se.Label||''}</td><td>${se.Sport||'—'}</td><td class="mono">${se.StartYear||'—'}</td><td class="mono">${se.EndYear||'—'}</td><td><button class="btn btn-danger btn-sm" onclick="deleteSeason('${se.id}')">Delete</button></td></tr>`;}).join('');
+  tbody.innerHTML=total===0?`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px;">No seasons yet</td></tr>`:pg.map(se=>{const sel=s.selected.has(se.id);return `<tr style="${sel?'background:rgba(79,124,255,0.06);':''}"><td style="padding:8px 4px;"><input type="checkbox" ${sel?'checked':''} onchange="manageToggleOne('seasons','${se.id}',this.checked)" style="cursor:pointer;accent-color:var(--accent);"></td><td style="font-weight:500;color:var(--text);">${se.Label||''}</td><td>${se.Sport||'—'}</td><td>${se.CompetitionType||'—'}</td><td class="mono">${se.StartYear||'—'}</td><td class="mono">${se.EndYear||'—'}</td><td><button class="btn btn-danger btn-sm" onclick="deleteSeason('${se.id}')">Delete</button></td></tr>`;}).join('');
 }
 
 function refreshManage() {
@@ -5844,6 +5861,318 @@ function runLinkageReport() {
 }
 
 // ─── ANALYTICS PAGE ──────────────────────────────────────────────────────────
+function inferSeasonClassification(label='') {
+  const s = label.toLowerCase();
+  if (/world cup|euro|nations league|copa america|afcon|asian cup/.test(s)) {
+    return {sport:'Football', competitionType:'International'};
+  }
+  if (/^\d{4}[-/]\d{2}$/.test(s) || /^\d{4}[-/]\d{4}$/.test(s)) {
+    return {sport:'Football', competitionType:'Club'};
+  }
+  return {sport:'Football', competitionType:'Other'};
+}
+
+function getSeasonClassification(season) {
+  if (!season) return {sport:'Unknown', competitionType:'Other'};
+  const sport = season.Sport || inferSeasonClassification(season.Label||'').sport;
+  const competitionType = season.CompetitionType || inferSeasonClassification(season.Label||'').competitionType;
+  return {sport, competitionType};
+}
+
+function computeAnalytics() {
+  if (ANALYTICS_CACHE) return ANALYTICS_CACHE;
+  const clubMap = new Map((CACHE.clubs||[]).map(c=>[c.id,c]));
+  const seasonMap = new Map((CACHE.seasons||[]).map(s=>[s.id,s]));
+  const heroes = CACHE.heroes||[];
+  const parents = CACHE.parents||[];
+  const players = CACHE.players||[];
+  const activeHeroes = heroes.filter(h=>h.Status==='active');
+  const archivedHeroes = heroes.filter(h=>h.Status==='archived');
+
+  // ── Executive Summary ─────────────────────────────────────────────────────
+  const uniqueActorIds = new Set(players.filter(p=>p.MDMActorID).map(p=>String(p.MDMActorID)));
+  const exec = {
+    totalHeroes: heroes.length,
+    activeHeroes: activeHeroes.length,
+    archivedHeroes: archivedHeroes.length,
+    totalParents: parents.length,
+    totalPlayers: uniqueActorIds.size,
+    totalClubs: CACHE.clubs.length,
+    totalSeasons: CACHE.seasons.length,
+    avgHeroesPerPlayer: uniqueActorIds.size > 0 ? (activeHeroes.length / uniqueActorIds.size).toFixed(1) : '—',
+    avgHeroesPerClub: CACHE.clubs.length > 0 ? (activeHeroes.length / CACHE.clubs.length).toFixed(1) : '—',
+    heroParentRatio: parents.length > 0 ? (heroes.length / parents.length).toFixed(1) : '—',
+  };
+
+  // ── Season Comparison ────────────────────────────────────────────────────
+  const seasonGroups = {};
+  const allHeroes = heroes; // use all heroes for season comparison
+  allHeroes.forEach(h => {
+    const s = seasonMap.get(h.SeasonID);
+    if (!s) return;
+    const cls = getSeasonClassification(s);
+    const groupKey = `${cls.sport}|${cls.competitionType}`;
+    if (!seasonGroups[groupKey]) seasonGroups[groupKey] = {sport:cls.sport, competitionType:cls.competitionType, seasons:{}};
+    if (!seasonGroups[groupKey].seasons[h.SeasonID]) seasonGroups[groupKey].seasons[h.SeasonID] = {season:s, active:0, archived:0, total:0};
+    if (h.Status === 'active') seasonGroups[groupKey].seasons[h.SeasonID].active++;
+    else if (h.Status === 'archived') seasonGroups[groupKey].seasons[h.SeasonID].archived++;
+    seasonGroups[groupKey].seasons[h.SeasonID].total++;
+  });
+
+  // ── Club Scale ─────────────────────────────────────────────────────────────
+  const clubStats = {};
+  activeHeroes.forEach(h => {
+    if (!h.ClubID) return;
+    if (!clubStats[h.ClubID]) clubStats[h.ClubID] = {club:clubMap.get(h.ClubID), active:0, players:new Set(), parents:new Set()};
+    clubStats[h.ClubID].active++;
+    const playerKey = h.ActorID ? `A:${h.ActorID}` : h.PlayerID ? `P:${h.PlayerID}` : null;
+    if (playerKey) clubStats[h.ClubID].players.add(playerKey);
+    if (h.ParentPIDID) clubStats[h.ClubID].parents.add(h.ParentPIDID);
+  });
+  const clubRows = Object.values(clubStats).map(cs => ({
+    club: cs.club,
+    active: cs.active,
+    players: cs.players.size,
+    parents: cs.parents.size,
+    avgPerPlayer: cs.players.size > 0 ? (cs.active / cs.players.size).toFixed(1) : '—',
+    avgPerParent: cs.parents.size > 0 ? (cs.active / cs.parents.size).toFixed(1) : '—',
+  })).sort((a,b) => b.active - a.active);
+
+  // ── Product Mix ────────────────────────────────────────────────────────────
+  const byGarment = {}, byKit = {}, byFont = {};
+  let gkCount = 0, specialsCount = 0, playerCount = 0;
+  let mensCount = 0, womensCount = 0, kidsCount = 0;
+  activeHeroes.forEach(h => {
+    const g = h.GarmentType||'unknown';
+    byGarment[g] = (byGarment[g]||0) + 1;
+    const k = h.KitType||'unknown';
+    byKit[k] = (byKit[k]||0) + 1;
+    const f = h.FontType||'unknown';
+    byFont[f] = (byFont[f]||0) + 1;
+    const fLower = (h.FontType||'').toLowerCase();
+    const kLower = (h.KitType||'').toLowerCase();
+    if (fLower==='gk' || kLower.startsWith('gk')) gkCount++;
+    else if (fLower==='specials') specialsCount++;
+    else playerCount++;
+    const gl = g.toLowerCase();
+    if (gl.includes('womens')||gl.includes('women')) womensCount++;
+    else if (gl.includes('kids')||gl.includes('little')||gl.includes('infant')||gl.includes('youth')) kidsCount++;
+    else mensCount++;
+  });
+
+  // ── MDM coverage ─────────────────────────────────────────────────────────
+  const fullyLinked = activeHeroes.filter(h=>h.ActorID&&String(h.ActorID)!=='0'&&h.RosterID&&String(h.RosterID)!=='0'&&h.RosterMemberID&&String(h.RosterMemberID)!=='0').length;
+  const mdmPct = activeHeroes.length > 0 ? Math.round((fullyLinked/activeHeroes.length)*100) : 0;
+
+  ANALYTICS_CACHE = {exec, seasonGroups, clubRows, byGarment, byKit, byFont, gkCount, specialsCount, playerCount, mensCount, womensCount, kidsCount, mdmPct, activeTotal:activeHeroes.length};
+  return ANALYTICS_CACHE;
+}
+
+function initAnalyticsPage() {
+  if (!CACHE.heroes.length) {
+    document.getElementById('analytics-content').innerHTML = '<div style="padding:40px;text-align:center;color:var(--text3);font-size:13px;">Cache not loaded — refresh the page first.</div>';
+    return;
+  }
+  const d = computeAnalytics();
+  let html = '';
+
+  // ── Section 1: Executive Summary ────────────────────────────────────────
+  html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;">
+    ${[
+      ['Total Hero PIDs', d.exec.totalHeroes.toLocaleString(), 'var(--text)'],
+      ['Active Hero PIDs', d.exec.activeHeroes.toLocaleString(), 'var(--green)'],
+      ['Archived Hero PIDs', d.exec.archivedHeroes.toLocaleString(), 'var(--text3)'],
+      ['Parent PIDs', d.exec.totalParents.toLocaleString(), 'var(--text)'],
+      ['Unique MDM Actors', d.exec.totalPlayers.toLocaleString(), 'var(--text)'],
+      ['Clubs', d.exec.totalClubs, 'var(--text)'],
+      ['Seasons', d.exec.totalSeasons, 'var(--text)'],
+      ['Avg PIDs / Player', d.exec.avgHeroesPerPlayer, 'var(--accent)'],
+      ['Avg PIDs / Club', d.exec.avgHeroesPerClub, 'var(--accent)'],
+      ['Hero : Parent Ratio', d.exec.heroParentRatio+'x', 'var(--accent)'],
+      ['MDM Linked', d.mdmPct+'%', d.mdmPct>=90?'var(--green)':d.mdmPct>=50?'var(--amber)':'var(--red,#fc8181)'],
+    ].map(([label,val,colour])=>`<div class="card" style="text-align:center;padding:14px 10px;">
+      <div style="font-size:22px;font-weight:700;color:${colour};font-family:'Syne',sans-serif;">${val}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:3px;line-height:1.3;">${label}</div>
+    </div>`).join('')}
+  </div>`;
+
+  // ── Section 2: Season Comparison ────────────────────────────────────────
+  html += `<div class="card" style="margin-bottom:16px;">
+    <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px;">Season Comparison</div>`;
+  Object.values(d.seasonGroups).forEach(group => {
+    const seasons = Object.values(group.seasons).sort((a,b)=>(a.season.Label||'').localeCompare(b.season.Label||''));
+    html += `<div style="margin-bottom:14px;">
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">${escHtml(group.sport)} — ${escHtml(group.competitionType)}</div>
+      <table class="data-table" style="font-size:11px;width:100%;">
+        <thead><tr>
+          <th style="padding:4px 8px;text-align:left;">Season</th>
+          <th style="padding:4px 8px;text-align:right;">Active PIDs</th>
+          <th style="padding:4px 8px;text-align:right;">Archived</th>
+          <th style="padding:4px 8px;text-align:right;">Total</th>
+          <th style="padding:4px 8px;text-align:right;">Growth</th>
+        </tr></thead>
+        <tbody>${seasons.map((s,i)=>{
+          const prev = i>0?seasons[i-1]:null;
+          const growth = prev&&prev.active>0?((s.active-prev.active)/prev.active*100).toFixed(1):null;
+          const gc = growth===null?'var(--text3)':parseFloat(growth)>=0?'var(--green)':'var(--red,#fc8181)';
+          return `<tr>
+            <td style="padding:4px 8px;">${escHtml(s.season.Label||'—')}</td>
+            <td style="padding:4px 8px;text-align:right;font-weight:600;">${s.active.toLocaleString()}</td>
+            <td style="padding:4px 8px;text-align:right;color:var(--text3);">${s.archived.toLocaleString()}</td>
+            <td style="padding:4px 8px;text-align:right;">${s.total.toLocaleString()}</td>
+            <td style="padding:4px 8px;text-align:right;color:${gc};">${growth!==null?(parseFloat(growth)>=0?'+':'')+growth+'%':'—'}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+  });
+  html += `</div>`;
+
+  // ── Section 3: Club Scale ─────────────────────────────────────────────────
+  html += `<div class="card" style="margin-bottom:16px;">
+    <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Club Scale</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Ranked by active Hero PIDs. Click column headers to sort.</div>
+    <div style="overflow-x:auto;max-height:400px;overflow-y:auto;">
+    <table class="data-table" style="font-size:11px;width:100%;" id="an-club-table">
+      <thead><tr style="position:sticky;top:0;background:var(--bg2);">
+        <th style="padding:5px 8px;text-align:left;cursor:pointer;" onclick="sortClubTable('name')">Club ↕</th>
+        <th style="padding:5px 8px;text-align:right;cursor:pointer;" onclick="sortClubTable('active')">Active PIDs ↕</th>
+        <th style="padding:5px 8px;text-align:right;cursor:pointer;" onclick="sortClubTable('parents')">Parent PIDs ↕</th>
+        <th style="padding:5px 8px;text-align:right;cursor:pointer;" onclick="sortClubTable('players')">Players ↕</th>
+        <th style="padding:5px 8px;text-align:right;cursor:pointer;" onclick="sortClubTable('avgPerPlayer')">Avg / Player ↕</th>
+        <th style="padding:5px 8px;text-align:right;cursor:pointer;" onclick="sortClubTable('avgPerParent')">Avg / Parent ↕</th>
+      </tr></thead>
+      <tbody id="an-club-tbody">${renderClubRows(d.clubRows)}</tbody>
+    </table></div>
+  </div>`;
+
+  // ── Section 4: Product Mix ────────────────────────────────────────────────
+  const total = d.activeTotal || 1;
+  const topGarments = Object.entries(d.byGarment).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const topKits = Object.entries(d.byKit).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const topFonts = Object.entries(d.byFont).sort((a,b)=>b[1]-a[1]);
+  html += `<div class="card" style="margin-bottom:16px;">
+    <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px;">Product Mix</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;">
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em;">By Garment Type</div>
+        ${topGarments.map(([g,n])=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid var(--border);">
+          <span style="color:var(--text2);">${escHtml(g)}</span>
+          <span style="font-weight:600;">${n.toLocaleString()} <span style="color:var(--text3);font-weight:400;">(${Math.round(n/total*100)}%)</span></span>
+        </div>`).join('')}
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em;">By Kit Type</div>
+        ${topKits.map(([k,n])=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid var(--border);">
+          <span style="color:var(--text2);">${escHtml(k)}</span>
+          <span style="font-weight:600;">${n.toLocaleString()} <span style="color:var(--text3);font-weight:400;">(${Math.round(n/total*100)}%)</span></span>
+        </div>`).join('')}
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em;">By Font Type</div>
+        ${topFonts.map(([f,n])=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid var(--border);">
+          <span style="color:var(--text2);">${escHtml(f)}</span>
+          <span style="font-weight:600;">${n.toLocaleString()} <span style="color:var(--text3);font-weight:400;">(${Math.round(n/total*100)}%)</span></span>
+        </div>`).join('')}
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em;">Catalogue Composition</div>
+        ${[
+          ['Player PIDs', d.playerCount, 'var(--accent)'],
+          ['Specials PIDs', d.specialsCount, 'var(--amber)'],
+          ['GK PIDs', d.gkCount, 'var(--green)'],
+          ['Mens', d.mensCount, 'var(--text2)'],
+          ['Womens', d.womensCount, 'var(--text2)'],
+          ['Kids/Youth', d.kidsCount, 'var(--text2)'],
+        ].map(([label,n,c])=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid var(--border);">
+          <span style="color:${c};">${label}</span>
+          <span style="font-weight:600;">${n.toLocaleString()} <span style="color:var(--text3);font-weight:400;">(${Math.round(n/total*100)}%)</span></span>
+        </div>`).join('')}
+      </div>
+    </div>
+  </div>`;
+
+  // ── Export row ────────────────────────────────────────────────────────────
+  html += `<div style="display:flex;gap:8px;margin-bottom:20px;">
+    <button class="btn btn-ghost btn-sm" onclick="copyAnalyticsSummary()">⎘ Copy Summary</button>
+    <button class="btn btn-ghost btn-sm" onclick="exportAnalyticsCsv()">⬇ Export CSV</button>
+    <span style="font-size:11px;color:var(--text3);align-self:center;">Generated: ${new Date().toLocaleTimeString()}</span>
+  </div>`;
+
+  document.getElementById('analytics-content').innerHTML = html;
+}
+
+let _clubSortKey = 'active', _clubSortAsc = false;
+function renderClubRows(rows) {
+  return rows.map((r,i) => {
+    const clubBg = r.club?.BadgeColour ? safeCssColour(r.club.BadgeColour,'var(--bg3)') : 'var(--bg3)';
+    const clubTxt = r.club?.BadgeTextColour ? safeCssColour(r.club.BadgeTextColour,'#FFFFFF') : '#FFFFFF';
+    return `<tr>
+      <td style="padding:5px 8px;font-size:11px;"><span style="background:${clubBg};color:${clubTxt};padding:1px 7px;border-radius:4px;font-size:10px;">${escHtml(r.club?.Name||'—')}</span></td>
+      <td style="padding:5px 8px;font-size:11px;text-align:right;font-weight:600;">${r.active.toLocaleString()}</td>
+      <td style="padding:5px 8px;font-size:11px;text-align:right;">${r.parents.toLocaleString()}</td>
+      <td style="padding:5px 8px;font-size:11px;text-align:right;">${r.players.toLocaleString()}</td>
+      <td style="padding:5px 8px;font-size:11px;text-align:right;">${r.avgPerPlayer}</td>
+      <td style="padding:5px 8px;font-size:11px;text-align:right;">${r.avgPerParent}</td>
+    </tr>`;
+  }).join('');
+}
+
+function sortClubTable(key) {
+  const d = computeAnalytics();
+  if (_clubSortKey === key) { _clubSortAsc = !_clubSortAsc; }
+  else { _clubSortKey = key; _clubSortAsc = key === 'name'; }
+  const sorted = [...d.clubRows].sort((a,b) => {
+    let va, vb;
+    if (key==='name') { va=a.club?.Name||''; vb=b.club?.Name||''; return _clubSortAsc?va.localeCompare(vb):vb.localeCompare(va); }
+    va = parseFloat(a[key])||0; vb = parseFloat(b[key])||0;
+    return _clubSortAsc ? va-vb : vb-va;
+  });
+  const tbody = document.getElementById('an-club-tbody');
+  if (tbody) tbody.innerHTML = renderClubRows(sorted);
+}
+
+function copyAnalyticsSummary() {
+  const d = computeAnalytics();
+  const lines = [
+    'Hero PID Hub — Analytics Summary',
+    `Generated: ${new Date().toLocaleString()}`,
+    '',
+    '── Estate Size ──',
+    `Total Hero PIDs: ${d.exec.totalHeroes.toLocaleString()}`,
+    `Active Hero PIDs: ${d.exec.activeHeroes.toLocaleString()}`,
+    `Archived Hero PIDs: ${d.exec.archivedHeroes.toLocaleString()}`,
+    `Parent PIDs: ${d.exec.totalParents.toLocaleString()}`,
+    `Unique MDM Actors: ${d.exec.totalPlayers.toLocaleString()}`,
+    `Clubs: ${d.exec.totalClubs}`,
+    `Avg Hero PIDs per Player: ${d.exec.avgHeroesPerPlayer}`,
+    `Avg Hero PIDs per Club: ${d.exec.avgHeroesPerClub}`,
+    `Hero:Parent Ratio: ${d.exec.heroParentRatio}x`,
+    '',
+    '── Top Clubs ──',
+    ...d.clubRows.slice(0,10).map((r,i)=>`${i+1}. ${r.club?.Name||'—'}: ${r.active.toLocaleString()} active PIDs`),
+    '',
+    '── Season Breakdown ──',
+    ...Object.values(d.seasonGroups).flatMap(g =>
+      Object.values(g.seasons).map(s=>`${s.season.Label||'?'} (${g.competitionType}): ${s.active.toLocaleString()} active`)
+    ),
+    '',
+    `Data Confidence: ${d.mdmPct}% MDM linked`,
+  ];
+  navigator.clipboard.writeText(lines.join('\n')).then(()=>toast('Analytics summary copied'));
+}
+
+function exportAnalyticsCsv() {
+  const d = computeAnalytics();
+  const rows = [['Club','Active PIDs','Parent PIDs','Players','Avg PIDs/Player','Avg PIDs/Parent']];
+  d.clubRows.forEach(r => rows.push([r.club?.Name||'—',r.active,r.parents,r.players,r.avgPerPlayer,r.avgPerParent]));
+  const csv = rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv],{type:'text/csv'});
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='hero-pid-analytics.csv'; a.click();
+  toast('Analytics CSV exported');
+}
+
+// ─── DATA HEALTH RUN REPORT ────────────────────────────────────────────────
 function runAnalytics() {
   const clubMap = new Map((CACHE.clubs||[]).map(c => [c.id, c.Name||'']));
   const seasonMap = new Map((CACHE.seasons||[]).map(s => [s.id, s.Label||'']));
