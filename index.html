@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v228 -->
+<!-- HEROPID-BUILD-v229 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1011,6 +1011,12 @@ let AT_BASE = localStorage.getItem('at_base') || '';
 
 // Table IDs (set after init)
 let TABLES = JSON.parse(localStorage.getItem('at_tables') || '{}');
+// Migration: ensure kitColours is set for users with existing localStorage from v228
+if (TABLES.clubs && !TABLES.kitColours) {
+  TABLES.kitColours = 'tblmcaKzxf2PyUma4';
+  try { localStorage.setItem('at_tables', JSON.stringify(TABLES)); } catch(e) {}
+}
+
 
 const GARMENT_LABELS = {pro_shirt:'Pro Shirt',pro_shirt_ls:'Pro Shirt L/S',mens_ss:'Mens S/S',mens_ls:'Mens L/S',womens_pro:'Womens Pro',womens_pro_ls:'Womens Pro L/S',womens:'Womens',womens_ls:'Womens L/S',womens_cropped:'Womens Cropped',pro_kids:'Pro Kids',pro_kids_ls:'Pro Kids L/S',kids_ss:'Kids S/S',kids_ls:'Kids L/S',little_kids:'Little Kids',infants:'Infants',other:'Other','mens_outsize':'Mens Outsize','mens_unsponsored':'Mens Unsponsored','retro_ss':'Retro S/S','youth_kit':'Youth Kit','womens_unsponsored':'Womens Unsponsored','pro_unsponsored':'Pro Unsponsored'};
 const FONT_LABELS = {league:'League',cup:'Cup',womens:'Womens League',womens_cup:'Womens Cup',specials:'Specials',other:'Other'};
@@ -1023,7 +1029,7 @@ const FED_MAP = {'FRNC':'FFF','FRANCE':'FFF','GERM':'DFB','GERMANY':'DFB','ENG':
 const BRAND_ANCHORS = ['FRANCE NIKE','FRANCE ADIDAS','FRANCE PUMA','DFB ADIDAS','DFB NIKE','DFB PUMA','ENGLAND NIKE','SPAIN ADIDAS','ITALY PUMA','PORTUGAL NIKE','NETHERLANDS NIKE','BELGIUM ADIDAS','BELGIUM NIKE','BELGIUM PUMA','LEEDS UNITED ADIDAS','LEEDS UNITED NIKE','LEEDS UNITED PUMA'];
 
 // Local cache for search performance
-let CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null,catalogues:[],fonts:[],rosterMappings:[]};
+let CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null,catalogues:[],fonts:[],rosterMappings:[],kitColours:[]};
 // O(1) lookup maps — rebuilt whenever CACHE arrays change
 let CACHE_MAPS = {
   heroByPID: new Map(),       // String(PID) -> hero
@@ -1034,6 +1040,7 @@ let CACHE_MAPS = {
   clubById: new Map(),        // AT record id -> club
   seasonById: new Map(),      // AT record id -> season
   rosterMappingByKey: new Map(), // `${ClubID}|${SeasonID}|${normFontType}|${normKitType}` -> rosterMapping
+  kitColourByKey: new Map(),     // `${clubName}|${seasonLabel}|${kitType}` -> {BadgeColour, BadgeTextColour}
 };
 function buildCacheMaps() {
   CACHE_MAPS.heroByPID = new Map((CACHE.heroes||[]).map(h => [String(h.PID), h]));
@@ -1048,6 +1055,20 @@ function buildCacheMaps() {
       .filter(r => r.Active)
       .map(r => [`${r.ClubID}|${r.SeasonID}|${String(r.FontType||'').trim().toLowerCase()}|${String(r.KitType||'').trim().toLowerCase()}`, r])
   );
+  // Kit Colours: keyed by `${clubName.toLowerCase()}|${seasonLabel.toLowerCase()}|${kitType.toLowerCase()}`
+  // Also universal keys: `all clubs|all seasons|${kitType.toLowerCase()}`
+  const kitColourEntries = (CACHE.kitColours||[]).filter(r => r.Active);
+  const kitColourDupCheck = new Set();
+  const kitColourDups = [];
+  CACHE_MAPS.kitColourByKey = new Map(
+    kitColourEntries.map(r => {
+      const key = `${String(r.ClubName||'').trim().toLowerCase()}|${String(r.SeasonLabel||'').trim().toLowerCase()}|${String(r.KitType||'').trim().toLowerCase()}`;
+      if (kitColourDupCheck.has(key)) kitColourDups.push(key);
+      kitColourDupCheck.add(key);
+      return [key, {bg: safeCssColour(r.BadgeColour,'var(--bg3)'), text: safeCssColour(r.BadgeTextColour,'#FFFFFF')}];
+    })
+  );
+  if (kitColourDups.length > 0) console.warn('[KitColours] Duplicate keys detected (last write wins):', kitColourDups);
 }
 
 // Resolve ActorID / RosterID for a hero PID at import time
@@ -1209,7 +1230,7 @@ function disconnectAirtable() {
   localStorage.removeItem('at_tables');
   localStorage.removeItem('at_fields_init');
   AT_TOKEN = ''; AT_BASE = ''; TABLES = {};
-  CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null,catalogues:[],fonts:[],rosterMappings:[]};
+  CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null,catalogues:[],fonts:[],rosterMappings:[],kitColours:[]};
   updateStats();
   refreshSettingsStatus();
   toast('Disconnected from Airtable');
@@ -1263,7 +1284,7 @@ async function initTables() {
   const required = ['Clubs','Seasons','Players','Parent PIDs','Hero PIDs'];
   const missing = required.filter(n => !tableMap[n]);
   if (missing.length > 0) throw new Error(`Missing tables: ${missing.join(', ')}. Please create them in Airtable first.`);
-  TABLES = {clubs:tableMap['Clubs'],seasons:tableMap['Seasons'],players:tableMap['Players'],parents:tableMap['Parent PIDs'],heroes:tableMap['Hero PIDs'],mdmRosterMembers:tableMap['MDM Roster Members'],catalogues:'tblH92885JmpxxBIM',fonts:'tblD6GssdzWoGAZ90',rosterMappings:'tblFtei2eh790LvNf'};
+  TABLES = {clubs:tableMap['Clubs'],seasons:tableMap['Seasons'],players:tableMap['Players'],parents:tableMap['Parent PIDs'],heroes:tableMap['Hero PIDs'],mdmRosterMembers:tableMap['MDM Roster Members'],catalogues:'tblH92885JmpxxBIM',fonts:'tblD6GssdzWoGAZ90',rosterMappings:'tblFtei2eh790LvNf',kitColours:'tblmcaKzxf2PyUma4'};
   // Only run ensureFields once per session — skip if already done
   if (!localStorage.getItem('at_fields_init') && !window._fieldsInitDone) {
     window._fieldsInitDone = true;
@@ -1342,17 +1363,18 @@ async function loadCachedOrFetch(key,tid){const c=getCachedTable(key);if(c)retur
 async function loadCache(force, dataOnly=false){
   // dataOnly=true: only refresh players/parents/heroes (skip clubs/seasons/catalogues)
   // This is much faster after imports since those tables don't change
-  if(force) { Object.values(CACHE_KEYS).forEach(k=>localStorage.removeItem(k)); CACHE.rosterMappings=[]; }
+  if(force) { Object.values(CACHE_KEYS).forEach(k=>localStorage.removeItem(k)); CACHE.rosterMappings=[]; CACHE.kitColours=[]; }
   try{
     if (!dataOnly) {
       // Full load - fetch everything
-      const[clubs,seasons,catalogues,rosterMappings]=await Promise.all([
+      const[clubs,seasons,catalogues,rosterMappings,kitColours]=await Promise.all([
         CACHE.clubs.length ? Promise.resolve(CACHE.clubs) : atGetAll(TABLES.clubs).then(r=>r.map(x=>({id:x.id,...x.fields}))),
         CACHE.seasons.length ? Promise.resolve(CACHE.seasons) : atGetAll(TABLES.seasons).then(r=>r.map(x=>({id:x.id,...x.fields}))),
         CACHE.catalogues.length ? Promise.resolve(CACHE.catalogues) : atGetAll(TABLES.catalogues).then(r=>r.map(x=>({id:x.id,...x.fields}))),
         CACHE.rosterMappings.length ? Promise.resolve(CACHE.rosterMappings) : atGetAll(TABLES.rosterMappings).then(r=>r.map(x=>({id:x.id,...x.fields}))).catch(()=>[]),
+        CACHE.kitColours.length ? Promise.resolve(CACHE.kitColours) : (TABLES.kitColours ? atGetAll(TABLES.kitColours).then(r=>r.map(x=>({id:x.id,...x.fields}))).catch(()=>[]) : Promise.resolve([])),
       ]);
-      CACHE.clubs=clubs.slice().sort((a,b)=>(a.Name||'').localeCompare(b.Name||'')); CACHE.seasons=seasons; CACHE.catalogues=catalogues||[]; CACHE.rosterMappings=rosterMappings||[];
+      CACHE.clubs=clubs.slice().sort((a,b)=>(a.Name||'').localeCompare(b.Name||'')); CACHE.seasons=seasons; CACHE.catalogues=catalogues||[]; CACHE.rosterMappings=rosterMappings||[]; CACHE.kitColours=kitColours||[];
     }
     const[players,parents,heroes]=await Promise.all([
       loadCachedOrFetch(CACHE_KEYS.players,TABLES.players),
@@ -1897,6 +1919,13 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
     const season = CACHE.seasons.find(s=>s.id===seasonId);
     const heroes = grouped[key].heroes;
     const initials = (player.Name||'?').split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
+    // Club badge colour (avatar + club pill)
+    const clubColour = getClubColour(clubId);
+    const avatarBg = clubColour ? clubColour.bg : 'var(--bg3)';
+    const avatarText = clubColour ? clubColour.text : 'var(--accent)';
+    const avatarBorder = clubColour ? 'transparent' : 'rgba(79,124,255,0.3)';
+    // Season label for colour lookup
+    const seasonLabel = season ? (season.Label||season.label||'') : '';
     // Determine MDM roster status for this player
     const playerMdmEntries = (CACHE.mdmRosterMembers||[]).filter(m=>m.PlayerID===player.id||(m.ActorID&&player.MDMActorID&&m.ActorID===player.MDMActorID));
     let mdmStatusBadge = '';
@@ -1976,7 +2005,11 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
         sortedKits.forEach(kitType => {
           const kitHeroes=byKit[kitType];
           const kitPids=kitHeroes.map(h=>h.PID).join('|');
-          kitGroupsHtml+=`<div class="kit-subgroup"><div class="kit-subgroup-title"><label onclick="event.stopPropagation()" style="display:flex;align-items:center;cursor:pointer;gap:5px;"><input type="checkbox" class="kit-group-chk" onchange="onFontGroupChange(this)" style="cursor:pointer;accent-color:var(--accent);width:12px;height:12px;flex-shrink:0;"><span style="font-size:10px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.06em;">${kitType}</span></label><button class="pid-copy btn-sm" onclick="event.stopPropagation();copyAll('${kitPids}',this)">⎘</button></div><div class="pid-grid">${kitHeroes.map(h=>`<div class="pid-cell${h.Status==='archived'?' archived':''}"><label style="display:flex;align-items:flex-start;gap:5px;width:100%;cursor:pointer;"><input type="checkbox" class="pid-sel-chk" data-pid="${h.PID}" onchange="onPidCheckChange(this)" onclick="event.stopPropagation()" style="cursor:pointer;accent-color:var(--accent);width:12px;height:12px;margin-top:2px;flex-shrink:0;"><span style="flex:1;"><span class="pid-garment">${GARMENT_LABELS[h.GarmentType]||h.GarmentType}</span><span class="pid-number">${h.PID}<button class="pid-copy" onclick="event.stopPropagation();copyPid('${h.PID}',this)">⎘</button></span>${h.Status==='archived'?'<span style="font-size:10px;color:var(--red);">archived</span>':''}</span></label></div>`).join('')}</div></div>`;
+          const kitColour = getKitColour(club?.Name||club?.name||'', seasonLabel, kitType);
+          const kitBg = kitColour ? kitColour.bg : 'var(--bg3)';
+          const kitText = kitColour ? kitColour.text : 'var(--accent)';
+          const kitBorder = kitColour ? 'transparent' : 'rgba(79,124,255,0.2)';
+          kitGroupsHtml+=`<div class="kit-subgroup"><div class="kit-subgroup-title"><label onclick="event.stopPropagation()" style="display:flex;align-items:center;cursor:pointer;gap:5px;"><input type="checkbox" class="kit-group-chk" onchange="onFontGroupChange(this)" style="cursor:pointer;accent-color:var(--accent);width:12px;height:12px;flex-shrink:0;"><span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;background:${kitBg};color:${kitText};border:1px solid ${kitBorder};padding:1px 7px;border-radius:4px;">${kitType}</span></label><button class="pid-copy btn-sm" onclick="event.stopPropagation();copyAll('${kitPids}',this)">⎘</button></div><div class="pid-grid">${kitHeroes.map(h=>`<div class="pid-cell${h.Status==='archived'?' archived':''}"><label style="display:flex;align-items:flex-start;gap:5px;width:100%;cursor:pointer;"><input type="checkbox" class="pid-sel-chk" data-pid="${h.PID}" onchange="onPidCheckChange(this)" onclick="event.stopPropagation()" style="cursor:pointer;accent-color:var(--accent);width:12px;height:12px;margin-top:2px;flex-shrink:0;"><span style="flex:1;"><span class="pid-garment">${GARMENT_LABELS[h.GarmentType]||h.GarmentType}</span><span class="pid-number">${h.PID}<button class="pid-copy" onclick="event.stopPropagation();copyPid('${h.PID}',this)">⎘</button></span>${h.Status==='archived'?'<span style="font-size:10px;color:var(--red);">archived</span>':''}</span></label></div>`).join('')}</div></div>`;
         });
         pidsHtml+=`<div class="pid-section"><div class="pid-section-title" style="display:flex;align-items:center;gap:8px;"><label onclick="event.stopPropagation()" style="display:flex;align-items:center;cursor:pointer;"><input type="checkbox" class="font-group-chk" onchange="onFontGroupChange(this)" style="cursor:pointer;accent-color:var(--accent);width:13px;height:13px;margin-right:6px;">${FONT_LABELS[fontType]||fontType}</label><button class="pid-copy btn-sm" style="margin-left:4px;" onclick="copyAll('${fontPids}',this)">⎘ Copy all</button></div>${kitGroupsHtml}</div>`;
       });
@@ -1985,7 +2018,7 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
     const allCardPids = heroes.map(h=>h.PID).filter(Boolean);
     const incompletePlayer = isEntryIncomplete('player', player.id);
     const incompleteBadge = incompletePlayer ? `<span class="badge" style="background:rgba(252,129,129,0.15);color:#fc8181;border:1px solid rgba(252,129,129,0.3);" title="Missing data — see Data Clean-up">⚠ Incomplete</span>` : '';
-    html += `<div class="player-card" data-key="${cardKey}" data-pids="${allCardPids.join(',')}"><div class="player-header" onclick="togglePlayer(this)"><label class="pid-select-check" onclick="event.stopPropagation()" style="display:flex;align-items:center;padding:0 8px 0 4px;cursor:pointer;"><input type="checkbox" class="card-select-chk" data-key="${cardKey}" data-pids="${allCardPids.join(',')}" onchange="onCardSelectChange(this)" style="cursor:pointer;accent-color:var(--accent);width:14px;height:14px;"></label><div class="player-avatar">${initials}</div><div class="player-info"><div class="player-name">${player.Name}</div><div class="player-meta">${displayShirtName||''}${displayNumber?' · #'+displayNumber:''}${club?' · '+(club.Name||club.name):''}${season?' · '+(season.Label||season.label):''}${mdmSourceLabel}</div></div><div class="player-badges">${statusBadge}${typeBadge}${gkBadge}${incompleteBadge}${club?`<span class="badge badge-club">${club.Name||club.name}</span>`:''}${season?`<span class="badge badge-season">${season.Label||season.label}</span>`:''}<span style="font-size:12px;color:var(--text3);margin-left:4px;">${heroes.length} PIDs</span>${allPids?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();copyAll('${allPids}',this)">⎘ Copy all</button>`:''}<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditPlayer('${player.id}')" style="margin-left:2px;">✎ Edit</button><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();deactivatePlayer('${player.id}').then(()=>runSearch())" style="margin-left:2px;">${player.Status==='archived'?'Activate':'Archive'}</button></div><span class="chevron">▶</span></div><div class="player-pids">${pidsHtml}</div></div>`;
+    html += `<div class="player-card" data-key="${cardKey}" data-pids="${allCardPids.join(',')}"><div class="player-header" onclick="togglePlayer(this)"><label class="pid-select-check" onclick="event.stopPropagation()" style="display:flex;align-items:center;padding:0 8px 0 4px;cursor:pointer;"><input type="checkbox" class="card-select-chk" data-key="${cardKey}" data-pids="${allCardPids.join(',')}" onchange="onCardSelectChange(this)" style="cursor:pointer;accent-color:var(--accent);width:14px;height:14px;"></label><div class="player-avatar" style="background:${avatarBg};color:${avatarText};border-color:${avatarBorder};">${initials}</div><div class="player-info"><div class="player-name">${player.Name}</div><div class="player-meta">${displayShirtName||''}${displayNumber?' · #'+displayNumber:''}${club?' · '+(club.Name||club.name):''}${season?' · '+(season.Label||season.label):''}${mdmSourceLabel}</div></div><div class="player-badges">${statusBadge}${typeBadge}${gkBadge}${incompleteBadge}${club?`<span class="badge badge-club" style="background:${avatarBg};color:${avatarText};border-color:${avatarBorder};">${club.Name||club.name}</span>`:''}${season?`<span class="badge badge-season">${season.Label||season.label}</span>`:''}<span style="font-size:12px;color:var(--text3);margin-left:4px;">${heroes.length} PIDs</span>${allPids?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();copyAll('${allPids}',this)">⎘ Copy all</button>`:''}<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditPlayer('${player.id}')" style="margin-left:2px;">✎ Edit</button><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();deactivatePlayer('${player.id}').then(()=>runSearch())" style="margin-left:2px;">${player.Status==='archived'?'Activate':'Archive'}</button></div><span class="chevron">▶</span></div><div class="player-pids">${pidsHtml}</div></div>`;
   });
   html += '</div>';
   document.getElementById('search-results').innerHTML = html;
@@ -5541,6 +5574,36 @@ function clearCorrectionImport() {
   document.getElementById('correction-cancel-btn').style.display = 'none';
   document.getElementById('correction-status').style.display = 'none';
   document.getElementById('correction-preview').style.display = 'none';
+}
+
+// ─── KIT COLOUR HELPERS ───────────────────────────────────────────────────────
+function safeCssColour(v, fallback='') {
+  const s = String(v||'').trim();
+  if (/^#[0-9a-fA-F]{3,8}$/.test(s)) return s;
+  if (/^rgba?\([\d\s.,%]+\)$/.test(s)) return s;
+  if (/^var\(--[a-zA-Z0-9-_]+\)$/.test(s)) return s;
+  return fallback;
+}
+
+function getKitColour(clubName, seasonLabel, kitType) {
+  const cn = String(clubName||'').trim().toLowerCase();
+  const sl = String(seasonLabel||'').trim().toLowerCase();
+  const kt = String(kitType||'').trim().toLowerCase();
+  // 1. Exact club+season+kit match
+  let c = CACHE_MAPS.kitColourByKey.get(`${cn}|${sl}|${kt}`);
+  if (c) return c;
+  // 2. Universal match (all clubs, all seasons) e.g. GK types, Night edition
+  c = CACHE_MAPS.kitColourByKey.get(`all clubs|all seasons|${kt}`);
+  if (c) return c;
+  return null;
+}
+
+function getClubColour(clubId) {
+  const club = CACHE_MAPS.clubById.get(clubId);
+  if (!club) return null;
+  const bg = safeCssColour(club.BadgeColour, '');
+  if (!bg) return null;
+  return {bg, text: safeCssColour(club.BadgeTextColour, '#FFFFFF')};
 }
 
 // ─── MDM BACKFILL ─────────────────────────────────────────────────────────────
