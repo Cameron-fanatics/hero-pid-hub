@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v232 -->
+<!-- HEROPID-BUILD-v233 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -291,7 +291,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         <span style="font-family:'Syne',sans-serif;font-size:14px;font-weight:600;">All Players</span>
         <button class="btn btn-ghost btn-sm" onclick="exportCorruptedPlayers()" style="margin-right:6px;" title="Export corrupted player names">⚠ Corrupted</button><label class="btn btn-ghost btn-sm" style="margin-right:6px;cursor:pointer;" title="Upload corrected names CSV">↑ Fix Upload<input type="file" accept=".csv" style="display:none" onchange="importCorrectedPlayers(this.files[0])"></label><span id="fix-upload-status" style="display:none;font-size:11px;margin-right:6px;"></span><button class="btn btn-primary btn-sm" onclick="openModal('modal-add-player')">+ Add Player</button>
       </div>
-      <div class="card"><table class="data-table"><thead><tr><th id="players-th-chk" style="width:32px;padding:8px 4px;"></th><th>Name</th><th>Shirt</th><th>No.</th><th>Club</th><th>Season</th><th>Status</th><th></th></tr></thead><tbody id="players-tbody"><tr><td colspan="7" class="loading"><div class="loading-spinner"></div><br>Loading...</td></tr></tbody></table></div>
+      <div class="card"><table class="data-table"><thead><tr><th id="players-th-chk" style="width:32px;padding:8px 4px;"></th><th>Name</th><th>Shirt</th><th>No.</th><th>Club</th><th>ActorID</th><th>Status</th><th></th></tr></thead><tbody id="players-tbody"><tr><td colspan="8" class="loading"><div class="loading-spinner"></div><br>Loading...</td></tr></tbody></table></div>
     </div>
     <div id="tabcontent-parent-pids" class="hidden"><div id="parents-selection-bar"></div><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div id="parents-perpage"></div><div id="parents-pager" style="margin-left:auto;"></div></div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
@@ -676,6 +676,20 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       <div id="correction-preview" style="display:none;"></div>
     </div>
 
+    <!-- PLAYER DEDUP PREVIEW -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Player Deduplication Preview</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px;">
+        Shows player records that share the same <span class="mono" style="font-size:11px;">ActorID + ClubID</span> and would be merged in Step 9.
+        Uses canonical scoring to identify which record would be kept.
+      </div>
+      <div style="font-size:11px;color:var(--amber);background:rgba(255,179,64,0.08);border:1px solid rgba(255,179,64,0.3);border-radius:4px;padding:8px 10px;margin-bottom:10px;">
+        ⚠ Preview only. No Airtable records will be changed. SeasonID is still present in Airtable until v234.
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="runDedupPreview()">⊙ Preview Player Deduplication</button>
+      <div id="dedup-preview-output" style="display:none;margin-top:12px;"></div>
+    </div>
+
     <!-- MDM ROSTER MEMBER DUPLICATES -->
     <div class="card" style="margin-bottom:16px;">
       <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">MDM Roster Member Duplicates</div>
@@ -1050,7 +1064,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <div class="modal-body">
       <div class="form-row"><div class="form-group"><label class="form-label">Full Name *</label><input class="form-input" id="player-name" placeholder="e.g. Cole Palmer" /></div><div class="form-group"><label class="form-label">Shirt Name *</label><input class="form-input" id="player-shirt" placeholder="e.g. PALMER" /></div></div>
       <div class="form-row"><div class="form-group"><label class="form-label">Squad Number</label><input class="form-input" id="player-number" type="number" /></div><div class="form-group"><label class="form-label">Player Type</label><select class="form-select" id="player-type"><option value="player">Player</option><option value="variant">Specials</option></select></div></div>
-      <div class="form-row"><div class="form-group"><label class="form-label">Club *</label><select class="form-select" id="player-club"></select></div><div class="form-group"><label class="form-label">Season *</label><select class="form-select" id="player-season"></select></div></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Club *</label><select class="form-select" id="player-club"></select></div></div>
       <div class="form-row"><div class="form-group"><label class="form-label">Status</label><select class="form-select" id="player-status"><option value="active">Active</option><option value="archived">Archived</option></select></div><div class="form-group"><label class="form-label">MDM Actor ID</label><input class="form-input" id="player-mdm" placeholder="e.g. 17009" /></div></div>
     </div>
     <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-add-player')">Cancel</button><button class="btn btn-primary" onclick="savePlayer()">Save Player</button></div>
@@ -1172,6 +1186,76 @@ function resolveMdmLinks(actorId, clubId, seasonId, fontType, kitType) {
 
 // Validate for duplicate RosterMemberIDs in the MDM Roster Members cache
 // Returns array of {rosterMemberId, count, records} for any duplicates found
+// ─── PLAYER DEDUP PREVIEW (Step 9.0) ─────────────────────────────────────────
+function runDedupPreview() {
+  const outputEl = document.getElementById('dedup-preview-output');
+  outputEl.style.display = '';
+
+  const groups = {};
+  (CACHE.players||[]).forEach(p => {
+    if (!p.MDMActorID) return;
+    const key = `${p.MDMActorID}|${p.ClubID}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(p);
+  });
+
+  const dupGroups = Object.entries(groups).filter(([,players]) => players.length > 1);
+  if (dupGroups.length === 0) {
+    outputEl.innerHTML = `<div style="color:var(--green);font-size:12px;">✓ No duplicate player records found.</div>`;
+    return;
+  }
+
+  const clubMap = new Map((CACHE.clubs||[]).map(c=>[c.id,c.Name||'']));
+  let totalDups = 0, totalRepoints = 0;
+
+  const rows = dupGroups.map(([key, players]) => {
+    const canonical = pickCanonicalPlayer(players);
+    const dups = players.filter(p => p.id !== canonical.id);
+    const repoints = CACHE.heroes.filter(h => dups.some(d => d.id === h.PlayerID)).length;
+    totalDups += dups.length;
+    totalRepoints += repoints;
+    const [actorId, clubId] = key.split('|');
+    const clubName = clubMap.get(clubId) || '—';
+    const canonHeroes = CACHE.heroes.filter(h => h.PlayerID === canonical.id).length;
+    return {actorId, clubName, players, canonical, dups, repoints, canonHeroes};
+  }).sort((a,b) => b.repoints - a.repoints);
+
+  outputEl.innerHTML = `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
+    <span style="font-weight:600;color:var(--amber);">${dupGroups.length} duplicate groups</span>
+    <span style="color:var(--text3);margin-left:8px;">${totalDups} records to delete · ${totalRepoints} Hero PIDs to re-point</span>
+  </div>
+  <div style="overflow-x:auto;max-height:400px;overflow-y:auto;">
+  <table class="data-table" style="font-size:11px;width:100%;">
+    <thead><tr style="position:sticky;top:0;background:var(--bg2);">
+      <th style="padding:5px 8px;text-align:left;">Player</th>
+      <th style="padding:5px 8px;text-align:left;">Club</th>
+      <th style="padding:5px 8px;text-align:left;">ActorID</th>
+      <th style="padding:5px 8px;text-align:right;">Records</th>
+      <th style="padding:5px 8px;text-align:left;">Canonical</th>
+      <th style="padding:5px 8px;text-align:right;">Re-points</th>
+    </tr></thead>
+    <tbody>${rows.map(r => `<tr>
+      <td style="padding:5px 8px;">${escHtml(r.canonical.Name||'—')}</td>
+      <td style="padding:5px 8px;">${escHtml(r.clubName)}</td>
+      <td style="padding:5px 8px;font-family:monospace;">${escHtml(r.actorId)}</td>
+      <td style="padding:5px 8px;text-align:right;vertical-align:top;">
+        ${r.players.map(p => {
+          const isCanon = p.id === r.canonical.id;
+          const statusCol = p.Status === 'active' ? 'var(--green)' : 'var(--text3)';
+          const heroCount = CACHE.heroes.filter(h => h.PlayerID === p.id).length;
+          return `<div style="font-size:10px;${isCanon?'font-weight:600;':'opacity:0.7;'}">
+            ${isCanon?'★ ':''}${escHtml(p.id.slice(-6))}
+            <span style="color:${statusCol};">${p.Status==='active'?'Active':'Archived'}</span>
+            · ${heroCount} PIDs
+          </div>`;
+        }).join('')}
+      </td>
+      <td style="padding:5px 8px;font-family:monospace;font-size:10px;">${escHtml(r.canonical.id)}</td>
+      <td style="padding:5px 8px;text-align:right;${r.repoints>0?'color:var(--amber);':'color:var(--text3);'}">${r.repoints>0?r.repoints:'—'}</td>
+    </tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
 function validateMdmRosterMemberDuplicates() {
   const counts = new Map();
   (CACHE.mdmRosterMembers||[]).forEach(m => {
@@ -1527,7 +1611,7 @@ function switchImportTab(tab) {
 
 // ─── MODALS ───────────────────────────────────────────────────────────────────
 function openModal(id) {
-  if (id==='modal-add-player') { fillSelect('player-club',CACHE.clubs,c=>({v:c.id,l:c.Name})); fillSelect('player-season',CACHE.seasons,s=>({v:s.id,l:s.Label})); }
+  if (id==='modal-add-player') { fillSelect('player-club',CACHE.clubs,c=>({v:c.id,l:c.Name})); }
   if (id==='modal-add-parent') { fillSelect('parent-club',CACHE.clubs,c=>({v:c.id,l:c.Name})); fillSelect('parent-season',CACHE.seasons,s=>({v:s.id,l:s.Label}),{v:'',l:'Open / Multi-season'}); }
   if (id==='modal-add-hero') { fillSelect('hero-club',CACHE.clubs,c=>({v:c.id,l:c.Name})); fillSelect('hero-season',CACHE.seasons,s=>({v:s.id,l:s.Label})); }
   document.getElementById(id).classList.add('open');
@@ -1547,10 +1631,9 @@ function fillSelect(id, items, mapFn, emptyOpt) {
 
 async function updateHeroPlayerOptions() {
   const clubId = document.getElementById('hero-club').value;
-  const seasonId = document.getElementById('hero-season').value;
-  const players = CACHE.players.filter(p => p.ClubID===clubId && p.SeasonID===seasonId && p.Status!=='provisional').sort((a,b)=>(a.Name||'').localeCompare(b.Name||''));
+  const players = CACHE.players.filter(p => p.ClubID===clubId && p.Status!=='provisional').sort((a,b)=>(a.Name||'').localeCompare(b.Name||''));
   const sel = document.getElementById('hero-player');
-  sel.innerHTML = players.length ? players.map(p=>`<option value="${p.id}">${p.Name} (${p.ShirtName||''})</option>`).join('') : '<option value="">No players found for this club/season</option>';
+  sel.innerHTML = players.length ? players.map(p=>`<option value="${p.id}">${p.Name} (${p.ShirtName||''})</option>`).join('') : '<option value="">No players found for this club</option>';
 }
 
 // ─── SAVE / DELETE ────────────────────────────────────────────────────────────
@@ -1644,10 +1727,9 @@ async function savePlayer() {
   const name = document.getElementById('player-name').value.trim();
   const shirt = document.getElementById('player-shirt').value.trim();
   const clubId = document.getElementById('player-club').value;
-  const seasonId = document.getElementById('player-season').value;
-  if (!name||!shirt||!clubId||!seasonId) { toast('Name, shirt, club and season required','error'); return; }
+  if (!name||!shirt||!clubId) { toast('Name, shirt name and club required','error'); return; }
   try {
-    const rec = await atCreate(TABLES.players, {Name:toProperName(name),ShirtName:toShirtName(shirt),SquadNumber:parseInt(document.getElementById('player-number').value)||null,Type:document.getElementById('player-type').value,ClubID:clubId,SeasonID:seasonId,Status:document.getElementById('player-status').value,MDMActorID:document.getElementById('player-mdm').value.trim()});
+    const rec = await atCreate(TABLES.players, {Name:toProperName(name),ShirtName:toShirtName(shirt),SquadNumber:parseInt(document.getElementById('player-number').value)||null,Type:document.getElementById('player-type').value,ClubID:clubId,Status:document.getElementById('player-status').value,MDMActorID:document.getElementById('player-mdm').value.trim()});
     CACHE.players.push({id:rec.id,...rec.fields});
     buildCacheMaps();
     closeModal('modal-add-player');
@@ -1953,21 +2035,21 @@ function localParseAndSearch(query, filterClub, filterSeason, filterFont, filter
 function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filterClub, filterSeason, filterFont, filterStatus, groupByClub) {
   const effectiveFont = resolvedFont||filterFont||null;
   const q = (nameQ||'').trim().toLowerCase();
-  let matchedPlayerIds = new Set();
+  // Build player name lookup for text matching — players drive name/status only
+  const playerNameSet = new Set();
   CACHE.players.forEach(p => {
     const clubMatch = !filterClub || p.ClubID===filterClub;
-    const seasonMatch = !filterSeason || p.SeasonID===filterSeason;
     const statusMatch = !filterStatus || p.Status===filterStatus;
-    if (!clubMatch||!seasonMatch||!statusMatch) return;
-    if (groupByClub || !q) { matchedPlayerIds.add(p.id); return; }
-    if (searchMatch(p.Name||'',q)||searchMatch(p.ShirtName||'',q)) matchedPlayerIds.add(p.id);
+    if (!clubMatch||!statusMatch) return;
+    if (groupByClub || !q) { playerNameSet.add(p.id); return; }
+    if (searchMatch(p.Name||'',q)||searchMatch(p.ShirtName||'',q)) playerNameSet.add(p.id);
   });
-  if (q && !groupByClub) CACHE.heroes.forEach(h => { if (h.PID&&h.PID.includes(q)) matchedPlayerIds.add(h.PlayerID); });
+  if (q && !groupByClub) CACHE.heroes.forEach(h => { if (h.PID&&h.PID.includes(q)) playerNameSet.add(h.PlayerID); });
   const grouped = {};
   CACHE.heroes.forEach(h => {
-    if (!matchedPlayerIds.has(h.PlayerID)) return;
+    if (!playerNameSet.has(h.PlayerID)) return;
     if (filterClub && h.ClubID!==filterClub) return;
-    if (filterSeason && h.SeasonID!==filterSeason) return;
+    if (filterSeason && h.SeasonID!==filterSeason) return; // season filter on hero
     if (effectiveFont && h.FontType!==effectiveFont) return;
     if (filterStatus && h.Status!==filterStatus) return;
     if (resolvedGarment && h.GarmentType!==resolvedGarment) return;
@@ -1980,18 +2062,12 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
     // League = mens only; womens = womens only — strict separation
     if (effectiveFont==='league' && (h.FontType||'')==='womens') return;
     if (effectiveFont==='womens' && (h.FontType||'')==='league') return;
-    const key = h.PlayerID+'_'+h.ClubID+'_'+h.SeasonID;
+    const key = h.PlayerID+'_'+h.ClubID+'_'+h.SeasonID; // key uses hero's SeasonID
     if (!grouped[key]) grouped[key]={heroes:[]};
     grouped[key].heroes.push(h);
   });
   if (!effectiveFont&&!resolvedGarment&&!resolvedKit) {
-    matchedPlayerIds.forEach(pid => {
-      const player = CACHE.players.find(p=>p.id===pid);
-      if (!player) return;
-      if (filterClub&&player.ClubID!==filterClub) return;
-      const key = player.id+'_'+player.ClubID+'_'+player.SeasonID;
-      if (!grouped[key]) grouped[key]={heroes:[]};
-    });
+    // Players with no matching heroes are omitted — search is hero-driven
   }
   const keys = Object.keys(grouped);
   document.getElementById('result-count').textContent = keys.length+' result'+(keys.length!==1?'s':'');
@@ -2288,7 +2364,7 @@ function showSquadNumberModal(importedPlayers, forceShow) {
     seen.add(key);
     const existing = CACHE.players.find(e =>
       (e.Name||'').toLowerCase() === p.name.toLowerCase() &&
-      e.ClubID === p.clubId && e.SeasonID === p.seasonId
+      e.ClubID === p.clubId
     );
     const club = CACHE.clubs.find(c => c.id === p.clubId);
     if (!existing) return; // player wasn't imported (e.g. all provisional)
@@ -2357,9 +2433,7 @@ async function openEditPlayer(id) {
   document.getElementById('edit-player-goalkeeper').checked = p.Goalkeeper || false;
   document.getElementById('edit-player-type').value = p.Type || 'player';
   fillSelect('edit-player-club', CACHE.clubs, c=>({v:c.id,l:c.Name||''}));
-  fillSelect('edit-player-season', CACHE.seasons, s=>({v:s.id,l:s.Label||''}));
   document.getElementById('edit-player-club').value = p.ClubID || '';
-  document.getElementById('edit-player-season').value = p.SeasonID || '';
   openModal('modal-edit-player');
 }
 async function saveEditPlayer() {
@@ -2371,7 +2445,6 @@ async function saveEditPlayer() {
   const goalkeeper = document.getElementById('edit-player-goalkeeper').checked;
   const type = document.getElementById('edit-player-type').value;
   const clubId = document.getElementById('edit-player-club').value;
-  const seasonId = document.getElementById('edit-player-season').value;
   if (!name || !shirt) { toast('Name and shirt name required', 'error'); return; }
   try {
     const cached = CACHE.players.find(p => p.id === id);
@@ -2381,8 +2454,8 @@ async function saveEditPlayer() {
     const nameChanged = toShirtName(shirt).toUpperCase() !== oldName.toUpperCase();
     const numberChanged = number !== oldNumber;
     const gkChanged = goalkeeper !== oldGoalkeeper;
-    await atUpdate(TABLES.players, id, {Name:toProperName(name), ShirtName:toShirtName(shirt), SquadNumber:number, Status:status, Type:type, ClubID:clubId, SeasonID:seasonId, Goalkeeper:goalkeeper});
-    if (cached) { cached.Name=name; cached.ShirtName=shirt.toUpperCase(); cached.SquadNumber=number; cached.Status=status; cached.Type=type; cached.ClubID=clubId; cached.SeasonID=seasonId; cached.Goalkeeper=goalkeeper; }
+    await atUpdate(TABLES.players, id, {Name:toProperName(name), ShirtName:toShirtName(shirt), SquadNumber:number, Status:status, Type:type, ClubID:clubId, Goalkeeper:goalkeeper});
+    if (cached) { cached.Name=name; cached.ShirtName=shirt.toUpperCase(); cached.SquadNumber=number; cached.Status=status; cached.Type=type; cached.ClubID=clubId; cached.Goalkeeper=goalkeeper; }
     buildCacheMaps();
     closeModal('modal-edit-player');
     refreshManage();
@@ -3024,7 +3097,7 @@ function refreshSeasons() {
 
 function refreshManage() {
   const ptbody=document.getElementById('players-tbody');
-  if(ptbody&&cacheLoaded){const s=manageState.players,all=CACHE.players,total=all.length;const pg=all.slice(s.page*s.perPage,(s.page+1)*s.perPage);const pgIds=pg.map(p=>p.id),allSel=pgIds.length>0&&pgIds.every(id=>s.selected.has(id)),multi=s.selected.size>1;renderSelBar('players','Delete Selected','Archive/Activate');renderPager('players',total);renderPerPage('players');const thc=document.getElementById('players-th-chk');if(thc)thc.innerHTML=`<input type="checkbox" ${allSel?'checked':''} onchange="manageToggleAll('players',this.checked,${JSON.stringify(pgIds)})" style="cursor:pointer;accent-color:var(--accent);">`;ptbody.innerHTML=total===0?`<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px;">No players yet</td></tr>`:pg.map(p=>{const cl=CACHE.clubs.find(c=>c.id===p.ClubID),se=CACHE.seasons.find(s=>s.id===p.SeasonID),sel=s.selected.has(p.id);const acts=multi?`<button class="btn btn-ghost btn-sm" onclick="deactivatePlayer('${p.id}').then(()=>refreshManage())">${p.Status==='archived'?'Activate':'Archive'}</button>`:`<button class="btn btn-ghost btn-sm" onclick="openEditPlayer('${p.id}')">Edit</button><button class="btn btn-ghost btn-sm" onclick="deactivatePlayer('${p.id}').then(()=>refreshManage())">${p.Status==='archived'?'Activate':'Archive'}</button>`;return `<tr style="${sel?'background:rgba(79,124,255,0.06);':''}"><td style="padding:8px 4px;"><input type="checkbox" ${sel?'checked':''} onchange="manageToggleOne('players','${p.id}',this.checked)" style="cursor:pointer;accent-color:var(--accent);"></td><td style="color:var(--text);font-weight:500;">${p.Name||''}</td><td class="mono">${p.ShirtName||''}</td><td class="mono">${p.SquadNumber||'—'}</td><td>${cl?.Name||'—'}</td><td>${se?.Label||'—'}</td><td>${p.Status==='archived'?'<span class="badge badge-archived">Archived</span>':'<span class="badge badge-active">Active</span>'}</td><td style="display:flex;gap:4px;">${acts}<button class="btn btn-danger btn-sm" onclick="deletePlayer('${p.id}')">Delete</button></td></tr>`;}).join('');}
+  if(ptbody&&cacheLoaded){const s=manageState.players,all=CACHE.players,total=all.length;const pg=all.slice(s.page*s.perPage,(s.page+1)*s.perPage);const pgIds=pg.map(p=>p.id),allSel=pgIds.length>0&&pgIds.every(id=>s.selected.has(id)),multi=s.selected.size>1;renderSelBar('players','Delete Selected','Archive/Activate');renderPager('players',total);renderPerPage('players');const thc=document.getElementById('players-th-chk');if(thc)thc.innerHTML=`<input type="checkbox" ${allSel?'checked':''} onchange="manageToggleAll('players',this.checked,${JSON.stringify(pgIds)})" style="cursor:pointer;accent-color:var(--accent);">`;ptbody.innerHTML=total===0?`<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px;">No players yet</td></tr>`:pg.map(p=>{const cl=CACHE.clubs.find(c=>c.id===p.ClubID),sel=s.selected.has(p.id);const acts=multi?`<button class="btn btn-ghost btn-sm" onclick="deactivatePlayer('${p.id}').then(()=>refreshManage())">${p.Status==='archived'?'Activate':'Archive'}</button>`:`<button class="btn btn-ghost btn-sm" onclick="openEditPlayer('${p.id}')">Edit</button><button class="btn btn-ghost btn-sm" onclick="deactivatePlayer('${p.id}').then(()=>refreshManage())">${p.Status==='archived'?'Activate':'Archive'}</button>`;return `<tr style="${sel?'background:rgba(79,124,255,0.06);':''}"><td style="padding:8px 4px;"><input type="checkbox" ${sel?'checked':''} onchange="manageToggleOne('players','${p.id}',this.checked)" style="cursor:pointer;accent-color:var(--accent);"></td><td style="color:var(--text);font-weight:500;">${p.Name||''}</td><td class="mono">${p.ShirtName||''}</td><td class="mono">${p.SquadNumber||'—'}</td><td>${cl?.Name||'—'}</td><td class="mono" style="font-size:11px;color:var(--text3);">${p.MDMActorID||'—'}</td><td>${p.Status==='archived'?'<span class="badge badge-archived">Archived</span>':'<span class="badge badge-active">Active</span>'}</td><td style="display:flex;gap:4px;">${acts}<button class="btn btn-danger btn-sm" onclick="deletePlayer('${p.id}')">Delete</button></td></tr>`;}).join('');}
   const parbody=document.getElementById('parents-tbody');
   if(parbody&&cacheLoaded){const s=manageState.parents,all=CACHE.parents,total=all.length;const pg=all.slice(s.page*s.perPage,(s.page+1)*s.perPage);const pgIds=pg.map(p=>p.id),allSel=pgIds.length>0&&pgIds.every(id=>s.selected.has(id));renderSelBar('parents','Delete Selected');renderPager('parents',total);renderPerPage('parents');const thc=document.getElementById('parents-th-chk');if(thc)thc.innerHTML=`<input type="checkbox" ${allSel?'checked':''} onchange="manageToggleAll('parents',this.checked,${JSON.stringify(pgIds)})" style="cursor:pointer;accent-color:var(--accent);">`;parbody.innerHTML=total===0?`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px;">No parent PIDs yet</td></tr>`:pg.map(p=>{const cl=CACHE.clubs.find(c=>c.id===p.ClubID),se=CACHE.seasons.find(s=>s.id===p.SeasonID),sel=s.selected.has(p.id);return `<tr style="${sel?'background:rgba(79,124,255,0.06);':''}"><td style="padding:8px 4px;"><input type="checkbox" ${sel?'checked':''} onchange="manageToggleOne('parents','${p.id}',this.checked)" style="cursor:pointer;accent-color:var(--accent);"></td><td class="mono" style="color:var(--amber);">${p.PID||''}</td><td>${cl?.Name||'—'}</td><td>${se?.Label||'Multi-season'}</td><td>${p.KitType||'—'}</td><td>${p.GarmentType||'—'}</td><td><button class="btn btn-danger btn-sm" onclick="deleteParent('${p.id}')">Delete</button></td></tr>`;}).join('');}
   const hbody=document.getElementById('heroes-tbody');
@@ -3149,6 +3222,25 @@ function updateStats() {
     else { healthEl.textContent = `🔴 ${health.totalIssues}`; }
   }
   populateExportFilters();
+}
+
+// ─── CANONICAL PLAYER PICKER (Step 9 transition) ────────────────────────────
+// Used during transition period when same Name+ClubID may have multiple records
+// with different SeasonIDs. Picks the most "complete" record deterministically.
+function pickCanonicalPlayer(players) {
+  if (!players || players.length === 0) return null;
+  if (players.length === 1) return players[0];
+  return players.slice().sort((a, b) => {
+    const ah = CACHE.heroes.filter(h => h.PlayerID === a.id).length;
+    const bh = CACHE.heroes.filter(h => h.PlayerID === b.id).length;
+    if (bh !== ah) return bh - ah;
+    const aActive = a.Status === 'active' ? 1 : 0;
+    const bActive = b.Status === 'active' ? 1 : 0;
+    if (bActive !== aActive) return bActive - aActive;
+    if (!!b.MDMActorID !== !!a.MDMActorID) return b.MDMActorID ? 1 : -1;
+    if (!!b.ShirtName !== !!a.ShirtName) return b.ShirtName ? 1 : -1;
+    return String(a.id).localeCompare(String(b.id));
+  })[0];
 }
 
 // ─── IMPORT ───────────────────────────────────────────────────────────────────
@@ -3430,10 +3522,20 @@ function _previewToggleGK(playerIndex) {
 function showImportPreview(club, season, filename) {
   const d=importData;
   const _seenPK=new Set();
-  const _cachePlayerMap = new Map((CACHE.players||[]).map(p=>[p.Name+'|'+p.ClubID+'|'+p.SeasonID, p]));
+  const _cachePlayerMap = new Map();
+  // Group by Name|ClubID and pick canonical player for each
+  const _playersByNameClub = {};
+  (CACHE.players||[]).forEach(p => {
+    const k = p.Name+'|'+p.ClubID;
+    if (!_playersByNameClub[k]) _playersByNameClub[k] = [];
+    _playersByNameClub[k].push(p);
+  });
+  Object.entries(_playersByNameClub).forEach(([k, players]) => {
+    _cachePlayerMap.set(k, pickCanonicalPlayer(players));
+  });
   // Roll-forward: find previous-season templates for players not in current season
   const _prevPlayerMap = new Map((CACHE.players||[]).map(p=>[p.Name+'|'+p.ClubID, p]));
-  const newPlayers=d.players.filter(p=>{const k=p.name+'|'+p.clubId+'|'+p.seasonId+'|'+p.fontType;if(_seenPK.has(k))return false;_seenPK.add(k);return !_cachePlayerMap.has(p.name+'|'+p.clubId+'|'+p.seasonId);});
+  const newPlayers=d.players.filter(p=>{const k=p.name+'|'+p.clubId+'|'+p.fontType;if(_seenPK.has(k))return false;_seenPK.add(k);return !_cachePlayerMap.has(p.name+'|'+p.clubId);});
   const rolledForward = newPlayers.filter(p => _prevPlayerMap.has(p.name+'|'+p.clubId));
   const brandNew = newPlayers.filter(p => !_prevPlayerMap.has(p.name+'|'+p.clubId));
   const existingPlayers=d.players.filter(p=>(CACHE.players||[]).some(e=>e.Name===p.name&&e.ClubID!==p.clubId));
@@ -3515,14 +3617,22 @@ async function confirmImport() {
   const d=importData;
   const newParents=d.parents.filter(p=>!CACHE_MAPS.parentByPID.has(String(p.pid)));
   const newHeroes=d.heroes.filter(h=>!CACHE_MAPS.heroByPID.has(String(h.pid)));
-  const _cachePlayerMap2 = new Map((CACHE.players||[]).map(p=>[p.Name+'|'+p.ClubID+'|'+p.SeasonID, p]));
-  const _seenPK=new Set();const newPlayers=d.players.filter(p=>{const k=p.name+'|'+p.clubId+'|'+p.seasonId+'|'+p.fontType;if(_seenPK.has(k))return false;_seenPK.add(k);return !_cachePlayerMap2.has(p.name+'|'+p.clubId+'|'+p.seasonId);});
+  const _playersByNameClub2 = {};
+  (CACHE.players||[]).forEach(p => {
+    const k = p.Name+'|'+p.ClubID;
+    if (!_playersByNameClub2[k]) _playersByNameClub2[k] = [];
+    _playersByNameClub2[k].push(p);
+  });
+  const _cachePlayerMap2 = new Map();
+  Object.entries(_playersByNameClub2).forEach(([k, players]) => {
+    _cachePlayerMap2.set(k, pickCanonicalPlayer(players));
+  });
+  const _seenPK=new Set();const newPlayers=d.players.filter(p=>{const k=p.name+'|'+p.clubId+'|'+p.fontType;if(_seenPK.has(k))return false;_seenPK.add(k);return !_cachePlayerMap2.has(p.name+'|'+p.clubId);});
   // playerMap must be declared before _cachePlayerMap2.forEach uses it
   const playerMap={};
   // Also populate playerMap for existing players right away
   _cachePlayerMap2.forEach((player, key) => {
-    const parts = key.split('|');
-    playerMap[parts[0]+'_'+parts[1]+'_'+parts[2]] = player.id;
+    playerMap[key] = player.id;
   });
   try {
     const total = newParents.length + newPlayers.length + newHeroes.length;
@@ -3546,7 +3656,6 @@ async function confirmImport() {
         SquadNumber: p.number || prev?.SquadNumber || null,
         Type: p.type || prev?.Type || 'player',
         ClubID: p.clubId,
-        SeasonID: p.seasonId,
         Status: 'active',
         MDMActorID: p.mdmId || prev?.MDMActorID || '',
         Goalkeeper: p.goalkeeper || prev?.Goalkeeper || false,
@@ -3554,13 +3663,13 @@ async function confirmImport() {
       const rec=await atCreate(TABLES.players, fields);
       _createdPlayers.push(rec);
       CACHE.players.push({id:rec.id,...rec.fields});
-      playerMap[p.name+'_'+p.clubId+'_'+p.seasonId]=rec.id;
+      playerMap[p.name+'|'+p.clubId]=rec.id;
     }
     done += newPlayers.length;
-    CACHE.players.filter(p=>d.players.some(dp=>dp.name===p.Name&&dp.clubId===p.ClubID&&dp.seasonId===p.SeasonID)).forEach(p=>{ playerMap[p.Name+'_'+p.ClubID+'_'+p.SeasonID]=p.id; });
+    CACHE.players.filter(p=>d.players.some(dp=>dp.name===p.Name&&dp.clubId===p.ClubID)).forEach(p=>{ playerMap[p.Name+'|'+p.ClubID]=p.id; });
     if (newHeroes.length>0) {
       const heroFields=newHeroes.map(h=>{
-        const playerId=playerMap[h.playerName+'_'+h.clubId+'_'+h.seasonId];
+        const playerId=playerMap[h.playerName+'|'+h.clubId];
         const parent=CACHE.parents.find(p=>String(p.PID)===String(h.parentPid));
         const player=CACHE.players.find(p=>p.id===playerId);
         const {actorId,rosterId}=resolveMdmLinks(player?.MDMActorID||'',h.clubId,h.seasonId,h.fontType,h.kitType);
@@ -3627,7 +3736,7 @@ async function confirmImport() {
     // For storage sheets numbers come from file — just show modal to let user verify
     // Only show if any players are missing numbers
     const _missingNums = _importedPlayerList.filter(p => {
-      const rec = CACHE.players.find(e => e.Name === p.name && e.ClubID === p.clubId && e.SeasonID === p.seasonId);
+      const rec = CACHE.players.find(e => e.Name === p.name && e.ClubID === p.clubId);
       return rec && !rec.SquadNumber;
     });
     if (_missingNums.length > 0) showSquadNumberModal(_missingNums);
@@ -3916,22 +4025,29 @@ async function confirmCreationImport() {
       recs.forEach(r=>{ CACHE.parents.push({id:r.id,...r.fields}); if(r.fields&&r.fields.PID) parentIdMap[String(r.fields.PID)]=r.id; });
     }
     const playerMap={};
-    // Find existing players first
+    // Find existing players first - use Name|ClubID key with canonical picker
+    const _playersByNameClub3 = {};
+    CACHE.players.forEach(p => {
+      const k = (p.Name||'').toLowerCase()+'|'+p.ClubID;
+      if (!_playersByNameClub3[k]) _playersByNameClub3[k] = [];
+      _playersByNameClub3[k].push(p);
+    });
     d.heroes.forEach(h => {
-      const key=h.playerName+'_'+h.clubId+'_'+h.seasonId;
-      if (!playerMap[key]) {
-        const existing=CACHE.players.find(p=>(p.Name||'').toLowerCase()===h.playerName.toLowerCase()&&p.ClubID===h.clubId&&p.SeasonID===h.seasonId);
-        if (existing) playerMap[key]=existing.id;
+      const k = h.playerName.toLowerCase()+'|'+h.clubId;
+      if (!playerMap[k]) {
+        const candidates = _playersByNameClub3[k] || [];
+        const existing = pickCanonicalPlayer(candidates);
+        if (existing) playerMap[k]=existing.id;
       }
     });
     // Batch create new players
     const newPlayerFields=[];
     const newPlayerKeys=[];
     d.heroes.forEach(h => {
-      const key=h.playerName+'_'+h.clubId+'_'+h.seasonId;
-      if (!playerMap[key]&&!newPlayerKeys.includes(key)) {
-        newPlayerKeys.push(key);
-        newPlayerFields.push({Name:toProperName(h.playerName),ShirtName:toShirtName(h.playerName),Type:'player',ClubID:h.clubId,SeasonID:h.seasonId,Status:'active'});
+      const k = h.playerName.toLowerCase()+'|'+h.clubId;
+      if (!playerMap[k]&&!newPlayerKeys.includes(k)) {
+        newPlayerKeys.push(k);
+        newPlayerFields.push({Name:toProperName(h.playerName),ShirtName:toShirtName(h.playerName),Type:'player',ClubID:h.clubId,Status:'active'});
       }
     });
     if (newPlayerFields.length>0) {
@@ -3939,7 +4055,7 @@ async function confirmCreationImport() {
       recs.forEach((r,i)=>{ CACHE.players.push({id:r.id,...r.fields}); playerMap[newPlayerKeys[i]]=r.id; });
     }
     if (d.heroes.length>0) {
-      const heroFields=d.heroes.map(h=>{const pId=parentIdMap[String(h.basePid)]||'';const playerId=playerMap[h.playerName+'_'+h.clubId+'_'+h.seasonId]||'';const player=CACHE.players.find(p=>p.id===playerId);const{actorId,rosterId}=resolveMdmLinks(player?.MDMActorID||'',h.clubId,h.seasonId,h.fontType,h.kitType);return {PID:h.pid,PlayerID:playerId,ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.garmentRaw,KitType:h.kitType,Status:'active',ActorID:actorId,RosterID:rosterId,...(pId?{ParentPIDID:pId}:{}),...(h.jerseyColour?{JerseyColour:h.jerseyColour}:{})};}).filter(h=>h.PlayerID);
+      const heroFields=d.heroes.map(h=>{const pId=parentIdMap[String(h.basePid)]||'';const playerId=playerMap[h.playerName.toLowerCase()+'|'+h.clubId]||'';const player=CACHE.players.find(p=>p.id===playerId);const{actorId,rosterId}=resolveMdmLinks(player?.MDMActorID||'',h.clubId,h.seasonId,h.fontType,h.kitType);return {PID:h.pid,PlayerID:playerId,ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.garmentRaw,KitType:h.kitType,Status:'active',ActorID:actorId,RosterID:rosterId,...(pId?{ParentPIDID:pId}:{}),...(h.jerseyColour?{JerseyColour:h.jerseyColour}:{})};}).filter(h=>h.PlayerID);
       const recs=await atCreateBatch(TABLES.heroes,heroFields);
       _createdHeroes.push(...recs);
       recs.forEach(r=>CACHE.heroes.push({id:r.id,...r.fields}));
@@ -3947,26 +4063,24 @@ async function confirmCreationImport() {
     if (d.provisional.length > 0) {
       // Ensure one __provisional__ player per club+season (batch create missing ones)
       const provPlayerMap = {};
-      const provKeys = [...new Set(d.provisional.map(h => h.clubId+'_'+h.seasonId))];
+      const provKeys = [...new Set(d.provisional.map(h => h.clubId))];
       // Find existing provisional players
       provKeys.forEach(k => {
-        const [cId, sId] = k.split('_');
-        const existing = CACHE.players.find(p => p.Name==='__provisional__' && p.ClubID===cId && p.SeasonID===sId);
+        const existing = CACHE.players.find(p => p.Name==='__provisional__' && p.ClubID===k);
         if (existing) provPlayerMap[k] = existing.id;
       });
       // Batch create missing provisional players
       const missingProvKeys = provKeys.filter(k => !provPlayerMap[k]);
       if (missingProvKeys.length > 0) {
         const newProvRecs = await atCreateBatch(TABLES.players, missingProvKeys.map(k => {
-          const [cId, sId] = k.split('_');
-          return {Name:'__provisional__',ShirtName:'UNKNOWN',Type:'player',ClubID:cId,SeasonID:sId,Status:'provisional'};
+          return {Name:'__provisional__',ShirtName:'UNKNOWN',Type:'player',ClubID:k,Status:'provisional'};
         }));
         newProvRecs.forEach((r, i) => { CACHE.players.push({id:r.id,...r.fields}); provPlayerMap[missingProvKeys[i]] = r.id; });
       }
       // Batch create all provisional hero PIDs
       const provHeroFields = d.provisional.map(h => {
         const pId=parentIdMap[String(h.basePid)]||'';
-        return {PID:h.pid, PlayerID:provPlayerMap[h.clubId+'_'+h.seasonId]||'',
+        return {PID:h.pid, PlayerID:provPlayerMap[h.clubId]||'',
           ClubID:h.clubId, SeasonID:h.seasonId, FontType:h.fontType,
           GarmentType:h.garmentType, GarmentRaw:h.name, KitType:h.kitType, Status:'provisional',
           ...(pId?{ParentPIDID:pId}:{}),...(h.jerseyColour?{JerseyColour:h.jerseyColour}:{})};
@@ -4052,9 +4166,9 @@ async function confirmHomeplateResolve() {
   for (const r of homeplateData.resolutions) {
     const hero=CACHE.heroes.find(h=>h.id===r.heroId);
     if (!hero) continue;
-    let player=CACHE.players.find(p=>normaliseAccents((p.Name||'').toLowerCase())===normaliseAccents(r.playerName.toLowerCase())&&p.ClubID===r.clubId&&p.SeasonID===r.seasonId&&p.Status!=='provisional');
+    let player=CACHE.players.find(p=>normaliseAccents((p.Name||'').toLowerCase())===normaliseAccents(r.playerName.toLowerCase())&&p.ClubID===r.clubId&&p.Status!=='provisional');
     if (!player) {
-      const rec=await atCreate(TABLES.players,{Name:toProperName(r.playerName),ShirtName:toShirtName(r.playerName),SquadNumber:r.squadNumber||null,Type:'player',ClubID:r.clubId,SeasonID:r.seasonId,Status:'active'});
+      const rec=await atCreate(TABLES.players,{Name:toProperName(r.playerName),ShirtName:toShirtName(r.playerName),SquadNumber:r.squadNumber||null,Type:'player',ClubID:r.clubId,Status:'active'});
       CACHE.players.push({id:rec.id,...rec.fields}); player={id:rec.id,...rec.fields};
     }
     await atUpdate(TABLES.heroes,r.heroId,{PlayerID:player.id,Status:'active',ActorID:player.MDMActorID||'',...(()=>{const{rosterId}=resolveMdmLinks(player.MDMActorID||'',r.clubId,r.seasonId,hero.FontType||'',hero.KitType||'');return rosterId?{RosterID:rosterId}:{};})()});
@@ -4880,7 +4994,7 @@ async function applySquadUpdate() {
   // Also update squad numbers on Players table
   const newSquadMap={};
   newSquad.forEach(p=>newSquadMap[p.name.toUpperCase()]=p.number);
-  const clubPlayers = CACHE.players.filter(p=>p.ClubID===clubId&&p.SeasonID===seasonId);
+  const clubPlayers = CACHE.players.filter(p=>p.ClubID===clubId);
   for (const player of clubPlayers) {
     const jerseyName=(player.ShirtName||player.Name||'').toUpperCase().trim();
     if (jerseyName in newSquadMap) {
@@ -7166,7 +7280,7 @@ init();
       <input type="hidden" id="edit-player-id">
       <div class="form-row"><div class="form-group"><label class="form-label">Full Name *</label><input class="form-input" id="edit-player-name" /></div><div class="form-group"><label class="form-label">Shirt Name *</label><input class="form-input" id="edit-player-shirt" /></div></div>
       <div class="form-row"><div class="form-group"><label class="form-label">Squad Number</label><input class="form-input" id="edit-player-number" type="number" /></div><div class="form-group"><label class="form-label">Player Type</label><select class="form-select" id="edit-player-type"><option value="player">Player</option><option value="variant">Specials</option></select></div></div>
-      <div class="form-row"><div class="form-group"><label class="form-label">Club</label><select class="form-select" id="edit-player-club"></select></div><div class="form-group"><label class="form-label">Season</label><select class="form-select" id="edit-player-season"></select></div></div>
+      <div class="form-row"><div class="form-group"><label class="form-label">Club</label><select class="form-select" id="edit-player-club"></select></div></div>
       <div class="form-row"><div class="form-group"><label class="form-label">Goalkeeper</label><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><input type="checkbox" id="edit-player-goalkeeper" style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer;"><label style="font-size:13px;color:var(--text2);cursor:pointer;" for="edit-player-goalkeeper">This player is a goalkeeper</label></div></div></div><div class="form-row"><div class="form-group"><label class="form-label">Status</label><select class="form-select" id="edit-player-status"><option value="active">Active</option><option value="archived">Archived</option></select></div></div>
     </div>
     <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-edit-player')">Cancel</button><button class="btn btn-primary" onclick="saveEditPlayer()">Save Changes</button></div>
