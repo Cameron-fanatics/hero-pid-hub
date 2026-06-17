@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v230 -->
+<!-- HEROPID-BUILD-v231 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -163,13 +163,14 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <div class="nav-item" onclick="showPage('fonts')" id="nav-fonts"><span class="icon">✦</span> Fonts</div>
     <div class="nav-item" onclick="showPage('rostermappings')" id="nav-rostermappings"><span class="icon">⇄</span> Roster Mappings</div>
     <div class="nav-item" onclick="showPage('cleanup')" id="nav-cleanup"><span class="icon">⚠</span> Data Clean-up</div>
+    <div class="nav-item" onclick="showPage('analytics')" id="nav-analytics"><span class="icon">◎</span> Analytics</div>
     <div class="nav-section" style="margin-top:8px;">Settings</div>
     <div class="nav-item" onclick="showPage('settings')" id="nav-settings"><span class="icon">⚙</span> Settings</div>
   </nav>
   <div class="sidebar-stats">
     <div class="stat-pill"><span class="stat-label">Hero PIDs</span><span class="stat-value" id="stat-hero">—</span></div>
-    <div class="stat-pill"><span class="stat-label">Players</span><span class="stat-value" id="stat-players">—</span></div>
-    <div class="stat-pill"><span class="stat-label">Clubs</span><span class="stat-value" id="stat-clubs">—</span></div>
+    <div class="stat-pill"><span class="stat-label">MDM Linked</span><span class="stat-value" id="stat-mdm-linked">—</span></div>
+    <div class="stat-pill" style="cursor:pointer;" onclick="showPage('cleanup')"><span class="stat-label">Data Health</span><span class="stat-value" id="stat-health">—</span></div>
   </div>
 </aside>
 
@@ -715,6 +716,66 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 </div>
 
 <!-- ROSTER MAPPINGS PAGE -->
+<div id="page-analytics" class="hidden">
+  <div class="topbar"><div class="page-title">Data Nerd Dashboard</div></div>
+  <div class="content">
+
+    <!-- EXECUTIVE SUMMARY -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;" id="analytics-summary-cards">
+      <div class="card" style="text-align:center;padding:16px 12px;">
+        <div style="font-size:24px;font-weight:700;color:var(--text);font-family:'Syne',sans-serif;" id="an-hero-count">—</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Active Hero PIDs</div>
+      </div>
+      <div class="card" style="text-align:center;padding:16px 12px;">
+        <div style="font-size:24px;font-weight:700;font-family:'Syne',sans-serif;" id="an-mdm-pct">—</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">MDM Fully Linked</div>
+      </div>
+      <div class="card" style="text-align:center;padding:16px 12px;cursor:pointer;" onclick="showPage('cleanup')">
+        <div style="font-size:24px;font-weight:700;font-family:'Syne',sans-serif;" id="an-health-score">—</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Data Health</div>
+      </div>
+      <div class="card" style="text-align:center;padding:16px 12px;">
+        <div style="font-size:24px;font-weight:700;color:var(--text);font-family:'Syne',sans-serif;" id="an-clubs-count">—</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">Clubs</div>
+      </div>
+    </div>
+
+    <!-- ATTENTION REQUIRED -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px;">Attention Required</div>
+      <div id="an-attention-list" style="font-size:12px;color:var(--text3);">Run report to compute.</div>
+    </div>
+
+    <!-- RUN BUTTON -->
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">
+      <button class="btn btn-primary btn-sm" onclick="runAnalytics()">⊙ Run Analytics</button>
+      <span id="an-last-run" style="font-size:11px;color:var(--text3);"></span>
+    </div>
+
+    <!-- MDM LINKAGE -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">MDM Linkage</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Per-club/season breakdown of active Hero PID MDM linkage. Active only.</div>
+      <div id="an-linkage-output" style="display:none;"></div>
+    </div>
+
+    <!-- COVERAGE GAPS -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Coverage Gaps</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Active Hero PIDs missing key fields.</div>
+      <div id="an-gaps-output" style="display:none;"></div>
+    </div>
+
+    <!-- ROSTER MAPPING COVERAGE -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Roster Mapping Coverage</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Kit types present in active Hero PIDs vs available roster mappings per club/season. Note: only covers kits that already have PIDs — kits with no PIDs yet are not shown.</div>
+      <div id="an-roster-output" style="display:none;"></div>
+    </div>
+
+  </div>
+</div>
+
 <div id="page-rostermappings" class="hidden">
   <div class="topbar">
     <div class="page-title">Roster Mappings</div>
@@ -1403,7 +1464,7 @@ async function loadCache(force, dataOnly=false){
 
 // ─── PAGES ────────────────────────────────────────────────────────────────────
 function showPage(page) {
-  ['search','manage','import','clubs','seasons','settings','cleanup','bulkexport','fonts','rostermappings'].forEach(p => {
+  ['search','manage','import','clubs','seasons','settings','cleanup','bulkexport','fonts','rostermappings','analytics'].forEach(p => {
     document.getElementById('page-'+p)?.classList.add('hidden');
     document.getElementById('nav-'+p)?.classList.remove('active');
   });
@@ -3050,9 +3111,26 @@ function isEntryIncomplete(type, id) {
 
 function updateStats() {
   document.getElementById('stat-hero').textContent = CACHE.heroes.length.toLocaleString();
-  document.getElementById('stat-players').textContent = CACHE.players.length.toLocaleString();
-  document.getElementById('stat-clubs').textContent = CACHE.clubs.length.toLocaleString();
-  calcDataHealth();
+  // MDM Linked % — active heroes with all three MDM fields
+  const activeHeroes = CACHE.heroes.filter(h => h.Status === 'active');
+  const fullyLinked = activeHeroes.filter(h =>
+    h.ActorID && String(h.ActorID) !== '0' &&
+    h.RosterID && String(h.RosterID) !== '0' &&
+    h.RosterMemberID && String(h.RosterMemberID) !== '0'
+  ).length;
+  const mdmPct = activeHeroes.length > 0 ? Math.round((fullyLinked / activeHeroes.length) * 100) : 0;
+  const mdmEl = document.getElementById('stat-mdm-linked');
+  if (mdmEl) {
+    mdmEl.textContent = activeHeroes.length > 0 ? `${mdmPct}%` : '—';
+    mdmEl.style.color = mdmPct >= 90 ? 'var(--green)' : mdmPct >= 50 ? 'var(--amber)' : 'var(--red,#fc8181)';
+  }
+  const health = calcDataHealth();
+  const healthEl = document.getElementById('stat-health');
+  if (healthEl) {
+    if (health.level === 'green') { healthEl.textContent = '🟢'; }
+    else if (health.level === 'amber') { healthEl.textContent = `🟡 ${health.totalIssues}`; }
+    else { healthEl.textContent = `🔴 ${health.totalIssues}`; }
+  }
   populateExportFilters();
 }
 
@@ -5763,6 +5841,213 @@ function runLinkageReport() {
     </div>`;
   outputEl.style.display = '';
   statusEl.textContent = `Last run: ${new Date().toLocaleTimeString()}`;
+}
+
+// ─── ANALYTICS PAGE ──────────────────────────────────────────────────────────
+function runAnalytics() {
+  const clubMap = new Map((CACHE.clubs||[]).map(c => [c.id, c.Name||'']));
+  const seasonMap = new Map((CACHE.seasons||[]).map(s => [s.id, s.Label||'']));
+  const activeHeroes = (CACHE.heroes||[]).filter(h => h.Status === 'active');
+  const totalActive = activeHeroes.length;
+
+  // ── Executive Summary ────────────────────────────────────────────────────
+  document.getElementById('an-hero-count').textContent = totalActive.toLocaleString();
+  document.getElementById('an-clubs-count').textContent = CACHE.clubs.length;
+
+  const fullyLinked = activeHeroes.filter(h =>
+    h.ActorID && String(h.ActorID) !== '0' &&
+    h.RosterID && String(h.RosterID) !== '0' &&
+    h.RosterMemberID && String(h.RosterMemberID) !== '0'
+  ).length;
+  const mdmPct = totalActive > 0 ? Math.round((fullyLinked / totalActive) * 100) : 0;
+  const mdmColour = mdmPct >= 90 ? 'var(--green)' : mdmPct >= 50 ? 'var(--amber)' : 'var(--red,#fc8181)';
+  const mdmEl = document.getElementById('an-mdm-pct');
+  mdmEl.textContent = `${mdmPct}%`;
+  mdmEl.style.color = mdmColour;
+
+  const health = calcDataHealth();
+  const healthEl = document.getElementById('an-health-score');
+  if (health.level === 'green') { healthEl.textContent = '🟢 Good'; healthEl.style.color = 'var(--green)'; }
+  else if (health.level === 'amber') { healthEl.textContent = `🟡 ${health.totalIssues} items`; healthEl.style.color = 'var(--amber)'; }
+  else { healthEl.textContent = `🔴 ${health.totalIssues} items`; healthEl.style.color = 'var(--red,#fc8181)'; }
+
+  // ── Attention Required ───────────────────────────────────────────────────
+  const missingActor = activeHeroes.filter(h => !h.ActorID || String(h.ActorID) === '0').length;
+  const missingRoster = activeHeroes.filter(h => !h.RosterID || String(h.RosterID) === '0').length;
+  const missingMember = activeHeroes.filter(h => !h.RosterMemberID || String(h.RosterMemberID) === '0').length;
+  const missingParent = activeHeroes.filter(h => !h.ParentPIDID).length;
+  const provisionalCount = (CACHE.heroes||[]).filter(h => h.Status === 'provisional').length;
+  const attentionItems = [
+    provisionalCount > 0 ? {sev:'🔴',label:'Provisional Hero PIDs awaiting resolution',count:provisionalCount,action:`showPage('import');switchImportTab('homeplate')`} : null,
+    missingActor > 0 ? {sev:'🟠',label:'Active Hero PIDs missing ActorID',count:missingActor,action:`showPage('cleanup')`} : null,
+    missingRoster > 0 ? {sev:'🟠',label:'Active Hero PIDs missing RosterID',count:missingRoster,action:`showPage('cleanup')`} : null,
+    missingMember > 0 ? {sev:'🟡',label:'Active Hero PIDs missing RosterMemberID',count:missingMember,action:`showPage('cleanup')`} : null,
+    missingParent > 0 ? {sev:'🟡',label:'Active Hero PIDs missing Parent PID',count:missingParent,action:null} : null,
+    health.incompletePlayers > 0 ? {sev:'🟡',label:'Incomplete player records',count:health.incompletePlayers,action:null} : null,
+  ].filter(Boolean);
+
+  const attEl = document.getElementById('an-attention-list');
+  if (attentionItems.length === 0) {
+    attEl.innerHTML = `<span style="color:var(--green);">✓ No issues found — data estate looks healthy.</span>`;
+  } else {
+    attEl.innerHTML = attentionItems.map(item => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">
+        <span>${item.sev} ${escHtml(item.label)}</span>
+        <span style="display:flex;align-items:center;gap:8px;">
+          <span style="font-weight:600;font-size:12px;">${item.count.toLocaleString()}</span>
+          ${item.action ? `<button class="btn btn-ghost btn-sm" onclick="${item.action}">View →</button>` : ''}
+        </span>
+      </div>`).join('');
+  }
+
+  // ── MDM Linkage Table ─────────────────────────────────────────────────────
+  const groups = {};
+  activeHeroes.forEach(h => {
+    const key = `${h.ClubID||''}|${h.SeasonID||''}`;
+    if (!groups[key]) groups[key] = {clubId:h.ClubID,seasonId:h.SeasonID,heroes:[]};
+    groups[key].heroes.push(h);
+  });
+  const linkageRows = Object.values(groups).sort((a,b) => {
+    const ca = clubMap.get(a.clubId)||''; const cb = clubMap.get(b.clubId)||'';
+    if (ca !== cb) return ca.localeCompare(cb);
+    return (seasonMap.get(a.seasonId)||'').localeCompare(seasonMap.get(b.seasonId)||'');
+  });
+  let ltHeroes=0,ltActor=0,ltRoster=0,ltMember=0,ltFull=0;
+  const linkageRowsHtml = linkageRows.map(({clubId,seasonId,heroes}) => {
+    const club = clubMap.get(clubId)||'—';
+    const season = seasonMap.get(seasonId)||'—';
+    const n = heroes.length;
+    const actor = heroes.filter(h=>h.ActorID&&String(h.ActorID)!=='0').length;
+    const roster = heroes.filter(h=>h.RosterID&&String(h.RosterID)!=='0').length;
+    const member = heroes.filter(h=>h.RosterMemberID&&String(h.RosterMemberID)!=='0').length;
+    const full = heroes.filter(h=>h.ActorID&&String(h.ActorID)!=='0'&&h.RosterID&&String(h.RosterID)!=='0'&&h.RosterMemberID&&String(h.RosterMemberID)!=='0').length;
+    ltHeroes+=n;ltActor+=actor;ltRoster+=roster;ltMember+=member;ltFull+=full;
+    const fp = n>0?Math.round((full/n)*100):0;
+    const fc = fp>=90?'var(--green)':fp>=50?'var(--amber)':'var(--red,#fc8181)';
+    const miss = n-full;
+    // Club colour pill
+    const clubObj = CACHE_MAPS.clubById?.get(clubId);
+    const clubBg = clubObj?.BadgeColour ? safeCssColour(clubObj.BadgeColour,'var(--bg3)') : 'var(--bg3)';
+    const clubTxt = clubObj?.BadgeTextColour ? safeCssColour(clubObj.BadgeTextColour,'#FFFFFF') : '#FFFFFF';
+    return `<tr>
+      <td style="padding:5px 8px;font-size:11px;"><span style="background:${clubBg};color:${clubTxt};padding:1px 7px;border-radius:4px;font-size:10px;">${escHtml(club)}</span></td>
+      <td style="padding:5px 8px;font-size:11px;">${escHtml(season)}</td>
+      <td style="padding:5px 8px;font-size:11px;text-align:right;">${n}</td>
+      <td style="padding:5px 8px;font-size:11px;text-align:right;">${n>0?Math.round((actor/n)*100):0}%</td>
+      <td style="padding:5px 8px;font-size:11px;text-align:right;">${n>0?Math.round((roster/n)*100):0}%</td>
+      <td style="padding:5px 8px;font-size:11px;text-align:right;">${n>0?Math.round((member/n)*100):0}%</td>
+      <td style="padding:5px 8px;font-size:11px;text-align:right;font-weight:600;color:${fc};">${fp}%</td>
+      <td style="padding:5px 8px;font-size:11px;text-align:right;color:${miss>0?'var(--red,#fc8181)':'var(--text3)'};">${miss>0?miss:'—'}</td>
+    </tr>`;
+  }).join('');
+  const lgp = ltHeroes>0?Math.round((ltFull/ltHeroes)*100):0;
+  const lgc = lgp>=90?'var(--green)':lgp>=50?'var(--amber)':'var(--red,#fc8181)';
+  const linkageEl = document.getElementById('an-linkage-output');
+  linkageEl.innerHTML = `
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
+      <span style="font-weight:600;color:${lgc};">${lgp}% fully MDM linked</span>
+      <span style="color:var(--text3);margin-left:8px;">${ltFull.toLocaleString()} of ${ltHeroes.toLocaleString()} active Hero PIDs</span>
+    </div>
+    <div style="overflow-x:auto;max-height:360px;overflow-y:auto;">
+    <table class="data-table" style="font-size:11px;width:100%;">
+      <thead><tr style="position:sticky;top:0;background:var(--bg2);">
+        <th style="padding:5px 8px;text-align:left;">Club</th>
+        <th style="padding:5px 8px;text-align:left;">Season</th>
+        <th style="padding:5px 8px;text-align:right;">PIDs</th>
+        <th style="padding:5px 8px;text-align:right;">ActorID</th>
+        <th style="padding:5px 8px;text-align:right;">RosterID</th>
+        <th style="padding:5px 8px;text-align:right;">MemberID</th>
+        <th style="padding:5px 8px;text-align:right;">Fully Linked</th>
+        <th style="padding:5px 8px;text-align:right;">Missing</th>
+      </tr></thead>
+      <tbody>${linkageRowsHtml}</tbody>
+      <tfoot><tr style="border-top:1px solid var(--border);font-weight:600;">
+        <td colspan="2" style="padding:5px 8px;font-size:11px;">Total</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:right;">${ltHeroes}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:right;">${ltHeroes>0?Math.round((ltActor/ltHeroes)*100):0}%</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:right;">${ltHeroes>0?Math.round((ltRoster/ltHeroes)*100):0}%</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:right;">${ltHeroes>0?Math.round((ltMember/ltHeroes)*100):0}%</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:right;color:${lgc};">${lgp}%</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:right;color:${(ltHeroes-ltFull)>0?'var(--red,#fc8181)':'var(--text3)'};">${ltHeroes-ltFull>0?ltHeroes-ltFull:'—'}</td>
+      </tr></tfoot>
+    </table></div>`;
+  linkageEl.style.display = '';
+
+  // ── Coverage Gaps ─────────────────────────────────────────────────────────
+  const gaps = [
+    {label:'Missing ActorID', count:missingActor, action:`showPage('cleanup')`},
+    {label:'Missing RosterID', count:missingRoster, action:`showPage('cleanup')`},
+    {label:'Missing RosterMemberID', count:missingMember, action:`showPage('cleanup')`},
+    {label:'Missing Parent PID', count:missingParent, action:null},
+    {label:'Missing Kit Type', count:activeHeroes.filter(h=>!h.KitType).length, action:null},
+    {label:'Missing Garment Type', count:activeHeroes.filter(h=>!h.GarmentType).length, action:null},
+  ];
+  const gapsEl = document.getElementById('an-gaps-output');
+  gapsEl.innerHTML = `<table class="data-table" style="font-size:11px;width:100%;">
+    <thead><tr><th style="padding:5px 8px;text-align:left;">Field</th><th style="padding:5px 8px;text-align:right;">Missing</th><th style="padding:5px 8px;text-align:right;">% of Active</th><th style="padding:5px 8px;"></th></tr></thead>
+    <tbody>${gaps.map(g => {
+      const pct = totalActive>0?((g.count/totalActive)*100).toFixed(1):0;
+      const c = g.count===0?'var(--text3)':g.count>100?'var(--red,#fc8181)':'var(--amber)';
+      return `<tr>
+        <td style="padding:5px 8px;font-size:11px;">${escHtml(g.label)}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:right;font-weight:600;color:${c};">${g.count>0?g.count.toLocaleString():'—'}</td>
+        <td style="padding:5px 8px;font-size:11px;text-align:right;color:${c};">${g.count>0?pct+'%':'—'}</td>
+        <td style="padding:5px 8px;text-align:right;">${g.action&&g.count>0?`<button class="btn btn-ghost btn-sm" onclick="${g.action}">View →</button>`:''}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+  gapsEl.style.display = '';
+
+  // ── Roster Mapping Coverage ───────────────────────────────────────────────
+  // For each club+season combo, find which kit types have Hero PIDs but no roster mapping
+  const activeMappingKeys = new Set(
+    (CACHE.rosterMappings||[])
+      .filter(r=>r.Active)
+      .map(r=>`${r.ClubID}|${r.SeasonID}|${String(r.FontType||'').trim().toLowerCase()}|${String(r.KitType||'').trim().toLowerCase()}`)
+  );
+  // Group active heroes by club+season+font+kit
+  const heroKitGroups = {};
+  activeHeroes.forEach(h => {
+    const key = `${h.ClubID}|${h.SeasonID}|${String(h.FontType||'').trim().toLowerCase()}|${String(h.KitType||'').trim().toLowerCase()}`;
+    if (!heroKitGroups[key]) heroKitGroups[key] = {clubId:h.ClubID,seasonId:h.SeasonID,font:h.FontType,kit:h.KitType,count:0,hasMapped:activeMappingKeys.has(key)};
+    heroKitGroups[key].count++;
+  });
+  const unmapped = Object.values(heroKitGroups).filter(g=>!g.hasMapped).sort((a,b)=>{
+    const ca=clubMap.get(a.clubId)||''; const cb=clubMap.get(b.clubId)||'';
+    return ca!==cb?ca.localeCompare(cb):(seasonMap.get(a.seasonId)||'').localeCompare(seasonMap.get(b.seasonId)||'');
+  });
+  const mapped = Object.values(heroKitGroups).filter(g=>g.hasMapped).length;
+  const total = Object.keys(heroKitGroups).length;
+  const rosterEl = document.getElementById('an-roster-output');
+  const coveragePct = total>0?Math.round((mapped/total)*100):100;
+  const coverageColour = coveragePct===100?'var(--green)':coveragePct>=80?'var(--amber)':'var(--red,#fc8181)';
+  rosterEl.innerHTML = `
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
+      <span style="font-weight:600;color:${coverageColour};">${coveragePct}% of kit types have a roster mapping</span>
+      <span style="color:var(--text3);margin-left:8px;">${mapped} of ${total} club/season/font/kit combinations</span>
+    </div>
+    ${unmapped.length>0?`
+    <div style="font-size:11px;color:var(--amber);margin-bottom:8px;">⚠ ${unmapped.length} kit type${unmapped.length!==1?'s':''} with Hero PIDs but no roster mapping — <a href="#" onclick="showPage('rostermappings');return false;" style="color:var(--accent);">Add mapping →</a></div>
+    <div style="overflow-x:auto;max-height:240px;overflow-y:auto;">
+    <table class="data-table" style="font-size:11px;width:100%;">
+      <thead><tr style="position:sticky;top:0;background:var(--bg2);">
+        <th style="padding:5px 8px;text-align:left;">Club</th>
+        <th style="padding:5px 8px;text-align:left;">Season</th>
+        <th style="padding:5px 8px;text-align:left;">Font</th>
+        <th style="padding:5px 8px;text-align:left;">Kit</th>
+        <th style="padding:5px 8px;text-align:right;">Hero PIDs</th>
+      </tr></thead>
+      <tbody>${unmapped.map(g=>`<tr>
+        <td style="padding:5px 8px;">${escHtml(clubMap.get(g.clubId)||'—')}</td>
+        <td style="padding:5px 8px;">${escHtml(seasonMap.get(g.seasonId)||'—')}</td>
+        <td style="padding:5px 8px;">${escHtml(g.font||'—')}</td>
+        <td style="padding:5px 8px;">${escHtml(g.kit||'—')}</td>
+        <td style="padding:5px 8px;text-align:right;">${g.count}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>` : `<div style="color:var(--green);font-size:12px;">✓ All active kit types have roster mappings.</div>`}`;
+  rosterEl.style.display = '';
+
+  document.getElementById('an-last-run').textContent = `Last run: ${new Date().toLocaleTimeString()}`;
 }
 
 // ─── MDM BACKFILL ─────────────────────────────────────────────────────────────
