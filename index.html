@@ -565,6 +565,19 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <!-- DATA HEALTH BANNER -->
     <div id="data-health-banner" style="display:none;border:1px solid;border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;margin-bottom:16px;"></div>
 
+    <!-- MDM LINKAGE REPORT -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">MDM Linkage Report</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">
+        Per-club/season breakdown of active Hero PID MDM linkage. Shows what % of Hero PIDs have ActorID, RosterID and RosterMemberID populated.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+        <button class="btn btn-ghost btn-sm" onclick="runLinkageReport()">⊙ Run Report</button>
+        <span id="linkage-report-status" style="font-size:11px;color:var(--text3);"></span>
+      </div>
+      <div id="linkage-report-output" style="display:none;"></div>
+    </div>
+
     <!-- CORRUPTED PLAYERS (moved from Manage) -->
     <div class="card" style="margin-bottom:16px;">
       <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Corrupted Player Names</div>
@@ -2959,7 +2972,7 @@ function refreshImportSelects() {
   fillSelect('import-season', CACHE.seasons, s=>({v:s.id,l:s.Label||''}));
   fillSelect('creation-season', CACHE.seasons, s=>({v:s.id,l:s.Label||''}));
   fillSelect('mdm-roster-club', CACHE.clubs, c=>({v:c.id,l:c.Name||''}));
-  fillSelect('mdm-roster-season', CACHE.seasons, s=>({v:s.id,l:s.Label||''}));
+  mdmRosterClubChanged();
   fillSelect('squad-update-club', CACHE.clubs, c=>({v:c.id,l:c.Name||''}));
   fillSelect('squad-update-season', CACHE.seasons, s=>({v:s.id,l:s.Label||''}));
 }
@@ -4104,7 +4117,10 @@ function processImportFile(file) {
 // ─── MDM ROSTER MEMBER IMPORT ─────────────────────────────
 let mdmRosterData = null;
 
-function mdmRosterClubChanged() {}
+function mdmRosterClubChanged() {
+  const clubId = document.getElementById('mdm-roster-club').value;
+  filterSeasonDropdown('mdm-roster-season', clubId, {blankLabel:'— Select season —', source:'rosterMappings'});
+}
 
 function parseMdmRosterUpload(file) {
   toast('Reading MDM roster file...');
@@ -4343,7 +4359,6 @@ async function importMdmRoster() {
     setStatus(`⟳ Syncing player statuses... ${Math.min(i+5, playerUpdates.length)}/${playerUpdates.length}`);
   }
   document.getElementById('mdm-roster-preview').classList.add('hidden');
-  toast(`MDM Roster: ${toCreate.length} created, ${toUpdate.length} updated${playerUpdates.length ? `, ${playerUpdates.length} player statuses synced` : ''}`,'success');
   setStatus('');
 
   // ── Step 8: Populate RosterMemberID on Hero PIDs ──────────────────────────
@@ -4353,7 +4368,7 @@ async function importMdmRoster() {
   const actorRosterToRMID = {};
   const actorRosterDupes = new Set();
   rows.forEach(r => {
-    if (r.actorId && r.id && r.rosterId) {
+    if (r.actorId && r.id && r.rosterId && String(r.id) !== '0' && String(r.id) !== '-999') {
       const key = `${r.actorId}|${r.rosterId}`;
       if (actorRosterToRMID[key] && actorRosterToRMID[key] !== String(r.id)) {
         actorRosterDupes.add(key);
@@ -4367,6 +4382,7 @@ async function importMdmRoster() {
   const heroUpdates = [];
   (CACHE.heroes||[]).forEach(h => {
     if (h.ClubID !== clubId) return;
+    if (h.SeasonID !== seasonId) return;
     if (!h.ActorID || !h.RosterID) return;
     if (h.RosterMemberID && String(h.RosterMemberID) !== '0') return; // already set
     const rmid = actorRosterToRMID[`${h.ActorID}|${h.RosterID}`];
@@ -4386,7 +4402,9 @@ async function importMdmRoster() {
       ));
       setStatus(`⟳ Writing RosterMemberID to Hero PIDs... ${Math.min(i+10, heroUpdates.length)}/${heroUpdates.length}`);
     }
-    toast(`MDM Roster: ${toCreate.length} created, ${toUpdate.length} updated, ${heroDone} Hero PIDs linked`, 'success');
+    toast(`MDM Roster: ${toCreate.length} created, ${toUpdate.length} updated${playerUpdates.length ? `, ${playerUpdates.length} statuses synced` : ''}, ${heroDone} Hero PIDs linked`, 'success');
+  } else {
+    toast(`MDM Roster: ${toCreate.length} created, ${toUpdate.length} updated${playerUpdates.length ? `, ${playerUpdates.length} statuses synced` : ''}, 0 Hero PIDs linked`, 'success');
   }
 
   setStatus('');
@@ -5649,6 +5667,102 @@ function getClubColour(clubId) {
   const bg = safeCssColour(club.BadgeColour, '');
   if (!bg) return null;
   return {bg, text: safeCssColour(club.BadgeTextColour, '#FFFFFF')};
+}
+
+// ─── MDM LINKAGE REPORT (Step 8.5) ───────────────────────────────────────────
+function runLinkageReport() {
+  const statusEl = document.getElementById('linkage-report-status');
+  const outputEl = document.getElementById('linkage-report-output');
+  statusEl.textContent = 'Computing…';
+  outputEl.style.display = 'none';
+
+  // Build lookup maps
+  const clubMap = new Map((CACHE.clubs||[]).map(c => [c.id, c.Name||c.name||'']));
+  const seasonMap = new Map((CACHE.seasons||[]).map(s => [s.id, s.Label||s.label||'']));
+
+  // Active hero PIDs only
+  const activeHeroes = (CACHE.heroes||[]).filter(h => h.Status === 'active');
+
+  // Group by ClubID + SeasonID
+  const groups = {};
+  activeHeroes.forEach(h => {
+    const key = `${h.ClubID||''}|${h.SeasonID||''}`;
+    if (!groups[key]) groups[key] = {clubId: h.ClubID, seasonId: h.SeasonID, heroes: []};
+    groups[key].heroes.push(h);
+  });
+
+  // Sort by club name then season
+  const rows = Object.values(groups).sort((a, b) => {
+    const ca = clubMap.get(a.clubId)||''; const cb = clubMap.get(b.clubId)||'';
+    if (ca !== cb) return ca.localeCompare(cb);
+    const sa = seasonMap.get(a.seasonId)||''; const sb = seasonMap.get(b.seasonId)||'';
+    return sa.localeCompare(sb);
+  });
+
+  // Compute totals
+  let totalHeroes = 0, totalActor = 0, totalRoster = 0, totalMember = 0, totalFull = 0;
+  const rowsHtml = rows.map(({clubId, seasonId, heroes}) => {
+    const club = clubMap.get(clubId) || '—';
+    const season = seasonMap.get(seasonId) || '—';
+    const n = heroes.length;
+    const actor = heroes.filter(h => h.ActorID && String(h.ActorID) !== '0').length;
+    const roster = heroes.filter(h => h.RosterID && String(h.RosterID) !== '0').length;
+    const member = heroes.filter(h => h.RosterMemberID && String(h.RosterMemberID) !== '0').length;
+    const full = heroes.filter(h =>
+      h.ActorID && String(h.ActorID) !== '0' &&
+      h.RosterID && String(h.RosterID) !== '0' &&
+      h.RosterMemberID && String(h.RosterMemberID) !== '0'
+    ).length;
+    totalHeroes += n; totalActor += actor; totalRoster += roster; totalMember += member; totalFull += full;
+    const fullPct = n > 0 ? Math.round((full/n)*100) : 0;
+    const colour = fullPct >= 90 ? 'var(--green)' : fullPct >= 50 ? 'var(--amber)' : 'var(--red,#fc8181)';
+    const missing = n - full;
+    return `<tr>
+      <td style="padding:5px 8px;font-size:11px;">${escHtml(club)}</td>
+      <td style="padding:5px 8px;font-size:11px;">${escHtml(season)}</td>
+      <td style="padding:5px 8px;font-size:11px;text-align:right;">${n}</td>
+      <td style="padding:5px 8px;font-size:11px;text-align:right;">${Math.round((actor/n)*100)}%</td>
+      <td style="padding:5px 8px;font-size:11px;text-align:right;">${Math.round((roster/n)*100)}%</td>
+      <td style="padding:5px 8px;font-size:11px;text-align:right;">${Math.round((member/n)*100)}%</td>
+      <td style="padding:5px 8px;font-size:11px;text-align:right;font-weight:600;color:${colour};">${fullPct}%</td>
+      <td style="padding:5px 8px;font-size:11px;text-align:right;color:${missing > 0 ? 'var(--red,#fc8181)' : 'var(--text3)'};">${missing > 0 ? missing : '—'}</td>
+    </tr>`;
+  }).join('');
+
+  const globalPct = totalHeroes > 0 ? Math.round((totalFull/totalHeroes)*100) : 0;
+  const globalColour = globalPct >= 90 ? 'var(--green)' : globalPct >= 50 ? 'var(--amber)' : 'var(--red,#fc8181)';
+
+  outputEl.innerHTML = `
+    <div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
+      <span style="font-weight:600;color:${globalColour};">${globalPct}% fully MDM linked</span>
+      <span style="color:var(--text3);margin-left:8px;">${totalFull.toLocaleString()} of ${totalHeroes.toLocaleString()} active Hero PIDs have ActorID + RosterID + RosterMemberID</span>
+    </div>
+    <div style="overflow-x:auto;max-height:400px;overflow-y:auto;">
+      <table class="data-table" style="font-size:11px;width:100%;">
+        <thead><tr style="position:sticky;top:0;background:var(--bg2);">
+          <th style="padding:5px 8px;text-align:left;">Club</th>
+          <th style="padding:5px 8px;text-align:left;">Season</th>
+          <th style="padding:5px 8px;text-align:right;">PIDs</th>
+          <th style="padding:5px 8px;text-align:right;">ActorID</th>
+          <th style="padding:5px 8px;text-align:right;">RosterID</th>
+          <th style="padding:5px 8px;text-align:right;">MemberID</th>
+          <th style="padding:5px 8px;text-align:right;">Fully linked</th>
+          <th style="padding:5px 8px;text-align:right;">Missing</th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+        <tfoot><tr style="border-top:1px solid var(--border);font-weight:600;">
+          <td style="padding:5px 8px;font-size:11px;" colspan="2">Total</td>
+          <td style="padding:5px 8px;font-size:11px;text-align:right;">${totalHeroes}</td>
+          <td style="padding:5px 8px;font-size:11px;text-align:right;">${totalHeroes > 0 ? Math.round((totalActor/totalHeroes)*100) : 0}%</td>
+          <td style="padding:5px 8px;font-size:11px;text-align:right;">${totalHeroes > 0 ? Math.round((totalRoster/totalHeroes)*100) : 0}%</td>
+          <td style="padding:5px 8px;font-size:11px;text-align:right;">${totalHeroes > 0 ? Math.round((totalMember/totalHeroes)*100) : 0}%</td>
+          <td style="padding:5px 8px;font-size:11px;text-align:right;color:${globalColour};">${globalPct}%</td>
+          <td style="padding:5px 8px;font-size:11px;text-align:right;color:${(totalHeroes-totalFull) > 0 ? 'var(--red,#fc8181)' : 'var(--text3)'};">${totalHeroes - totalFull > 0 ? totalHeroes - totalFull : '—'}</td>
+        </tr></tfoot>
+      </table>
+    </div>`;
+  outputEl.style.display = '';
+  statusEl.textContent = `Last run: ${new Date().toLocaleTimeString()}`;
 }
 
 // ─── MDM BACKFILL ─────────────────────────────────────────────────────────────
