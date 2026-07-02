@@ -3177,7 +3177,7 @@ function calcDataHealth() {
       banner.innerHTML = `<span style="color:${colour};font-weight:600;">${icon} ${totalIssues} item${totalIssues !== 1 ? 's' : ''} need attention</span><span style="color:var(--text2);margin-left:8px;">— ${parts.join(', ')}.</span>`;
     }
   }
-  return { totalIncomplete, incompletePlayers, incompleteParents, incompleteHeroes, provisionalHeroes, missingRosterLink, missingActorId, level };
+  return { totalIncomplete, incompletePlayers, incompleteParents, incompleteHeroes, provisionalHeroes, missingRosterLink, missingActorId, level, totalIssues };
 }
 
 function isEntryIncomplete(type, id) {
