@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v233 -->
+<!-- HEROPID-BUILD-v233.5 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -676,6 +676,22 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       <div id="correction-preview" style="display:none;"></div>
     </div>
 
+    <!-- PLAYER ACTORIID SYNC -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Player ActorID Sync</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px;">
+        Populates <span class="mono" style="font-size:11px;">MDMActorID</span> on Player records by matching against MDM Roster Members.
+        Uses tiered matching: Jersey Name first, Full Name fallback. Conflicts are skipped.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+        <select class="form-select" id="actor-sync-club" style="width:200px;"></select>
+        <button class="btn btn-ghost btn-sm" onclick="runActorSync(true)" id="actor-sync-dry-btn">⊙ Dry Run</button>
+        <button class="btn btn-primary btn-sm" onclick="runActorSync(false)" id="actor-sync-apply-btn" disabled>✓ Apply Safe Updates</button>
+        <span id="actor-sync-status" style="font-size:11px;color:var(--text3);"></span>
+      </div>
+      <div id="actor-sync-output" style="display:none;"></div>
+    </div>
+
     <!-- PLAYER DEDUP PREVIEW -->
     <div class="card" style="margin-bottom:16px;">
       <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Player Deduplication Preview</div>
@@ -1186,6 +1202,183 @@ function resolveMdmLinks(actorId, clubId, seasonId, fontType, kitType) {
 
 // Validate for duplicate RosterMemberIDs in the MDM Roster Members cache
 // Returns array of {rosterMemberId, count, records} for any duplicates found
+// ─── PLAYER ACTORID SYNC ──────────────────────────────────────────────────────
+function normSyncName(s) {
+  return String(s||'').trim().toUpperCase().replace(/\s+/g,' ');
+}
+
+async function runActorSync(isDryRun) {
+  const clubId = document.getElementById('actor-sync-club').value;
+  if (!clubId) { toast('Select a club first', 'error'); return; }
+  const club = CACHE_MAPS.clubById.get(clubId);
+  const clubName = club?.Name || clubId;
+  const statusEl = document.getElementById('actor-sync-status');
+  const outputEl = document.getElementById('actor-sync-output');
+  const applyBtn = document.getElementById('actor-sync-apply-btn');
+  statusEl.textContent = isDryRun ? 'Building lookup index…' : 'Applying updates…';
+  outputEl.style.display = 'none';
+
+  // Phase 1: Build lookup index from MDM Roster Members for this club
+  const jerseyIndex = {}; // normJerseyName -> {actorId, conflicts: bool}
+  const nameIndex   = {}; // normFullName   -> {actorId, conflicts: bool}
+
+  const mdmRows = (CACHE.mdmRosterMembers||[]).filter(r => {
+    const rClub = CACHE_MAPS.clubById.get(r.ClubID)?.Name || r.ClubName || '';
+    return r.ClubID === clubId || rClub.toLowerCase() === clubName.toLowerCase();
+  });
+
+  mdmRows.forEach(r => {
+    const actorId = String(r.ActorID||'').trim();
+    if (!actorId || actorId === '0' || actorId === '-999') return;
+
+    const jersey = normSyncName(r.JerseyName||r.ShirtName||'');
+    const full   = normSyncName(r.Name||r.PlayerName||'');
+
+    if (jersey) {
+      if (!jerseyIndex[jersey]) {
+        jerseyIndex[jersey] = {actorId, conflicts: false};
+      } else if (jerseyIndex[jersey].actorId !== actorId) {
+        jerseyIndex[jersey].conflicts = true;
+      }
+    }
+    if (full) {
+      if (!nameIndex[full]) {
+        nameIndex[full] = {actorId, conflicts: false};
+      } else if (nameIndex[full].actorId !== actorId) {
+        nameIndex[full].conflicts = true;
+      }
+    }
+  });
+
+  // Count index conflicts
+  const indexConflicts = [
+    ...Object.values(jerseyIndex).filter(v=>v.conflicts),
+    ...Object.values(nameIndex).filter(v=>v.conflicts)
+  ].length;
+
+  // Phase 2: Match players against index
+  const players = (CACHE.players||[]).filter(p => p.ClubID === clubId);
+  const results = [];
+
+  players.forEach(p => {
+    const currentActorId = String(p.MDMActorID||'').trim();
+    const isPlaceholder = !currentActorId || currentActorId === '0' || currentActorId === '-999';
+
+    const normJersey = normSyncName(p.ShirtName||'');
+    const normFull   = normSyncName(p.Name||'');
+
+    const jerseyMatch = normJersey && jerseyIndex[normJersey] && !jerseyIndex[normJersey].conflicts
+      ? jerseyIndex[normJersey].actorId : null;
+    const nameMatch   = normFull   && nameIndex[normFull]     && !nameIndex[normFull].conflicts
+      ? nameIndex[normFull].actorId   : null;
+
+    let confidence, resolvedActorId, action;
+
+    if (jerseyMatch && nameMatch && jerseyMatch !== nameMatch) {
+      // Both matched but disagree — conflict, skip
+      confidence = 'Conflict';
+      resolvedActorId = null;
+      action = 'Skip';
+    } else if (jerseyMatch) {
+      confidence = 'High';
+      resolvedActorId = jerseyMatch;
+      action = isPlaceholder ? 'Update' : (resolvedActorId === currentActorId ? 'Already correct' : 'Skip (has value)');
+    } else if (nameMatch) {
+      confidence = 'Medium';
+      resolvedActorId = nameMatch;
+      action = isPlaceholder ? 'Update' : (resolvedActorId === currentActorId ? 'Already correct' : 'Skip (has value)');
+    } else {
+      confidence = 'None';
+      resolvedActorId = null;
+      action = 'Not found';
+    }
+
+    results.push({player: p, currentActorId, resolvedActorId, confidence, action, isPlaceholder});
+  });
+
+  const toUpdate   = results.filter(r => r.action === 'Update');
+  const correct    = results.filter(r => r.action === 'Already correct');
+  const conflicts  = results.filter(r => r.action === 'Conflict');
+  const notFound   = results.filter(r => r.action === 'Not found');
+  const skipped    = results.filter(r => r.action === 'Skip (has value)');
+  const hasConflicts = conflicts.length > 0;
+
+  // Phase 3: Apply if not dry run and no conflicts
+  let applied = 0;
+  if (!isDryRun && !hasConflicts && toUpdate.length > 0) {
+    statusEl.textContent = `Updating ${toUpdate.length} player records…`;
+    for (let i = 0; i < toUpdate.length; i += 10) {
+      const batch = toUpdate.slice(i, i+10);
+      await Promise.all(batch.map(r =>
+        atUpdate(TABLES.players, r.player.id, {MDMActorID: r.resolvedActorId}).then(() => {
+          r.player.MDMActorID = r.resolvedActorId;
+          applied++;
+        }).catch(() => {})
+      ));
+      statusEl.textContent = `Updating… ${Math.min(i+10, toUpdate.length)}/${toUpdate.length}`;
+    }
+    buildCacheMaps();
+    toast(`Player ActorID Sync: ${applied} updated for ${clubName}`, 'success');
+  }
+
+  // Render output
+  const modeLabel = isDryRun ? 'Dry Run' : 'Applied';
+  const conflictWarning = hasConflicts && isDryRun
+    ? `<div style="font-size:11px;color:var(--red,#fc8181);background:rgba(252,129,129,0.08);border:1px solid rgba(252,129,129,0.3);border-radius:4px;padding:8px 10px;margin-bottom:10px;">
+        ⚠ ${conflicts.length} conflict${conflicts.length!==1?'s':''} found — resolve these before applying. Apply button is disabled.
+       </div>` : '';
+
+  outputEl.innerHTML = `
+    <div style="font-size:12px;margin-bottom:10px;">
+      <strong>${modeLabel} — ${escHtml(clubName)}</strong>
+      <span style="color:var(--text3);margin-left:8px;">${mdmRows.length} MDM roster rows · ${players.length} player records · ${indexConflicts} index conflicts</span>
+    </div>
+    ${conflictWarning}
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;">
+      <span style="color:var(--green);">✓ ${isDryRun?'Would update':'Updated'}: ${isDryRun?toUpdate.length:applied}</span>
+      <span style="color:var(--text3);">Already correct: ${correct.length}</span>
+      <span style="color:var(--amber);">Conflict (skip): ${conflicts.length}</span>
+      <span style="color:var(--text3);">Not found: ${notFound.length}</span>
+      <span style="color:var(--text3);">Has value (skip): ${skipped.length}</span>
+    </div>
+    <div style="overflow-x:auto;max-height:360px;overflow-y:auto;">
+    <table class="data-table" style="font-size:11px;width:100%;">
+      <thead><tr style="position:sticky;top:0;background:var(--bg2);">
+        <th style="padding:5px 8px;text-align:left;">Player</th>
+        <th style="padding:5px 8px;text-align:left;">Jersey Name</th>
+        <th style="padding:5px 8px;text-align:left;">Current ActorID</th>
+        <th style="padding:5px 8px;text-align:left;">Resolved ActorID</th>
+        <th style="padding:5px 8px;text-align:left;">Confidence</th>
+        <th style="padding:5px 8px;text-align:left;">Action</th>
+      </tr></thead>
+      <tbody>${results.map(r => {
+        const ac = r.action==='Update'?'var(--green)':r.action==='Conflict'?'var(--red,#fc8181)':r.action==='Not found'?'var(--text3)':'var(--text2)';
+        return `<tr>
+          <td style="padding:5px 8px;">${escHtml(r.player.Name||'—')}</td>
+          <td style="padding:5px 8px;font-family:monospace;">${escHtml(r.player.ShirtName||'—')}</td>
+          <td style="padding:5px 8px;font-family:monospace;color:var(--text3);">${escHtml(r.currentActorId||'—')}</td>
+          <td style="padding:5px 8px;font-family:monospace;">${escHtml(r.resolvedActorId||'—')}</td>
+          <td style="padding:5px 8px;">${r.confidence}</td>
+          <td style="padding:5px 8px;color:${ac};font-weight:${r.action==='Update'?'600':'400'};">${r.action}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+  outputEl.style.display = '';
+
+  // Enable apply button only if dry run passed with zero conflicts
+  if (isDryRun) {
+    applyBtn.disabled = hasConflicts || toUpdate.length === 0;
+    statusEl.textContent = hasConflicts
+      ? `⚠ ${conflicts.length} conflicts — resolve before applying`
+      : toUpdate.length === 0
+        ? 'Dry run complete — nothing to update'
+        : `Dry run complete — ${toUpdate.length} ready to apply`;
+  } else {
+    applyBtn.disabled = true;
+    statusEl.textContent = `✓ ${applied} updated`;
+  }
+}
+
 // ─── PLAYER DEDUP PREVIEW (Step 9.0) ─────────────────────────────────────────
 function runDedupPreview() {
   const outputEl = document.getElementById('dedup-preview-output');
@@ -6502,8 +6695,22 @@ function initBackfillSelects() {
     const o = document.createElement('option'); o.value=c.id; o.textContent=c.Name||c.id;
     clubSel.appendChild(o);
   });
-  // Populate seasons filtered by current club selection (initially all)
   filterSeasonDropdown('backfill-season', clubSel.value, {allLabel:'All seasons'});
+  // Populate actor sync club selector
+  const actorSyncSel = document.getElementById('actor-sync-club');
+  if (actorSyncSel && actorSyncSel.options.length === 0) {
+    const blank = document.createElement('option'); blank.value=''; blank.textContent='— Select club —';
+    actorSyncSel.appendChild(blank);
+    CACHE.clubs.forEach(c => {
+      const o = document.createElement('option'); o.value=c.id; o.textContent=c.Name||c.id;
+      actorSyncSel.appendChild(o);
+    });
+    actorSyncSel.addEventListener('change', () => {
+      document.getElementById('actor-sync-apply-btn').disabled = true;
+      document.getElementById('actor-sync-output').style.display = 'none';
+      document.getElementById('actor-sync-status').textContent = '';
+    });
+  }
 }
 
 async function runMdmBackfill(dryRun) {
