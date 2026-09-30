@@ -1218,6 +1218,19 @@ async function runActorSync(isDryRun) {
   statusEl.textContent = isDryRun ? 'Building lookup index…' : 'Applying updates…';
   outputEl.style.display = 'none';
 
+  // Ensure MDM Roster Members are loaded — they're lazy-loaded elsewhere
+  if (!CACHE.mdmRosterMembers) {
+    statusEl.textContent = 'Loading MDM Roster Members…';
+    try {
+      const recs = await atGetAll(TABLES.mdmRosterMembers);
+      CACHE.mdmRosterMembers = recs.map(x=>({id:x.id,...x.fields}));
+    } catch(e) {
+      toast('Failed to load MDM Roster Members', 'error');
+      statusEl.textContent = '';
+      return;
+    }
+  }
+
   // Phase 1: Build lookup index from MDM Roster Members for this club
   const jerseyIndex = {}; // normJerseyName -> {actorId, conflicts: bool}
   const nameIndex   = {}; // normFullName   -> {actorId, conflicts: bool}
