@@ -1207,7 +1207,31 @@ function normSyncName(s) {
   return String(s||'').trim().toUpperCase().replace(/\s+/g,' ');
 }
 
+// Store last dry-run results for Apply to use — fix 5: store IDs only, not player objects
+let _actorSyncPending = null; // {clubId, toUpdate: [{playerId, resolvedActorId}]}
+
 async function runActorSync(isDryRun) {
+  // Outer wrapper: guarantees controls are restored and errors are reported on EVERY exit path
+  const statusEl = document.getElementById('actor-sync-status');
+  const applyBtn = document.getElementById('actor-sync-apply-btn');
+  const dryBtn   = document.getElementById('actor-sync-dry-btn');
+  const clubSel  = document.getElementById('actor-sync-club');
+  try {
+    await _actorSyncInner(isDryRun);
+  } catch (e) {
+    console.error('[ActorSync] failed:', e);
+    _actorSyncPending = null; // never leave a stale preview approvable after a failure
+    applyBtn.disabled = true;
+    const what = isDryRun ? 'Dry run' : 'Apply';
+    statusEl.textContent = `⚠ ${what} failed — ${e && e.message ? e.message : 'unknown error'}. Re-run the dry run to check the current state before trying again.`;
+    toast(`Player ActorID Sync: ${what.toLowerCase()} failed`, 'error');
+  } finally {
+    dryBtn.disabled = false;
+    clubSel.disabled = false;
+  }
+}
+
+async function _actorSyncInner(isDryRun) {
   const clubId = document.getElementById('actor-sync-club').value;
   if (!clubId) { toast('Select a club first', 'error'); return; }
   const club = CACHE_MAPS.clubById.get(clubId);
@@ -1215,8 +1239,77 @@ async function runActorSync(isDryRun) {
   const statusEl = document.getElementById('actor-sync-status');
   const outputEl = document.getElementById('actor-sync-output');
   const applyBtn = document.getElementById('actor-sync-apply-btn');
+  const dryBtn   = document.getElementById('actor-sync-dry-btn');
+
+  // Disable controls while running — fix 5: also disable club selector
+  const clubSel = document.getElementById('actor-sync-club');
+  applyBtn.disabled = true;
+  dryBtn.disabled = true;
+  clubSel.disabled = true;
   statusEl.textContent = isDryRun ? 'Building lookup index…' : 'Applying updates…';
   outputEl.style.display = 'none';
+
+  // Fix 5: clear pending on new dry run
+  if (isDryRun) { _actorSyncPending = null; }
+
+  // Fix 5: if Apply, use stored IDs only — fetch fresh records from AT
+  if (!isDryRun) {
+    try {
+      if (!_actorSyncPending || _actorSyncPending.clubId !== clubId) {
+        toast('Run a dry run first', 'error');
+        statusEl.textContent = 'Run a dry run for this club before applying.';
+        return;
+      }
+      const {toUpdate} = _actorSyncPending;
+      let applied = 0, failed = 0, skipped = 0, failedNames = [];
+
+      // Fetch fresh player records from AT
+      statusEl.textContent = 'Fetching fresh player records…';
+      const freshRecs = await atGetAll(TABLES.players);
+      const freshById = new Map(freshRecs.map(x => [x.id, {id:x.id,...x.fields}]));
+
+      statusEl.textContent = `Updating ${toUpdate.length} player records…`;
+      for (let i = 0; i < toUpdate.length; i += 10) {
+        const batch = toUpdate.slice(i, i+10);
+        await Promise.all(batch.map(({playerId, resolvedActorId}) => {
+          const fresh = freshById.get(playerId);
+          // Skip if record missing, club changed, or ActorID already populated
+          if (!fresh) { skipped++; return Promise.resolve(); }
+          if (fresh.ClubID !== clubId) { skipped++; return Promise.resolve(); }
+          const current = String(fresh.MDMActorID||'').trim();
+          const isStillPlaceholder = !current || current === '0' || current === '-999';
+          if (!isStillPlaceholder) { skipped++; return Promise.resolve(); }
+          return atUpdate(TABLES.players, playerId, {MDMActorID: resolvedActorId})
+            .then(() => {
+              // Update cache
+              const cached = CACHE.players.find(p => p.id === playerId);
+              if (cached) cached.MDMActorID = resolvedActorId;
+              applied++;
+            })
+            .catch(() => { failed++; failedNames.push(fresh.Name||playerId); });
+        }));
+        statusEl.textContent = `Updating… ${Math.min(i+10, toUpdate.length)}/${toUpdate.length}`;
+      }
+      buildCacheMaps();
+      _actorSyncPending = null;
+      const parts = [`${applied} updated`];
+      if (skipped > 0) parts.push(`${skipped} skipped`);
+      if (failed > 0) parts.push(`${failed} failed`);
+      const msg = `Player ActorID Sync: ${parts.join(', ')} for ${clubName}`;
+      if (failed > 0) {
+        toast(`${msg} — failed: ${failedNames.slice(0,3).join(', ')}${failedNames.length>3?'…':''}`, 'error');
+        statusEl.textContent = `✓ ${applied} updated · ${skipped} skipped · ⚠ ${failed} failed`;
+      } else {
+        toast(msg, 'success');
+        statusEl.textContent = `✓ ${applied} updated${skipped>0?` · ${skipped} skipped`:''}`;
+      }
+    } finally {
+      applyBtn.disabled = true;
+      dryBtn.disabled = false;
+      clubSel.disabled = false;
+    }
+    return;
+  }
 
   // Ensure MDM Roster Members are loaded — they're lazy-loaded elsewhere
   if (!CACHE.mdmRosterMembers) {
@@ -1226,7 +1319,8 @@ async function runActorSync(isDryRun) {
       CACHE.mdmRosterMembers = recs.map(x=>({id:x.id,...x.fields}));
     } catch(e) {
       toast('Failed to load MDM Roster Members', 'error');
-      statusEl.textContent = '';
+      statusEl.textContent = '⚠ Could not load MDM Roster Members — try again.';
+      dryBtn.disabled = false;
       return;
     }
   }
@@ -1235,39 +1329,42 @@ async function runActorSync(isDryRun) {
   const jerseyIndex = {}; // normJerseyName -> {actorId, conflicts: bool}
   const nameIndex   = {}; // normFullName   -> {actorId, conflicts: bool}
 
+  // Fix 4: only fall back to Club name match when ClubID is absent
   const mdmRows = (CACHE.mdmRosterMembers||[]).filter(r => {
-    const rClub = CACHE_MAPS.clubById.get(r.ClubID)?.Name || r.ClubName || '';
-    return r.ClubID === clubId || rClub.toLowerCase() === clubName.toLowerCase();
+    if (r.ClubID) return r.ClubID === clubId;
+    // ClubID absent — fall back to Club name string
+    return String(r.Club||'').trim().toLowerCase() === clubName.toLowerCase();
   });
 
   mdmRows.forEach(r => {
     const actorId = String(r.ActorID||'').trim();
     if (!actorId || actorId === '0' || actorId === '-999') return;
 
-    const jersey = normSyncName(r.JerseyName||r.ShirtName||'');
-    const full   = normSyncName(r.Name||r.PlayerName||'');
+    const jersey = normSyncName(r.JerseyName||'');
+    const full   = normSyncName(r.PlayerName||'');
 
     if (jersey) {
       if (!jerseyIndex[jersey]) {
         jerseyIndex[jersey] = {actorId, conflicts: false};
-      } else if (jerseyIndex[jersey].actorId !== actorId) {
+      } else if (jerseyIndex[jersey].actorId !== String(actorId)) {
         jerseyIndex[jersey].conflicts = true;
       }
     }
     if (full) {
       if (!nameIndex[full]) {
         nameIndex[full] = {actorId, conflicts: false};
-      } else if (nameIndex[full].actorId !== actorId) {
+      } else if (nameIndex[full].actorId !== String(actorId)) {
         nameIndex[full].conflicts = true;
       }
     }
   });
 
-  // Count index conflicts
-  const indexConflicts = [
-    ...Object.values(jerseyIndex).filter(v=>v.conflicts),
-    ...Object.values(nameIndex).filter(v=>v.conflicts)
-  ].length;
+  // Fix 2: index conflicts count toward hasConflicts
+  const indexConflictKeys = [
+    ...Object.keys(jerseyIndex).filter(k=>jerseyIndex[k].conflicts),
+    ...Object.keys(nameIndex).filter(k=>nameIndex[k].conflicts)
+  ];
+  const indexConflicts = indexConflictKeys.length;
 
   // Phase 2: Match players against index
   const players = (CACHE.players||[]).filter(p => p.ClubID === clubId);
@@ -1288,10 +1385,10 @@ async function runActorSync(isDryRun) {
     let confidence, resolvedActorId, action;
 
     if (jerseyMatch && nameMatch && jerseyMatch !== nameMatch) {
-      // Both matched but disagree — conflict, skip
+      // Fix 1: both matched but disagree — set action = 'Conflict' not 'Skip'
       confidence = 'Conflict';
       resolvedActorId = null;
-      action = 'Skip';
+      action = 'Conflict';
     } else if (jerseyMatch) {
       confidence = 'High';
       resolvedActorId = jerseyMatch;
@@ -1311,46 +1408,35 @@ async function runActorSync(isDryRun) {
 
   const toUpdate   = results.filter(r => r.action === 'Update');
   const correct    = results.filter(r => r.action === 'Already correct');
-  const conflicts  = results.filter(r => r.action === 'Conflict');
+  const conflicts  = results.filter(r => r.action === 'Conflict'); // Fix 1: now correctly populated
   const notFound   = results.filter(r => r.action === 'Not found');
   const skipped    = results.filter(r => r.action === 'Skip (has value)');
-  const hasConflicts = conflicts.length > 0;
+  // Fix 2: index conflicts also block Apply
+  const hasConflicts = conflicts.length > 0 || indexConflicts > 0;
 
-  // Phase 3: Apply if not dry run and no conflicts
-  let applied = 0;
-  if (!isDryRun && !hasConflicts && toUpdate.length > 0) {
-    statusEl.textContent = `Updating ${toUpdate.length} player records…`;
-    for (let i = 0; i < toUpdate.length; i += 10) {
-      const batch = toUpdate.slice(i, i+10);
-      await Promise.all(batch.map(r =>
-        atUpdate(TABLES.players, r.player.id, {MDMActorID: r.resolvedActorId}).then(() => {
-          r.player.MDMActorID = r.resolvedActorId;
-          applied++;
-        }).catch(() => {})
-      ));
-      statusEl.textContent = `Updating… ${Math.min(i+10, toUpdate.length)}/${toUpdate.length}`;
-    }
-    buildCacheMaps();
-    toast(`Player ActorID Sync: ${applied} updated for ${clubName}`, 'success');
+  // Fix 5: store player IDs only — not player objects (which may be stale at Apply time)
+  if (!hasConflicts && toUpdate.length > 0) {
+    _actorSyncPending = {clubId, toUpdate: toUpdate.map(r => ({playerId: r.player.id, resolvedActorId: r.resolvedActorId}))};
+  } else {
+    _actorSyncPending = null;
   }
 
   // Render output
-  const modeLabel = isDryRun ? 'Dry Run' : 'Applied';
-  const conflictWarning = hasConflicts && isDryRun
+  const conflictWarning = hasConflicts
     ? `<div style="font-size:11px;color:var(--red,#fc8181);background:rgba(252,129,129,0.08);border:1px solid rgba(252,129,129,0.3);border-radius:4px;padding:8px 10px;margin-bottom:10px;">
-        ⚠ ${conflicts.length} conflict${conflicts.length!==1?'s':''} found — resolve these before applying. Apply button is disabled.
+        ⚠ ${conflicts.length} player conflict${conflicts.length!==1?'s':''}${indexConflicts>0?` · ${indexConflicts} index conflict${indexConflicts!==1?'s':''}`:''}  — resolve before applying.
        </div>` : '';
 
   outputEl.innerHTML = `
     <div style="font-size:12px;margin-bottom:10px;">
-      <strong>${modeLabel} — ${escHtml(clubName)}</strong>
-      <span style="color:var(--text3);margin-left:8px;">${mdmRows.length} MDM roster rows · ${players.length} player records · ${indexConflicts} index conflicts</span>
+      <strong>Dry Run — ${escHtml(clubName)}</strong>
+      <span style="color:var(--text3);margin-left:8px;">${mdmRows.length} MDM roster rows · ${players.length} player records · ${indexConflicts} index conflict${indexConflicts!==1?'s':''}</span>
     </div>
     ${conflictWarning}
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;">
-      <span style="color:var(--green);">✓ ${isDryRun?'Would update':'Updated'}: ${isDryRun?toUpdate.length:applied}</span>
+      <span style="color:var(--green);">✓ Would update: ${toUpdate.length}</span>
       <span style="color:var(--text3);">Already correct: ${correct.length}</span>
-      <span style="color:var(--amber);">Conflict (skip): ${conflicts.length}</span>
+      <span style="color:var(--red,#fc8181);">Conflict (skip): ${conflicts.length}</span>
       <span style="color:var(--text3);">Not found: ${notFound.length}</span>
       <span style="color:var(--text3);">Has value (skip): ${skipped.length}</span>
     </div>
@@ -1378,18 +1464,14 @@ async function runActorSync(isDryRun) {
     </table></div>`;
   outputEl.style.display = '';
 
-  // Enable apply button only if dry run passed with zero conflicts
-  if (isDryRun) {
-    applyBtn.disabled = hasConflicts || toUpdate.length === 0;
-    statusEl.textContent = hasConflicts
-      ? `⚠ ${conflicts.length} conflicts — resolve before applying`
-      : toUpdate.length === 0
-        ? 'Dry run complete — nothing to update'
-        : `Dry run complete — ${toUpdate.length} ready to apply`;
-  } else {
-    applyBtn.disabled = true;
-    statusEl.textContent = `✓ ${applied} updated`;
-  }
+  dryBtn.disabled = false;
+  clubSel.disabled = false;
+  applyBtn.disabled = hasConflicts || toUpdate.length === 0;
+  statusEl.textContent = hasConflicts
+    ? `⚠ Conflicts found — resolve before applying`
+    : toUpdate.length === 0
+      ? 'Dry run complete — nothing to update'
+      : `Dry run complete — ${toUpdate.length} ready to apply`;
 }
 
 // ─── PLAYER DEDUP PREVIEW (Step 9.0) ─────────────────────────────────────────
@@ -6719,6 +6801,7 @@ function initBackfillSelects() {
       actorSyncSel.appendChild(o);
     });
     actorSyncSel.addEventListener('change', () => {
+      _actorSyncPending = null; // Fix 5: clear pending on club change
       document.getElementById('actor-sync-apply-btn').disabled = true;
       document.getElementById('actor-sync-output').style.display = 'none';
       document.getElementById('actor-sync-status').textContent = '';
