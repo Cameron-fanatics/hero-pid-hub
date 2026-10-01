@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v233.6 -->
+<!-- HEROPID-BUILD-v233.7 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -692,6 +692,23 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       <div id="actor-sync-output" style="display:none;"></div>
     </div>
 
+    <!-- DATA INTEGRITY CHECK -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Data Integrity Check</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px;">
+        Checks that players, hero PIDs and MDM agree on who each ActorID belongs to. The check changes nothing.
+        Only the <b>repairable</b> group can be fixed here: a PID whose ActorID differs from its player, where MDM positively confirms that player's ActorID. Anything MDM can't confirm is listed for you to review.
+        Run this before the player deduplication.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+        <select class="form-select" id="integrity-club" style="width:200px;"></select>
+        <button class="btn btn-ghost btn-sm" id="integrity-run-btn" onclick="runIntegrityCheck()">⊙ Run Check</button>
+        <button class="btn btn-primary btn-sm" id="integrity-apply-btn" onclick="applyIntegrityRepair()" disabled>✓ Apply Repair</button>
+        <span id="integrity-status" style="font-size:11px;color:var(--text3);"></span>
+      </div>
+      <div id="integrity-output" style="display:none;"></div>
+    </div>
+
     <!-- PLAYER DEDUP PREVIEW -->
     <div class="card" style="margin-bottom:16px;">
       <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Player Deduplication Preview</div>
@@ -1213,6 +1230,72 @@ function isRealMdmId(v) {
   return t !== '' && t !== '0' && t !== '-999';
 }
 
+// ─── NAME / INTEGRITY HELPERS (v233.7) ──────────────────────────────────────
+const AT_PACE_MS = 250;   // Airtable allows 5 requests/sec per base; stay safely under it
+const _sleep = ms => ms > 0 ? new Promise(r => setTimeout(r, ms)) : Promise.resolve();
+
+function foldName(s) {
+  // NFKD maps non-breaking spaces etc. to plain ones; whitespace is normalised BEFORE non-letters are
+  // dropped, because MDM exports contain U+00A0 (e.g. "Lucy\u00a0Parker") and deleting it would glue words together.
+  return String(s == null ? '' : s).normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[-\u2010-\u2015]/g, ' ').replace(/\s+/g, ' ').replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+// How do two player records' names relate?  'same' | 'similar' | 'different'
+//  same      = identical after accent/case/space folding. The ONLY relation that may be cleared automatically.
+//  similar   = shortened/extended name, or shared name part + identical shirt name. A human must confirm.
+//  different = unrelated names: almost certainly two people.
+function playerNameRelation(a, b) {
+  const fa = foldName(a.Name), fb = foldName(b.Name);
+  if (!fa || !fb) return 'similar';              // missing name: can't clear it, can't call it different either
+  if (fa === fb) return 'same';
+  const sa = new Set(fa.split(' ')), sb = new Set(fb.split(' '));
+  const [small, big] = sa.size <= sb.size ? [sa, sb] : [sb, sa];
+  if ([...small].every(t => big.has(t))) return 'similar';
+  const shirtA = foldName(a.ShirtName), shirtB = foldName(b.ShirtName);
+  if ([...sa].some(t => sb.has(t)) && shirtA && shirtA === shirtB) return 'similar';
+  return 'different';
+}
+function dedupGroupNameStatus(players) {          // worst relation between any two records in the group
+  let worst = 'same';
+  for (let i = 0; i < players.length; i++)
+    for (let j = i + 1; j < players.length; j++) {
+      const r = playerNameRelation(players[i], players[j]);
+      if (r === 'different') return 'different';
+      if (r === 'similar') worst = 'similar';
+    }
+  return worst;
+}
+
+// Batch PATCH = 10 records/request, sequential, paced. Failures are RETURNED (never swallowed).
+async function atUpdateBatchSafe(table, items, onProgress) {
+  const ok = [], failed = [];
+  for (let i = 0; i < items.length; i += 10) {
+    const chunk = items.slice(i, i + 10);
+    try {
+      await atFetch(table, {method: 'PATCH', body: JSON.stringify({records: chunk.map(it => ({id: it.id, fields: it.fields}))})});
+      chunk.forEach(c => ok.push(c.id));
+    } catch (e) {
+      chunk.forEach(c => failed.push({id: c.id, error: (e && e.message) ? e.message : String(e)}));
+    }
+    if (onProgress) onProgress(Math.min(i + 10, items.length), items.length);
+    if (i + 10 < items.length) await _sleep(AT_PACE_MS);
+  }
+  return {ok, failed};
+}
+
+// Fetch specific records fresh from Airtable by id (formula batches of 40, not the whole table).
+async function atFetchByIds(table, ids) {
+  const out = new Map();
+  for (let i = 0; i < ids.length; i += 40) {
+    const chunk = ids.slice(i, i + 40);
+    const recs = await atGetAll(table, `OR(${chunk.map(id => `RECORD_ID()='${id}'`).join(',')})`);
+    recs.forEach(r => out.set(r.id, {id: r.id, ...r.fields}));
+    if (i + 40 < ids.length) await _sleep(AT_PACE_MS);
+  }
+  return out;
+}
+
 function normSyncName(s) {
   return String(s||'').trim().toUpperCase().replace(/\s+/g,' ');
 }
@@ -1511,6 +1594,297 @@ async function _actorSyncInner(isDryRun) {
       : `Dry run complete — ${toUpdate.length} ready to apply`;
 }
 
+// ─── DATA INTEGRITY CHECK (v233.7) ───────────────────────────────────────────
+// MDM evidence, indexed once: names scoped to a club (preferred), names across clubs (fallback only),
+// and which ActorIDs each RosterMemberID is listed under.
+function buildMdmIndex(mdmRows, clubs) {
+  const clubIdByName = new Map((clubs || []).map(c => [String(c.Name || '').trim().toLowerCase(), c.id]));
+  const byClubName = new Map(), byName = new Map(), rmidActors = new Map(), rmidSeen = new Set();
+  const add = (map, k, v) => { if (!map.has(k)) map.set(k, new Set()); map.get(k).add(v); };
+  mdmRows.forEach(r => {
+    const a = String(r.ActorID == null ? '' : r.ActorID).trim(), nm = foldName(r.PlayerName);
+    const club = r.ClubID || clubIdByName.get(String(r.Club || '').trim().toLowerCase()) || '';
+    if (nm && isRealMdmId(a)) { add(byName, nm, a); if (club) add(byClubName, `${club}|${nm}`, a); }
+    if (isRealMdmId(r.RosterMemberID)) { const k = String(r.RosterMemberID).trim(); rmidSeen.add(k); if (isRealMdmId(a)) add(rmidActors, k, a); }
+  });
+  return {byClubName, byName, rmidActors, rmidSeen};
+}
+
+// Is this player's ActorID positively confirmed by MDM?
+//  validated  : this club's MDM rows give this name exactly one ActorID, and it matches   -> may supply repairs
+//  mismatched : this club's MDM rows give this name a different ActorID                   -> the player is wrong
+//  ambiguous  : this club's MDM rows give this name more than one ActorID                 -> human decision
+//  unverified : the name isn't in this club's MDM rows (maybe only under another club)    -> human decision
+//  noId       : the player has no usable ActorID
+// "Not proven wrong" is NOT validated: only 'validated' players may supply an automatic repair.
+function classifyPlayer(p, idx) {
+  if (!isRealMdmId(p.MDMActorID)) return {state: 'noId', ids: []};
+  const nm = foldName(p.Name), a = String(p.MDMActorID).trim();
+  const inClub = idx.byClubName.get(`${p.ClubID}|${nm}`);
+  if (inClub) {
+    if (inClub.size > 1) return {state: 'ambiguous', ids: [...inClub], scope: 'club'};
+    return inClub.has(a) ? {state: 'validated', ids: [a], scope: 'club'} : {state: 'mismatched', ids: [...inClub], scope: 'club'};
+  }
+  const any = idx.byName.get(nm);
+  return {state: 'unverified', ids: any ? [...any] : [], scope: any ? 'other-club' : 'none'};
+}
+
+// Pure computation: no DOM, no writes.
+function computeIntegrity({heroes, players, mdmRows, clubs, clubId}) {
+  const inHero = h => !clubId || h.ClubID === clubId;
+  const inPlayer = p => !clubId || p.ClubID === clubId;
+  const playerById = new Map(players.map(p => [p.id, p]));
+  const idx = buildMdmIndex(mdmRows, clubs);
+
+  // A. Classify every player (heroes need all of them, whatever the scope), report the in-scope ones
+  const state = new Map();
+  const playerMismatch = [], playerAmbiguous = [], playerUnverified = [];
+  let playersValidated = 0;
+  players.forEach(p => {
+    const c = classifyPlayer(p, idx); state.set(p.id, c);
+    if (!inPlayer(p)) return;
+    if (c.state === 'validated') playersValidated++;
+    else if (c.state === 'mismatched') playerMismatch.push({player: p, stored: String(p.MDMActorID).trim(), mdmIds: c.ids});
+    else if (c.state === 'ambiguous') playerAmbiguous.push({player: p, stored: String(p.MDMActorID).trim(), mdmIds: c.ids});
+    else if (c.state === 'unverified') playerUnverified.push({player: p, stored: String(p.MDMActorID).trim(), mdmIds: c.ids, scope: c.scope});
+  });
+
+  // B. Hero ActorID vs its own player. Automatic repair needs a VALIDATED player and no RosterMemberID.
+  const repairable = [], blockedByPlayer = [], unverifiedPlayer = [], hasRmid = [], clubMismatch = [];
+  let heroesChecked = 0, heroesOk = 0, heroBlank = 0, orphans = 0, playerNoId = 0;
+  heroes.filter(inHero).forEach(h => {
+    const p = playerById.get(h.PlayerID);
+    if (!p) { orphans++; return; }
+    if (!isRealMdmId(p.MDMActorID)) { playerNoId++; return; }
+    if (!isRealMdmId(h.ActorID)) { heroBlank++; return; }   // blank/placeholder: the MDM Backfill's job
+    heroesChecked++;
+    const pa = String(p.MDMActorID).trim(), ha = String(h.ActorID).trim();
+    if (pa === ha) { heroesOk++; return; }
+    const item = {hero: h, player: p, from: ha, to: pa};
+    const st = state.get(p.id).state;
+    if (st === 'mismatched') blockedByPlayer.push(item);              // the player is wrong: never copy it
+    else if (st !== 'validated') unverifiedPlayer.push(item);         // can't confirm the player: human decision
+    else if (isRealMdmId(h.RosterMemberID)) hasRmid.push(item);       // RosterMemberID may be wrong too: human decision
+    else if (String(h.ClubID == null ? '' : h.ClubID).trim() !== String(p.ClubID == null ? '' : p.ClubID).trim()) clubMismatch.push(item); // PID filed under a different club than its player: human decision
+    else repairable.push(item);
+  });
+
+  // C. RosterMemberIDs. (1) MDM itself lists one RosterMemberID under several ActorIDs;
+  //    (2) a hero holds a RosterMemberID that MDM lists only under other ActorIDs.
+  const heldBy = new Map();
+  heroes.filter(inHero).forEach(h => { if (isRealMdmId(h.RosterMemberID)) { const k = String(h.RosterMemberID).trim(); heldBy.set(k, (heldBy.get(k) || 0) + 1); } });
+  const rmidConflicts = [];
+  idx.rmidActors.forEach((set, k) => { if (set.size > 1 && (!clubId || heldBy.has(k))) rmidConflicts.push({rmid: k, actors: [...set], pids: heldBy.get(k) || 0}); });
+  const rmidMismatch = []; let rmidNotInMdm = 0;
+  heroes.filter(inHero).forEach(h => {
+    if (!isRealMdmId(h.RosterMemberID) || !isRealMdmId(h.ActorID)) return;
+    const k = String(h.RosterMemberID).trim();
+    if (!idx.rmidSeen.has(k)) { rmidNotInMdm++; return; }
+    const set = idx.rmidActors.get(k);
+    if (set && !set.has(String(h.ActorID).trim())) rmidMismatch.push({hero: h, mdmActors: [...set]});
+  });
+
+  return {playerMismatch, playerAmbiguous, playerUnverified, playersValidated,
+          repairable, blockedByPlayer, unverifiedPlayer, hasRmid, clubMismatch,
+          heroesChecked, heroesOk, heroBlank, orphans, playerNoId,
+          rmidConflicts, rmidMismatch, rmidNotInMdm};
+}
+
+let _integrityPending = null; // {clubId, items:[{heroId, playerId, from, to}]}
+
+function _integGroup(items) {            // aggregate PID-level items per player for compact display
+  const m = new Map();
+  items.forEach(it => {
+    const k = it.player.id + '|' + it.from + '|' + it.to;
+    if (!m.has(k)) m.set(k, {player: it.player, from: it.from, to: it.to, n: 0});
+    m.get(k).n++;
+  });
+  return [...m.values()].sort((a, b) => b.n - a.n);
+}
+
+async function runIntegrityCheck() {
+  const sel = document.getElementById('integrity-club');
+  const statusEl = document.getElementById('integrity-status'), outEl = document.getElementById('integrity-output');
+  const applyBtn = document.getElementById('integrity-apply-btn'), runBtn = document.getElementById('integrity-run-btn');
+  const clubId = sel.value;
+  _integrityPending = null;
+  applyBtn.disabled = true; runBtn.disabled = true; sel.disabled = true;
+  outEl.style.display = 'none';
+  try {
+    statusEl.textContent = 'Loading MDM Roster Members…';
+    const recs = await atGetAll(TABLES.mdmRosterMembers);   // always fresh: this drives a write
+    CACHE.mdmRosterMembers = recs.map(x => ({id: x.id, ...x.fields}));
+    statusEl.textContent = 'Comparing…';
+    const r = computeIntegrity({heroes: CACHE.heroes || [], players: CACHE.players || [], mdmRows: CACHE.mdmRosterMembers, clubs: CACHE.clubs || [], clubId});
+    const clubName = id => (CACHE.clubs.find(c => c.id === id) || {}).Name || '—';
+    const tbl = (head, rows) => rows.length ? `<div style="overflow-x:auto;max-height:260px;overflow-y:auto;margin:6px 0 14px;"><table class="data-table" style="font-size:11px;width:100%;"><thead><tr style="position:sticky;top:0;background:var(--bg2);">${head.map(h => `<th style="padding:4px 8px;text-align:left;">${h}</th>`).join('')}</tr></thead><tbody>${rows.map(rw => `<tr>${rw.map(c => `<td style="padding:4px 8px;">${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '';
+    const line = (label, n, extra = '') => `<div style="font-size:12px;margin:3px 0;color:${n === 0 ? 'var(--green)' : 'var(--amber)'};">${n === 0 ? '✓' : '⚠'} <b>${n.toLocaleString()}</b> ${label}${extra}</div>`;
+    const mono = v => `<span class="mono">${escHtml(String(v))}</span>`;
+
+    const repairGroups = _integGroup(r.repairable), blockedGroups = _integGroup(r.blockedByPlayer),
+          unverGroups = _integGroup(r.unverifiedPlayer), rmidGroups = _integGroup(r.hasRmid), clubGroups = _integGroup(r.clubMismatch);
+    outEl.innerHTML = `
+      <div style="font-size:12px;margin-bottom:8px;"><strong>${clubId ? escHtml(clubName(clubId)) : 'All clubs'}</strong>
+        <span style="color:var(--text3);margin-left:8px;">${r.playersValidated} players confirmed by MDM · ${r.heroesChecked.toLocaleString()} hero PIDs compared</span></div>
+      <div style="font-weight:600;font-size:12px;margin-top:6px;">A · Is each player's ActorID confirmed by MDM? (report only)</div>
+      ${line('players whose ActorID disagrees with MDM for the same name at the same club', r.playerMismatch.length)}
+      ${r.playerMismatch.length ? '<div style="font-size:11px;color:var(--amber);">Correct these players first (set the ActorID to what MDM says), then run the check again: their PIDs will then appear under B.</div>' : ''}
+      ${tbl(['Player', 'Club', 'Stored ActorID', 'MDM says'], r.playerMismatch.map(m => [escHtml(m.player.Name || '—'), escHtml(clubName(m.player.ClubID)), mono(m.stored), mono(m.mdmIds.join(', '))]))}
+      ${line('players MDM lists under more than one ActorID at their club', r.playerAmbiguous.length, ' (needs a human)')}
+      ${tbl(['Player', 'Club', 'Stored ActorID', 'MDM lists'], r.playerAmbiguous.map(m => [escHtml(m.player.Name || '—'), escHtml(clubName(m.player.ClubID)), mono(m.stored), mono(m.mdmIds.join(', '))]))}
+      ${line('players that cannot be confirmed (name not in MDM for their club)', r.playerUnverified.length, ' (never used for automatic repair)')}
+      <div style="font-size:11px;color:var(--text3);">${r.playerUnverified.filter(m => m.scope === 'other-club').length} of these exist in MDM under a different club only.</div>
+      <div style="font-weight:600;font-size:12px;margin-top:10px;">B · Hero PID ActorID vs its own player</div>
+      ${line('PIDs can be repaired automatically', r.repairable.length, ' (player confirmed by MDM, PID has the wrong ActorID, no RosterMemberID yet)')}
+      ${line('PIDs need the PLAYER fixed first', r.blockedByPlayer.length, ' (the player itself disagrees with MDM)')}
+      ${line('PIDs belong to a player MDM cannot confirm', r.unverifiedPlayer.length, ' (not repaired automatically)')}
+      ${line('PIDs need a human decision', r.hasRmid.length, ' (wrong ActorID but a RosterMemberID is already set)')}
+      ${line('PIDs are filed under a different club than their player', r.clubMismatch.length, ' (not repaired automatically)')}
+      <div style="font-size:11px;color:var(--text3);">${r.heroesOk.toLocaleString()} PIDs already match · ${r.heroBlank.toLocaleString()} have a blank/placeholder ActorID (use MDM Backfill) · ${r.playerNoId.toLocaleString()} belong to a player with no ActorID · ${r.orphans} have no player</div>
+      ${tbl(['Will be repaired', 'Club', 'PID ActorID now', 'Player / MDM ActorID', 'PIDs'], repairGroups.map(g => [escHtml(g.player.Name || '—'), escHtml(clubName(g.player.ClubID)), mono(g.from), `<span class="mono" style="color:var(--green);">${escHtml(g.to)}</span>`, g.n]))}
+      ${tbl(['Blocked: fix player first', 'Club', 'PID ActorID', 'Player ActorID', 'PIDs'], blockedGroups.map(g => [escHtml(g.player.Name || '—'), escHtml(clubName(g.player.ClubID)), mono(g.from), mono(g.to), g.n]))}
+      ${tbl(['Player cannot be confirmed', 'Club', 'PID ActorID', 'Player ActorID', 'PIDs'], unverGroups.map(g => [escHtml(g.player.Name || '—'), escHtml(clubName(g.player.ClubID)), mono(g.from), mono(g.to), g.n]))}
+      ${tbl(['Needs a decision (has RosterMemberID)', 'Club', 'PID ActorID', 'Player ActorID', 'PIDs'], rmidGroups.map(g => [escHtml(g.player.Name || '—'), escHtml(clubName(g.player.ClubID)), mono(g.from), mono(g.to), g.n]))}
+      ${tbl(['PID club differs from player club', 'Player club', 'PID ActorID', 'Player ActorID', 'PIDs'], clubGroups.map(g => [escHtml(g.player.Name || '—'), escHtml(clubName(g.player.ClubID)), mono(g.from), mono(g.to), g.n]))}
+      <div style="font-weight:600;font-size:12px;margin-top:10px;">C · RosterMemberIDs (report only)</div>
+      ${line('RosterMemberIDs that MDM itself lists under more than one ActorID', r.rmidConflicts.length, ' (a data problem in MDM)')}
+      ${tbl(['RosterMemberID', 'MDM lists it under', 'PIDs holding it'], r.rmidConflicts.slice(0, 100).map(c => [mono(c.rmid), mono(c.actors.join(', ')), c.pids]))}
+      ${line('PIDs hold a RosterMemberID that MDM lists only under other ActorIDs', r.rmidMismatch.length)}
+      <div style="font-size:11px;color:var(--text3);">${r.rmidNotInMdm} PIDs hold a RosterMemberID that isn't in the MDM Roster Members table.</div>
+      ${tbl(['PID', 'PID ActorID', 'RosterMemberID', 'MDM lists it under'], r.rmidMismatch.slice(0, 100).map(m => [mono(m.hero.PID || ''), mono(m.hero.ActorID), mono(m.hero.RosterMemberID), mono(m.mdmActors.join(', '))]))}
+      ${r.rmidMismatch.length > 100 ? `<div style="font-size:11px;color:var(--text3);">…and ${r.rmidMismatch.length - 100} more.</div>` : ''}`;
+    outEl.style.display = '';
+
+    if (r.repairable.length > 0) {
+      _integrityPending = {clubId, items: r.repairable.map(i => ({heroId: i.hero.id, playerId: i.player.id, from: i.from, to: i.to}))};
+      applyBtn.disabled = false;
+      statusEl.textContent = `Check complete — ${r.repairable.length} PIDs ready to repair. Review above, then click Apply.`;
+    } else {
+      statusEl.textContent = 'Check complete — nothing to repair automatically.';
+    }
+  } catch (e) {
+    console.error('[Integrity] check failed:', e);
+    _integrityPending = null; applyBtn.disabled = true;
+    statusEl.textContent = `⚠ Check failed — ${e && e.message ? e.message : 'unknown error'}.`;
+    toast('Integrity check failed', 'error');
+  } finally {
+    runBtn.disabled = false; sel.disabled = false;
+  }
+}
+
+async function applyIntegrityRepair() {
+  const sel = document.getElementById('integrity-club');
+  const statusEl = document.getElementById('integrity-status'), outEl = document.getElementById('integrity-output');
+  const applyBtn = document.getElementById('integrity-apply-btn'), runBtn = document.getElementById('integrity-run-btn');
+  applyBtn.disabled = true; runBtn.disabled = true; sel.disabled = true;
+  try {
+    if (!_integrityPending || _integrityPending.clubId !== sel.value) {
+      statusEl.textContent = 'Run the check for this scope before applying.';
+      toast('Run the check first', 'error');
+      return;
+    }
+    const items = _integrityPending.items;
+    const scope = _integrityPending.clubId;      // '' = all clubs
+    const skipReasons = {}, note = why => { skipReasons[why] = (skipReasons[why] || 0) + 1; };
+    const str = v => String(v == null ? '' : v).trim();
+
+    // 1. Fresh MDM evidence + fresh players, and re-confirm each player against that evidence.
+    statusEl.textContent = 'Re-reading MDM Roster Members…';
+    const mdmRecs = await atGetAll(TABLES.mdmRosterMembers);
+    const freshMdm = mdmRecs.map(x => ({id: x.id, ...x.fields}));
+    CACHE.mdmRosterMembers = freshMdm;
+    const idx = buildMdmIndex(freshMdm, CACHE.clubs || []);
+    const playerIds = [...new Set(items.map(i => i.playerId))];
+    statusEl.textContent = 'Re-reading players…';
+    await _sleep(AT_PACE_MS);
+    const freshPlayers = await atFetchByIds(TABLES.players, playerIds);
+    const playerBlock = new Map();
+    playerIds.forEach(pid => {
+      const fp = freshPlayers.get(pid);
+      if (!fp) { playerBlock.set(pid, 'player no longer exists'); return; }
+      const c = classifyPlayer(fp, idx);
+      if (c.state !== 'validated') playerBlock.set(pid, `player no longer confirmed by MDM (${c.state})`);
+    });
+    const todo = items.filter(it => { const why = playerBlock.get(it.playerId); if (why) { note(why); return false; } return true; });
+
+    // 2. Write in chunks of 10, re-reading those PIDs and their players IMMEDIATELY before each write.
+    const written = [], failed = [];
+    for (let i = 0; i < todo.length; i += 10) {
+      const chunk = todo.slice(i, i + 10);
+      statusEl.textContent = `Checking and updating… ${i}/${todo.length}`;
+      await _sleep(AT_PACE_MS);
+      const fh = await atFetchByIds(TABLES.heroes, chunk.map(c => c.heroId));
+      await _sleep(AT_PACE_MS);
+      const fp = await atFetchByIds(TABLES.players, [...new Set(chunk.map(c => c.playerId))]);
+      const valid = [];
+      chunk.forEach(it => {
+        const h = fh.get(it.heroId), p = fp.get(it.playerId);
+        let why = null;
+        if (!h) why = 'PID no longer exists';
+        else if (!p) why = 'player no longer exists';
+        else if (h.PlayerID !== it.playerId) why = 'PID now belongs to another player';
+        else if (str(h.ActorID) !== it.from) why = 'PID ActorID changed since the check';
+        else if (str(p.MDMActorID) !== it.to) why = 'player ActorID changed since the check';
+        else {
+          // The player must STILL be positively confirmed by MDM under their CURRENT name and club:
+          // an unchanged ActorID is not enough if the name or club was edited after validation.
+          const c = classifyPlayer(p, idx);
+          if (c.state !== 'validated') why = `player no longer confirmed by MDM (${c.state}), e.g. name or club changed`;
+          else if (str(h.ClubID) !== str(p.ClubID)) why = "PID's club no longer matches the player's club";
+          else if (scope && (str(h.ClubID) !== scope || str(p.ClubID) !== scope)) why = 'PID or player is outside the selected club';
+          else if (isRealMdmId(h.RosterMemberID)) why = 'PID now has a RosterMemberID';
+        }
+        if (why) note(why); else valid.push({id: it.heroId, fields: {ActorID: it.to}});
+      });
+      if (valid.length) {
+        await _sleep(AT_PACE_MS);
+        const res = await atUpdateBatchSafe(TABLES.heroes, valid);
+        res.ok.forEach(id => written.push({id, to: valid.find(v => v.id === id).fields.ActorID}));
+        failed.push(...res.failed);
+      }
+    }
+
+    // 3. Read back what we wrote: confirm Airtable really holds the new value.
+    let verified = 0; const verifyBad = [];
+    if (written.length) {
+      statusEl.textContent = 'Verifying…';
+      await _sleep(AT_PACE_MS);
+      const back = await atFetchByIds(TABLES.heroes, written.map(w => w.id));
+      const heroById = new Map((CACHE.heroes || []).map(h => [h.id, h]));
+      written.forEach(w => {
+        const h = back.get(w.id);
+        if (h && str(h.ActorID) === w.to) { verified++; const ch = heroById.get(w.id); if (ch) ch.ActorID = w.to; }
+        else verifyBad.push(w.id);
+      });
+    }
+    buildCacheMaps(); updateStats();
+    _integrityPending = null;
+
+    const skipped = items.length - written.length - failed.length;
+    const parts = [`${written.length} updated`];
+    if (written.length) parts.push(`${verified} verified`);
+    if (skipped) parts.push(`${skipped} skipped`);
+    if (failed.length) parts.push(`${failed.length} failed`);
+    const skipText = Object.entries(skipReasons).map(([k, v]) => `${v} × ${k}`).join('; ');
+    const bad = failed.length || verifyBad.length;
+    outEl.innerHTML = `<div style="font-size:12px;"><b>Repair result:</b> ${parts.join(', ')}.</div>
+      ${skipText ? `<div style="font-size:11px;color:var(--amber);margin-top:4px;">Skipped: ${escHtml(skipText)}</div>` : ''}
+      ${failed.length ? `<div style="font-size:11px;color:var(--red,#fc8181);margin-top:4px;">Failed: ${escHtml(failed.slice(0, 5).map(f => f.id + ' (' + f.error + ')').join('; '))}${failed.length > 5 ? '…' : ''}.</div>` : ''}
+      ${verifyBad.length ? `<div style="font-size:11px;color:var(--red,#fc8181);margin-top:4px;">${verifyBad.length} written PIDs did not read back with the new value (e.g. ${escHtml(verifyBad[0])}).</div>` : ''}
+      <div style="font-size:11px;color:var(--text3);margin-top:6px;">Run the check again to confirm.</div>`;
+    outEl.style.display = '';
+    statusEl.textContent = `${bad ? '⚠' : '✓'} ${parts.join(' · ')}`;
+    toast(`Integrity repair: ${parts.join(', ')}`, bad ? 'error' : 'success');
+  } catch (e) {
+    console.error('[Integrity] apply failed:', e);
+    _integrityPending = null;
+    statusEl.textContent = `⚠ Repair failed — ${e && e.message ? e.message : 'unknown error'}. Some PIDs may already have changed; run the check again to see the current state.`;
+    toast('Integrity repair failed', 'error');
+  } finally {
+    applyBtn.disabled = true; runBtn.disabled = false; sel.disabled = false;
+  }
+}
+
 // ─── PLAYER DEDUP PREVIEW (Step 9.0) ─────────────────────────────────────────
 function runDedupPreview() {
   const outputEl = document.getElementById('dedup-preview-output');
@@ -1525,6 +1899,7 @@ function runDedupPreview() {
   });
 
   const dupGroups = Object.entries(groups).filter(([,players]) => players.length > 1);
+  window._dedupMixedGroups = 0;
   if (dupGroups.length === 0) {
     outputEl.innerHTML = `<div style="color:var(--green);font-size:12px;">✓ No duplicate player records found.</div>`;
     return;
@@ -1542,10 +1917,24 @@ function runDedupPreview() {
     const [actorId, clubId] = key.split('|');
     const clubName = clubMap.get(clubId) || '—';
     const canonHeroes = CACHE.heroes.filter(h => h.PlayerID === canonical.id).length;
-    return {actorId, clubName, players, canonical, dups, repoints, canonHeroes};
-  }).sort((a,b) => b.repoints - a.repoints);
+    const nameStatus = dedupGroupNameStatus(players);   // 'same' | 'similar' (review) | 'different' (blocked)
+    return {actorId, clubName, players, canonical, dups, repoints, canonHeroes, nameStatus};
+  }).sort((a,b) => ({different:0,similar:1,same:2}[a.nameStatus] - {different:0,similar:1,same:2}[b.nameStatus]) || (b.repoints - a.repoints));
 
-  outputEl.innerHTML = `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
+  const mixed = rows.filter(r => r.nameStatus === 'different').length;
+  const review = rows.filter(r => r.nameStatus === 'similar').length;
+  window._dedupMixedGroups = mixed;      // PREVIEW ONLY: the executor (v234) must recompute this itself, never trust a flag
+  window._dedupReviewGroups = review;
+  const banner =
+    (mixed > 0 ? `<div style="font-size:12px;color:var(--red,#fc8181);background:rgba(252,129,129,0.08);border:1px solid rgba(252,129,129,0.3);border-radius:4px;padding:8px 10px;margin-bottom:8px;">
+         ⛔ <b>${mixed} group${mixed!==1?'s':''} contain different people</b> sharing one ActorID (shown first, in red). Merging them would delete a real player. Fix the ActorIDs (Data Integrity Check) before any deduplication.
+       </div>` : '') +
+    (review > 0 ? `<div style="font-size:12px;color:var(--amber);background:rgba(255,179,64,0.08);border:1px solid rgba(255,179,64,0.3);border-radius:4px;padding:8px 10px;margin-bottom:8px;">
+         ⚠ <b>${review} group${review!==1?'s':''} have name variations</b> (amber): a shortened name, or a shared surname with the same shirt name. Confirm by eye that they are the same person. Only groups with identical names count as cleared.
+       </div>` : '') +
+    (mixed === 0 && review === 0 ? `<div style="font-size:12px;color:var(--green);margin-bottom:10px;">✓ Names are identical within every group.</div>` : '');
+
+  outputEl.innerHTML = `${banner}<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
     <span style="font-weight:600;color:var(--amber);">${dupGroups.length} duplicate groups</span>
     <span style="color:var(--text3);margin-left:8px;">${totalDups} records to delete · ${totalRepoints} Hero PIDs to re-point</span>
   </div>
@@ -1555,21 +1944,21 @@ function runDedupPreview() {
       <th style="padding:5px 8px;text-align:left;">Player</th>
       <th style="padding:5px 8px;text-align:left;">Club</th>
       <th style="padding:5px 8px;text-align:left;">ActorID</th>
-      <th style="padding:5px 8px;text-align:right;">Records</th>
+      <th style="padding:5px 8px;text-align:left;">Records</th>
       <th style="padding:5px 8px;text-align:left;">Canonical</th>
       <th style="padding:5px 8px;text-align:right;">Re-points</th>
     </tr></thead>
-    <tbody>${rows.map(r => `<tr>
-      <td style="padding:5px 8px;">${escHtml(r.canonical.Name||'—')}</td>
+    <tbody>${rows.map(r => `<tr style="${r.nameStatus==='different'?'background:rgba(252,129,129,0.10);':r.nameStatus==='similar'?'background:rgba(255,179,64,0.10);':''}">
+      <td style="padding:5px 8px;">${escHtml(r.canonical.Name||'—')}${r.nameStatus==='different'?' <span style="color:var(--red,#fc8181);font-weight:600;">⛔ different people</span>':r.nameStatus==='similar'?' <span style="color:var(--amber);font-weight:600;">⚠ check names</span>':''}</td>
       <td style="padding:5px 8px;">${escHtml(r.clubName)}</td>
       <td style="padding:5px 8px;font-family:monospace;">${escHtml(r.actorId)}</td>
-      <td style="padding:5px 8px;text-align:right;vertical-align:top;">
+      <td style="padding:5px 8px;vertical-align:top;">
         ${r.players.map(p => {
           const isCanon = p.id === r.canonical.id;
           const statusCol = p.Status === 'active' ? 'var(--green)' : 'var(--text3)';
           const heroCount = CACHE.heroes.filter(h => h.PlayerID === p.id).length;
           return `<div style="font-size:10px;${isCanon?'font-weight:600;':'opacity:0.7;'}">
-            ${isCanon?'★ ':''}${escHtml(p.id.slice(-6))}
+            ${isCanon?'★ ':''}${escHtml(p.Name||'—')} <span style="color:var(--text3);">${escHtml(p.id.slice(-6))}</span>
             <span style="color:${statusCol};">${p.Status==='active'?'Active':'Archived'}</span>
             · ${heroCount} PIDs
           </div>`;
@@ -4917,31 +5306,37 @@ async function importMdmRoster() {
 
   // Find Hero PIDs for this club where ActorID+RosterID matches but RosterMemberID is blank
   const heroUpdates = [];
+  let ambiguousSkipped = 0;
   (CACHE.heroes||[]).forEach(h => {
     if (h.ClubID !== clubId) return;
     if (h.SeasonID !== seasonId) return;
     if (!isRealMdmId(h.ActorID) || !isRealMdmId(h.RosterID)) return;
     if (isRealMdmId(h.RosterMemberID)) return; // already set
-    const rmid = actorRosterToRMID[`${h.ActorID}|${h.RosterID}`];
+    const k = `${h.ActorID}|${h.RosterID}`;
+    // The import holds more than one roster row for this ActorID+roster (e.g. two players sharing an
+    // ActorID). We cannot tell which row belongs to this PID, so link nothing rather than guess.
+    if (actorRosterDupes.has(k)) { ambiguousSkipped++; return; }
+    const rmid = actorRosterToRMID[k];
     if (rmid) heroUpdates.push({hero: h, rmid});
   });
+  const _ambNote = ambiguousSkipped ? `, ⚠ ${ambiguousSkipped} NOT linked (one ActorID is shared by different MDM rows: fix it in MDM, then re-import)` : '';
 
   if (heroUpdates.length > 0) {
     setStatus(`⟳ Writing RosterMemberID to ${heroUpdates.length} Hero PIDs...`);
-    let heroDone = 0;
+    let heroDone = 0, heroFailed = 0;
     for (let i = 0; i < heroUpdates.length; i += 10) {
       const batch = heroUpdates.slice(i, i + 10);
       await Promise.all(batch.map(({hero, rmid}) =>
         atUpdate(TABLES.heroes, hero.id, {RosterMemberID: rmid}).then(() => {
           hero.RosterMemberID = rmid;
           heroDone++;
-        }).catch(() => {})
+        }).catch(() => { heroFailed++; })
       ));
       setStatus(`⟳ Writing RosterMemberID to Hero PIDs... ${Math.min(i+10, heroUpdates.length)}/${heroUpdates.length}`);
     }
-    toast(`MDM Roster: ${toCreate.length} created, ${toUpdate.length} updated${playerUpdates.length ? `, ${playerUpdates.length} statuses synced` : ''}, ${heroDone} Hero PIDs linked`, 'success');
+    toast(`MDM Roster: ${toCreate.length} created, ${toUpdate.length} updated${playerUpdates.length ? `, ${playerUpdates.length} statuses synced` : ''}, ${heroDone} Hero PIDs linked${heroFailed ? `, ${heroFailed} FAILED` : ''}${_ambNote}`, (heroFailed || ambiguousSkipped) ? 'error' : 'success');
   } else {
-    toast(`MDM Roster: ${toCreate.length} created, ${toUpdate.length} updated${playerUpdates.length ? `, ${playerUpdates.length} statuses synced` : ''}, 0 Hero PIDs linked`, 'success');
+    toast(`MDM Roster: ${toCreate.length} created, ${toUpdate.length} updated${playerUpdates.length ? `, ${playerUpdates.length} statuses synced` : ''}, 0 Hero PIDs linked${_ambNote}`, ambiguousSkipped ? 'error' : 'success');
   }
 
   setStatus('');
@@ -6845,6 +7240,20 @@ function initBackfillSelects() {
       document.getElementById('actor-sync-apply-btn').disabled = true;
       document.getElementById('actor-sync-output').style.display = 'none';
       document.getElementById('actor-sync-status').textContent = '';
+    });
+  }
+  // Integrity check club selector ("All clubs" = blank)
+  const integSel = document.getElementById('integrity-club');
+  if (integSel && integSel.options.length === 0) {
+    const all = document.createElement('option'); all.value=''; all.textContent='All clubs'; integSel.appendChild(all);
+    CACHE.clubs.forEach(c => {
+      const o = document.createElement('option'); o.value=c.id; o.textContent=c.Name||c.id; integSel.appendChild(o);
+    });
+    integSel.addEventListener('change', () => {
+      _integrityPending = null;
+      document.getElementById('integrity-apply-btn').disabled = true;
+      document.getElementById('integrity-output').style.display = 'none';
+      document.getElementById('integrity-status').textContent = '';
     });
   }
 }
