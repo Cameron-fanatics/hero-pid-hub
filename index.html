@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v233.7 -->
+<!-- HEROPID-BUILD-v234 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -717,10 +717,45 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         Uses canonical scoring to identify which record would be kept.
       </div>
       <div style="font-size:11px;color:var(--amber);background:rgba(255,179,64,0.08);border:1px solid rgba(255,179,64,0.3);border-radius:4px;padding:8px 10px;margin-bottom:10px;">
-        ⚠ Preview only. No Airtable records will be changed. SeasonID is still present in Airtable until v234.
+        ⚠ Preview only. No Airtable records will be changed. Use the Merge Duplicate Players card below to act on it.
       </div>
       <button class="btn btn-ghost btn-sm" onclick="runDedupPreview()">⊙ Preview Player Deduplication</button>
       <div id="dedup-preview-output" style="display:none;margin-top:12px;"></div>
+    </div>
+
+    <!-- PLAYER DEDUP EXECUTION -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Merge Duplicate Players</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px;">
+        Merges each duplicate pair into the kept player: the spare's PIDs are moved across, read back to confirm, and only then is the spare record deleted.
+        Every pair is re-checked against live Airtable data first. The run stops at the first error.
+      </div>
+      <div style="font-size:11px;color:var(--amber);background:rgba(255,179,64,0.08);border:1px solid rgba(255,179,64,0.3);border-radius:4px;padding:8px 10px;margin-bottom:10px;">
+        ⚠ This DELETES player records. Refresh the tool first, and <b>pause imports and other edits</b> to Players and Hero PIDs while a run is in progress.
+        Start with a small pilot (about 5 pairs at one club), check the result, then continue.
+      </div>
+      <div id="dedup-exec-warning" style="display:none;font-size:11px;color:var(--amber);background:rgba(255,179,64,0.08);border:1px solid rgba(255,179,64,0.3);border-radius:4px;padding:8px 10px;margin-bottom:10px;"></div>
+      <button class="btn btn-ghost btn-sm" id="dedup-exec-reviewed-btn" onclick="dedupMarkReviewed()" style="display:none;margin-bottom:10px;">✓ Mark reviewed</button>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+        <select class="form-select" id="dedup-exec-club" style="width:200px;"></select>
+        <button class="btn btn-ghost btn-sm" id="dedup-exec-plan-btn" onclick="buildDedupExecPlan()">⊙ Build Plan</button>
+        <button class="btn btn-ghost btn-sm" id="dedup-exec-csv-btn" onclick="downloadDedupPlanCsv()" disabled>⬇ Plan CSV (backup)</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+        <label style="font-size:12px;color:var(--text2);display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="checkbox" id="dedup-exec-backup" onchange="dedupExecSyncButtons()" style="accent-color:var(--accent);"> I have downloaded the plan CSV and/or backed up the base
+        </label>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+        <span style="font-size:12px;color:var(--text2);">Run the next</span>
+        <input type="number" id="dedup-exec-count" value="5" min="1" max="500" class="form-input" style="width:70px;">
+        <span style="font-size:12px;color:var(--text2);">pairs</span>
+        <button class="btn btn-primary btn-sm" id="dedup-exec-run-btn" onclick="runDedupMerge()" disabled>✓ Run</button>
+        <button class="btn btn-ghost btn-sm" id="dedup-exec-stop-btn" onclick="stopDedupRun()" disabled>■ Stop after this pair</button>
+        <button class="btn btn-ghost btn-sm" id="dedup-exec-log-btn" onclick="downloadDedupLogCsv()" disabled>⬇ Run log CSV</button>
+        <span id="dedup-exec-status" style="font-size:11px;color:var(--text3);"></span>
+      </div>
+      <div id="dedup-exec-output" style="display:none;"></div>
     </div>
 
     <!-- MDM ROSTER MEMBER DUPLICATES -->
@@ -1383,6 +1418,7 @@ async function _actorSyncInner(isDryRun) {
         }));
         statusEl.textContent = `Updating… ${Math.min(i+10, toUpdate.length)}/${toUpdate.length}`;
       }
+      if (applied > 0 && typeof invalidateCache === 'function') invalidateCache();   // stored copy is now stale
       buildCacheMaps();
       _actorSyncPending = null;
       const parts = [`${applied} updated`];
@@ -1857,6 +1893,7 @@ async function applyIntegrityRepair() {
         else verifyBad.push(w.id);
       });
     }
+    if (written.length && typeof invalidateCache === 'function') invalidateCache();   // stored copy is now stale
     buildCacheMaps(); updateStats();
     _integrityPending = null;
 
@@ -1882,6 +1919,469 @@ async function applyIntegrityRepair() {
     toast('Integrity repair failed', 'error');
   } finally {
     applyBtn.disabled = true; runBtn.disabled = false; sel.disabled = false;
+  }
+}
+
+// ─── PLAYER DEDUP EXECUTION (v234) ───────────────────────────────────────────
+// SAFETY MODEL
+//  * Planning is read-only. Running re-validates EVERY pair against live Airtable data before touching it,
+//    and compares it with the reviewed plan SNAPSHOT (not just record-vs-record).
+//  * Per spare: re-check the PIDs before EACH batch of 10 -> move -> journal the batch -> read ALL moved PIDs back
+//    -> final re-check (zero references, both players re-read and re-validated, MDM refs) -> delete.
+//  * Fail-fast: the first failed batch or changed PID halts everything. A pre-change validation skip is safe and continues.
+//  * Nothing here trusts the preview's warning flags: names, fields, MDM and club checks are recomputed.
+//  * Pause imports and other edits while a run is in progress: this reduces the race window, it cannot make Airtable atomic.
+const _dn = v => String(v == null ? '' : v).trim();
+
+// Fields compared with the plan snapshot. SeasonID is the ONLY ignored field: it is obsolete since v233, it
+// legitimately differs between the two copies, and nothing reads it. Data in any OTHER field blocks the merge.
+const DEDUP_COMPARE_FIELDS = ['Name', 'ShirtName', 'SquadNumber', 'Type', 'ClubID', 'Status', 'MDMActorID', 'Goalkeeper'];
+const DEDUP_IGNORED_FIELDS = ['SeasonID'];
+const _fieldKey = (f, v) => f === 'Goalkeeper' ? (v ? '1' : '0') : _dn(v);
+function snapshotOf(rec) { const o = {id: rec.id}; DEDUP_COMPARE_FIELDS.forEach(f => { o[f] = rec[f] === undefined ? null : rec[f]; }); return o; }
+function snapshotDiff(snap, live) { return DEDUP_COMPARE_FIELDS.filter(f => _fieldKey(f, snap[f]) !== _fieldKey(f, live[f])); }
+function unexpectedFields(rec) {
+  const known = new Set(['id', ...DEDUP_COMPARE_FIELDS, ...DEDUP_IGNORED_FIELDS]);
+  return Object.keys(rec).filter(k => !known.has(k) && rec[k] !== '' && rec[k] != null && rec[k] !== false);
+}
+
+// Fields that must agree between the two copies for a merge to lose nothing.
+function dedupFieldDiffs(a, b) {
+  const d = [];
+  if (_dn(a.Status) !== _dn(b.Status)) d.push('status');
+  if (_dn(a.SquadNumber) !== _dn(b.SquadNumber)) d.push('squad number');
+  if (foldName(a.ShirtName) !== foldName(b.ShirtName)) d.push('shirt name');
+  if (!!a.Goalkeeper !== !!b.Goalkeeper) d.push('goalkeeper flag');
+  if (_dn(a.Type) !== _dn(b.Type)) d.push('type');
+  return d;
+}
+
+function pickCanonicalFrom(players, heroCount) {
+  return players.slice().sort((a, b) => {
+    const ah = heroCount(a.id), bh = heroCount(b.id); if (bh !== ah) return bh - ah;
+    const aa = a.Status === 'active' ? 1 : 0, ba = b.Status === 'active' ? 1 : 0; if (ba !== aa) return ba - aa;
+    if (!!b.ShirtName !== !!a.ShirtName) return b.ShirtName ? 1 : -1;
+    return String(a.id).localeCompare(String(b.id));
+  })[0];
+}
+
+// A PID may move only if it carries EXACTLY the group's ActorID and sits under the group's club.
+const _pidProblem = (h, item) => _dn(h.ClubID) !== item.clubId ? 'a PID is filed under a different club'
+  : _dn(h.ActorID) !== item.actorId ? "a PID's ActorID is blank, a placeholder, or differs from the player's" : null;
+
+// Pure: decides which duplicate groups may be merged automatically and why the others may not.
+function buildDedupPlan({players, heroes, mdmRows, clubs, clubId}) {
+  const idx = buildMdmIndex(mdmRows, clubs);
+  const clubName = id => ((clubs || []).find(c => c.id === id) || {}).Name || id || '';
+  const heroesByPlayer = new Map();
+  heroes.forEach(h => { if (!heroesByPlayer.has(h.PlayerID)) heroesByPlayer.set(h.PlayerID, []); heroesByPlayer.get(h.PlayerID).push(h); });
+  const count = id => (heroesByPlayer.get(id) || []).length;
+  const groups = new Map();
+  players.forEach(p => {
+    if (!isRealMdmId(p.MDMActorID)) return;                    // blank, 0 and -999 are never eligible
+    if (clubId && p.ClubID !== clubId) return;
+    const k = `${_dn(p.MDMActorID)}|${p.ClubID}`;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(p);
+  });
+  const eligible = [], blocked = [];
+  [...groups.entries()].filter(([, g]) => g.length > 1).forEach(([key, g]) => {
+    const [actorId, club] = key.split('|');
+    const canonical = pickCanonicalFrom(g, count);
+    const spares = g.filter(p => p.id !== canonical.id);
+    const item = {key, actorId, clubId: club, clubName: clubName(club), canonical, spares, canonicalPids: count(canonical.id),
+                  sparePids: spares.map(sp => ({id: sp.id, n: count(sp.id)})),
+                  sparePidIds: Object.fromEntries(spares.map(sp => [sp.id, (heroesByPlayer.get(sp.id) || []).map(h => h.id).sort()])),
+                  snapshot: Object.fromEntries(g.map(p => [p.id, snapshotOf(p)])), repoints: 0};
+    const reasons = [];
+    const ns = dedupGroupNameStatus(g);
+    if (ns === 'different') reasons.push('different people share this ActorID');
+    else if (ns === 'similar') reasons.push('names differ slightly: confirm by eye');
+    spares.forEach(sp => { const d = dedupFieldDiffs(canonical, sp); if (d.length) reasons.push(`records differ on ${d.join(', ')}`); });
+    g.forEach(p => { const u = unexpectedFields(p); if (u.length) reasons.push(`record has data in an unexpected field (${u.join(', ')})`); });
+    const st = classifyPlayer(canonical, idx).state;
+    if (st === 'ambiguous') reasons.push('MDM lists this name under more than one ActorID');
+    else if (st === 'mismatched') reasons.push('ActorID disagrees with MDM');
+    else if (st !== 'validated') reasons.push('MDM cannot confirm this player');
+    const spareHeroes = spares.flatMap(sp => heroesByPlayer.get(sp.id) || []);
+    item.repoints = spareHeroes.length;
+    const pp = spareHeroes.map(h => _pidProblem(h, item)).find(Boolean); if (pp) reasons.push(pp);
+    if (reasons.length) blocked.push({...item, reasons}); else eligible.push(item);
+  });
+  const ord = (a, b) => a.clubName.localeCompare(b.clubName) || String(a.canonical.Name).localeCompare(String(b.canonical.Name));
+  eligible.sort(ord); blocked.sort(ord);
+  return {eligible, blocked};
+}
+
+// Pure: re-checks one group against LIVE data AND the reviewed plan snapshot. Returns null if safe, else the reason.
+//  final=false: before anything is moved (the PID set must equal the planned set).
+//  final=true : immediately before a spare is deleted (it must have ZERO PIDs; item.spares = the spares still to delete).
+function validateGroupLive(item, fresh, final = false) {
+  const ids = [item.canonical.id, ...item.spares.map(s => s.id)];
+  const recs = ids.map(id => fresh.players.get(id));
+  if (recs.some(r => !r)) return 'a record no longer exists';
+  const now = new Set(fresh.actorClub.map(r => r.id));
+  if (now.size !== ids.length || !ids.every(id => now.has(id))) return 'the players sharing this ActorID at this club have changed';
+  for (const r of recs) {
+    const snap = item.snapshot && item.snapshot[r.id];
+    if (!snap) return 'no plan snapshot for a record';
+    const diff = snapshotDiff(snap, r);
+    if (diff.length) return `a record changed since the plan (${diff.join(', ')}): refresh and rebuild the plan`;
+    const extra = unexpectedFields(r);
+    if (extra.length) return `a record has data in an unexpected field (${extra.join(', ')})`;
+  }
+  if (recs.some(r => _dn(r.ClubID) !== item.clubId || _dn(r.MDMActorID) !== item.actorId)) return 'ActorID or club changed';
+  if (dedupGroupNameStatus(recs) !== 'same') return 'names are no longer identical';
+  for (const r of recs.slice(1)) { const d = dedupFieldDiffs(recs[0], r); if (d.length) return `records now differ on ${d.join(', ')}`; }
+  if (classifyPlayer(recs[0], fresh.idx).state !== 'validated') return 'player is no longer confirmed by MDM';
+  if (fresh.mdmRefs > 0) return 'MDM Roster Member rows reference a record that would be deleted';
+  if (final) { if (fresh.spareHeroes.length) return `${fresh.spareHeroes.length} PIDs still reference the spare`; return null; }
+  for (const sp of item.spares) {
+    const live = fresh.spareHeroes.filter(h => _dn(h.PlayerID) === sp.id).map(h => h.id).sort();
+    const planned = (item.sparePidIds && item.sparePidIds[sp.id]) || [];
+    if (live.length !== planned.length || live.some((x, i) => x !== planned[i])) return 'the PIDs on a spare changed since the plan';
+  }
+  for (const h of fresh.spareHeroes) { const pp = _pidProblem(h, item); if (pp) return pp; }
+  return null;
+}
+
+function _csvCell(v) { const t = String(v == null ? '' : v); return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }
+function _toCsv(head, rows) { return [head, ...rows].map(r => r.map(_csvCell).join(',')).join('\n'); }
+function _downloadText(name, text) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], {type: 'text/csv'})); a.download = name; a.click();
+}
+
+// THE JOURNAL. Every step is recorded in memory AND in browser storage (one verified storage entry per journal entry).
+// Browser storage can still fail (full, blocked, private mode) or be cleared by the user, so:
+//  * a failed save is NEVER swallowed: it throws, and the run stops before the next write or delete;
+//  * write-ahead entries ('move-intent', 'delete-intent') are saved BEFORE the operation they describe;
+//  * the downloaded plan CSV remains the independent backup. The journal is a safety net, not a guarantee.
+const DEDUP_LOG_PREFIX = 'hpid_dedup_j_';
+function _journalError(e) { const err = new Error(e && e.message ? e.message : String(e)); err.isJournal = true; return err; }
+function _loadDedupLog() {
+  try {
+    if (typeof localStorage === 'undefined') return [];
+    const out = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(DEDUP_LOG_PREFIX)) { try { out.push(JSON.parse(localStorage.getItem(k))); } catch (e) { /* unreadable entry: skipped, never fatal at load */ } }
+    }
+    return out.filter(Boolean).sort((a, b) => (a.seq || 0) - (b.seq || 0));
+  } catch (e) { return []; }
+}
+function _saveDedupEntry(entry) {                       // throws if the entry cannot be stored AND read back
+  try {
+    if (typeof localStorage === 'undefined') throw new Error('browser storage is not available');
+    const key = DEDUP_LOG_PREFIX + String(entry.seq).padStart(8, '0'), json = JSON.stringify(entry);
+    localStorage.setItem(key, json);
+    if (localStorage.getItem(key) !== json) throw new Error('a saved journal entry did not read back');
+  } catch (e) { throw _journalError(e); }
+}
+function _journalSelfTest() {                           // run BEFORE the first change; null = storage works
+  try {
+    if (typeof localStorage === 'undefined') return 'browser storage is not available';
+    const key = DEDUP_LOG_PREFIX + 'probe', val = 'probe-' + Date.now();
+    localStorage.setItem(key, val);
+    const back = localStorage.getItem(key);
+    localStorage.removeItem(key);
+    return back === val ? null : 'a test write did not read back';
+  } catch (e) { return e && e.message ? e.message : String(e); }
+}
+let _dedupSeq = 0;
+function _nextDedupSeq() { if (!_dedupSeq) _dedupSeq = _dedupLog.reduce((m, l) => Math.max(m, l.seq || 0), 0); return ++_dedupSeq; }
+
+// Intents with no recorded outcome = operations whose result is UNKNOWN (page closed, crash, lost connection).
+// Only a CONFIRMED outcome resolves an intent. 'move-unknown' / 'delete-unknown' are recorded when a request threw and a fresh
+// read could not establish what happened: they deliberately do NOT resolve the intent. A failed request is not proof of "no change".
+const DEDUP_INTENTS = new Set(['move-intent', 'delete-intent']);
+const DEDUP_RESOLVING = new Set(['move-done', 'move-failed', 'merged', 'delete-failed', 'reviewed']);
+function dedupUnresolved() {
+  const outcome = new Set(_dedupLog.filter(l => l.ref != null && DEDUP_RESOLVING.has(l.result)).map(l => l.ref));
+  return _dedupLog.filter(l => DEDUP_INTENTS.has(l.result) && !outcome.has(l.seq));
+}
+// After an error response, ask Airtable what actually happened (it may have applied the change and lost the reply).
+async function reconcileMoveBatch(chunk, sp, item) {
+  try {
+    await _sleep(AT_PACE_MS);
+    const cur = await atFetchByIds(TABLES.heroes, chunk.map(h => h.id));
+    const owner = h => { const c = cur.get(h.id); return c ? _dn(c.PlayerID) : null; };
+    const moved = chunk.filter(h => owner(h) === item.canonical.id).length;
+    const still = chunk.filter(h => owner(h) === sp.id).length;
+    if (moved === chunk.length) return {state: 'applied', moved};
+    if (still === chunk.length) return {state: 'not-applied', moved: 0};
+    return {state: 'partial', moved};
+  } catch (e) { return {state: 'unknown', moved: 0}; }
+}
+async function reconcileDelete(sp) {
+  try { await _sleep(AT_PACE_MS); const cur = await atFetchByIds(TABLES.players, [sp.id]); return cur.has(sp.id) ? 'present' : 'deleted'; }
+  catch (e) { return 'unknown'; }
+}
+function dedupRenderJournalWarning() {
+  const box = _dedupEl('dedup-exec-warning'), btn = _dedupEl('dedup-exec-reviewed-btn');
+  if (!box) return;
+  const un = dedupUnresolved();
+  if (!un.length) { box.style.display = 'none'; if (btn) btn.style.display = 'none'; return; }
+  const mv = un.filter(l => l.result === 'move-intent').length, dl = un.filter(l => l.result === 'delete-intent').length;
+  box.innerHTML = `⚠ <b>A previous run was interrupted</b>: ${mv} PID move${mv !== 1 ? 's' : ''} and ${dl} delete${dl !== 1 ? 's' : ''} have no CONFIRMED outcome (a request that errored may still have been applied).
+    Download the run log, check those PIDs and records in Airtable, then click <b>Mark reviewed</b>. Rebuilding the plan is safe: it re-reads everything live.`;
+  box.style.display = ''; if (btn) btn.style.display = '';
+}
+function dedupMarkReviewed() {
+  try {
+    dedupUnresolved().forEach(l => {
+      const e = {seq: _nextDedupSeq(), ts: new Date().toISOString(), club: l.club, player: l.player, actorId: l.actorId, keepId: l.keepId, spareId: l.spareId,
+        result: 'reviewed', reason: 'marked reviewed by the user', moved: 0, movedIds: [], movedPids: [], spareJson: '', ref: l.seq};
+      _saveDedupEntry(e); _dedupLog.push(e);
+    });
+  } catch (e) { toast(`Could not save the review: ${e.message}`, 'error'); }
+  dedupRenderJournalWarning(); dedupExecSyncButtons();
+}
+
+let _dedupPlan = null;   // {clubId, eligible, blocked}
+let _dedupStop = false;
+let _dedupLog = _loadDedupLog();
+let _dedupRunning = false;
+const _dedupEl = id => document.getElementById(id);
+
+function dedupExecSyncButtons() {
+  const run = _dedupEl('dedup-exec-run-btn'), csv = _dedupEl('dedup-exec-csv-btn'), log = _dedupEl('dedup-exec-log-btn');
+  if (_dedupRunning) return;
+  run.disabled = !(_dedupPlan && _dedupPlan.eligible.length > 0 && _dedupEl('dedup-exec-backup').checked);
+  csv.disabled = !(_dedupPlan && _dedupPlan.eligible.length > 0);
+  log.disabled = _dedupLog.length === 0;
+}
+
+async function buildDedupExecPlan() {
+  const statusEl = _dedupEl('dedup-exec-status'), outEl = _dedupEl('dedup-exec-output'), planBtn = _dedupEl('dedup-exec-plan-btn');
+  const sel = _dedupEl('dedup-exec-club'), clubId = sel.value;
+  _dedupPlan = null; _dedupEl('dedup-exec-backup').checked = false;      // the backup acknowledgement belongs to ONE plan
+  dedupRenderJournalWarning(); dedupExecSyncButtons();
+  planBtn.disabled = true; sel.disabled = true; outEl.style.display = 'none';
+  try {
+    statusEl.textContent = 'Loading MDM Roster Members…';
+    const recs = await atGetAll(TABLES.mdmRosterMembers);                 // fresh: the plan depends on it
+    CACHE.mdmRosterMembers = recs.map(x => ({id: x.id, ...x.fields}));
+    statusEl.textContent = 'Planning…';
+    const plan = buildDedupPlan({players: CACHE.players || [], heroes: CACHE.heroes || [], mdmRows: CACHE.mdmRosterMembers, clubs: CACHE.clubs || [], clubId});
+    _dedupPlan = {clubId, ...plan};
+    const totalRepoints = plan.eligible.reduce((a, g) => a + g.repoints, 0);
+    const tbl = (head, rows) => rows.length ? `<div style="overflow-x:auto;max-height:260px;overflow-y:auto;margin:6px 0 14px;"><table class="data-table" style="font-size:11px;width:100%;"><thead><tr style="position:sticky;top:0;background:var(--bg2);">${head.map(h => `<th style="padding:4px 8px;text-align:left;">${h}</th>`).join('')}</tr></thead><tbody>${rows.map(rw => `<tr>${rw.map(c => `<td style="padding:4px 8px;">${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '';
+    outEl.innerHTML = `
+      <div style="font-size:12px;margin-bottom:8px;"><strong>${clubId ? escHtml((CACHE.clubs.find(c => c.id === clubId) || {}).Name || '') : 'All clubs'}</strong>
+        <span style="color:var(--text3);margin-left:8px;">${plan.eligible.length} pairs can be merged automatically · ${totalRepoints.toLocaleString()} PIDs would move · ${plan.blocked.length} held back</span></div>
+      ${plan.blocked.length ? `<div style="font-size:12px;color:var(--amber);margin-bottom:4px;">⚠ <b>${plan.blocked.length}</b> held back for a human (never merged automatically)</div>
+        ${tbl(['Player', 'Club', 'ActorID', 'Why'], plan.blocked.map(b => [escHtml(b.canonical.Name || '—'), escHtml(b.clubName), `<span class="mono">${escHtml(b.actorId)}</span>`, escHtml(b.reasons.join('; '))]))}` : ''}
+      ${tbl(['Keep', 'Club', 'ActorID', 'Keep: PIDs', 'Delete (spare): id / PIDs'], plan.eligible.slice(0, 150).map(g => [escHtml(g.canonical.Name || '—'), escHtml(g.clubName), `<span class="mono">${escHtml(g.actorId)}</span>`, g.canonicalPids, g.sparePids.map(sp => `<span class="mono">${escHtml(sp.id.slice(-6))}</span> / ${sp.n}`).join(', ')]))}
+      ${plan.eligible.length > 150 ? `<div style="font-size:11px;color:var(--text3);">…and ${plan.eligible.length - 150} more.</div>` : ''}`;
+    outEl.style.display = '';
+    statusEl.textContent = plan.eligible.length
+      ? `Plan ready — ${plan.eligible.length} pairs. Download the plan CSV (your backup), tick the box, then run a small pilot first.`
+      : 'Plan built — nothing can be merged automatically.';
+  } catch (e) {
+    console.error('[DedupExec] plan failed:', e);
+    _dedupPlan = null;
+    statusEl.textContent = `⚠ Planning failed — ${e && e.message ? e.message : 'unknown error'}.`;
+    toast('Dedup planning failed', 'error');
+  } finally {
+    planBtn.disabled = false; sel.disabled = false; dedupExecSyncButtons();
+  }
+}
+
+function downloadDedupPlanCsv() {
+  if (!_dedupPlan) return;
+  const heroesBySpare = new Map();
+  (CACHE.heroes || []).forEach(h => { if (!heroesBySpare.has(h.PlayerID)) heroesBySpare.set(h.PlayerID, []); heroesBySpare.get(h.PlayerID).push(h); });
+  const rows = [];
+  _dedupPlan.eligible.forEach(g => g.spares.forEach(sp => {
+    const hs = heroesBySpare.get(sp.id) || [];
+    const {id, ...fields} = sp;
+    rows.push([g.clubName, g.canonical.Name, g.actorId, g.canonical.id, sp.id, JSON.stringify(fields), hs.map(h => h.id).join('; '), hs.map(h => h.PID).join('; ')]);
+  }));
+  _downloadText('dedup_plan_backup.csv', _toCsv(['Club', 'Player', 'ActorID', 'KeepRecordId', 'SpareRecordId', 'SpareFieldsJson', 'PidRecordIdsToMove', 'PidsToMove'], rows));
+}
+
+function downloadDedupLogCsv() {
+  if (!_dedupLog.length) return;
+  const un = new Set(dedupUnresolved().map(l => l.seq));
+  _downloadText('dedup_run_log.csv', _toCsv(['Seq', 'Ref', 'Time', 'Club', 'Player', 'ActorID', 'KeepRecordId(destination)', 'SpareRecordId(source)', 'Result', 'Reason', 'PidsInThisRow', 'PidRecordIds', 'PidNumbers', 'SpareFieldsJson', 'OutcomeUnknown'],
+    _dedupLog.map(l => [l.seq, l.ref == null ? '' : l.ref, l.ts, l.club, l.player, l.actorId, l.keepId, l.spareId, l.result, l.reason, l.moved, (l.movedIds || []).join('; '), (l.movedPids || []).join('; '), l.spareJson, un.has(l.seq) ? 'YES' : ''])));
+}
+
+function stopDedupRun() { _dedupStop = true; _dedupEl('dedup-exec-status').textContent = 'Stopping after the current pair…'; }
+
+async function runDedupMerge() {
+  const statusEl = _dedupEl('dedup-exec-status'), outEl = _dedupEl('dedup-exec-output');
+  const sel = _dedupEl('dedup-exec-club'), cnt = _dedupEl('dedup-exec-count');
+  const planBtn = _dedupEl('dedup-exec-plan-btn'), runBtn = _dedupEl('dedup-exec-run-btn'), stopBtn = _dedupEl('dedup-exec-stop-btn');
+  if (_dedupRunning) return;
+  if (!_dedupPlan || _dedupPlan.clubId !== sel.value) { statusEl.textContent = 'Build a plan for this scope before running.'; toast('Build the plan first', 'error'); return; }
+  if (!_dedupEl('dedup-exec-backup').checked) { statusEl.textContent = 'Confirm the backup box first.'; toast('Confirm the backup first', 'error'); return; }
+  const n = parseInt(cnt.value, 10);
+  if (!(n >= 1 && n <= 500)) { statusEl.textContent = 'Enter how many pairs to run (1 to 500).'; return; }
+  const todo = _dedupPlan.eligible.slice(0, n);
+  if (!todo.length) { statusEl.textContent = 'Nothing to run.'; return; }
+  if (!confirm(`Merge ${todo.length} pair${todo.length !== 1 ? 's' : ''}?\n\nFor each pair the PIDs are moved to the kept player and the spare player record is DELETED. This cannot be undone from the tool (the run log CSV and the plan CSV are your records).\n\nPause imports and other edits to these tables until the run finishes.`)) return;
+
+  _dedupRunning = true; _dedupStop = false;
+  planBtn.disabled = true; runBtn.disabled = true; sel.disabled = true; cnt.disabled = true; stopBtn.disabled = false;
+  _dedupEl('dedup-exec-csv-btn').disabled = true; _dedupEl('dedup-exec-log-btn').disabled = true;
+  const runLog = []; let halted = null, merged = 0, skipped = 0;
+  const entry = (item, sp, result, reason, heroes, spareFields, ref, countOnly) => ({
+    seq: _nextDedupSeq(), ts: new Date().toISOString(), club: item.clubName, player: item.canonical.Name, actorId: item.actorId, keepId: item.canonical.id,
+    spareId: sp ? sp.id : '', result, reason: reason || '', moved: heroes ? heroes.length : 0,
+    movedIds: heroes && !countOnly ? heroes.map(h => h.id) : [], movedPids: heroes && !countOnly ? heroes.map(h => h.PID) : [],
+    spareJson: spareFields ? JSON.stringify(spareFields) : '', ref: ref == null ? null : ref});
+  // STRICT: the entry must be saved to browser storage or this throws (and the run stops before the next write).
+  const journal = (...a) => { const e = entry(...a); runLog.push(e); _dedupLog.push(e); _saveDedupEntry(e); return e; };
+  // SOFT: used only on paths that are already halting; the entry is kept in memory even if it cannot be saved.
+  const journalSoft = (...a) => { const e = entry(...a); runLog.push(e); _dedupLog.push(e); try { _saveDedupEntry(e); } catch (x) { /* already halting */ } return e; };
+  const stripId = ({id, ...f}) => f;
+  const idsOf = (item, spares) => [item.canonical.id, ...spares.map(s => s.id)];
+  try {
+    // PRE-FLIGHT: free the browser space taken by the table cache, then prove the journal can be saved. No journal = no changes.
+    if (typeof invalidateCache === 'function') invalidateCache();
+    const jerr = _journalSelfTest();
+    if (jerr) { halted = `the safety journal cannot be saved in this browser (${jerr}). NO changes were made.`; }
+    else {
+      statusEl.textContent = 'Re-reading MDM Roster Members…';
+      const mdmRecs = await atGetAll(TABLES.mdmRosterMembers);
+      const idx = buildMdmIndex(mdmRecs.map(x => ({id: x.id, ...x.fields})), CACHE.clubs || []);
+      for (let i = 0; i < todo.length && !halted; i++) {
+        const item = todo[i];
+        statusEl.textContent = `Merging ${i + 1}/${todo.length}: ${item.canonical.Name}…`;
+        try {
+          // 1. fresh evidence for the whole group, compared with the reviewed plan
+          await _sleep(AT_PACE_MS);
+          const freshPlayers = await atFetchByIds(TABLES.players, idsOf(item, item.spares));
+          await _sleep(AT_PACE_MS);
+          const actorClub = (await atGetAll(TABLES.players, `AND({MDMActorID}='${item.actorId}',{ClubID}='${item.clubId}')`)).map(r => ({id: r.id, ...r.fields}));
+          const spareHeroes = {}, allSpareHeroes = []; let mdmRefs = 0;
+          for (const sp of item.spares) {
+            await _sleep(AT_PACE_MS);
+            spareHeroes[sp.id] = (await atGetAll(TABLES.heroes, `{PlayerID}='${sp.id}'`)).map(r => ({id: r.id, ...r.fields}));
+            allSpareHeroes.push(...spareHeroes[sp.id]);
+            await _sleep(AT_PACE_MS);
+            mdmRefs += (await atGetAll(TABLES.mdmRosterMembers, `{PlayerID}='${sp.id}'`)).length;
+          }
+          const why = validateGroupLive(item, {players: freshPlayers, actorClub, spareHeroes: allSpareHeroes, mdmRefs, idx});
+          if (why) { skipped++; journal(item, null, 'skipped', why, null); continue; }   // nothing was changed: safe to continue
+
+          // 2. per spare (from here on, any problem HALTS the run)
+          for (let si = 0; si < item.spares.length && !halted; si++) {
+            const sp = item.spares[si], heroes = spareHeroes[sp.id];
+            // 2a. move in batches of 10: re-check those exact PIDs, JOURNAL THE INTENT, send, journal the outcome. Fail fast.
+            for (let b = 0; b < heroes.length; b += 10) {
+              const chunk = heroes.slice(b, b + 10);
+              await _sleep(AT_PACE_MS);
+              const cur = await atFetchByIds(TABLES.heroes, chunk.map(h => h.id));
+              const bad = chunk.find(h => { const c = cur.get(h.id); return !c || _dn(c.PlayerID) !== sp.id || !!_pidProblem(c, item); });
+              if (bad) { halted = `PID ${bad.PID} changed while merging ${item.canonical.Name} (it no longer belongs to the spare, or its club/ActorID differs). Nothing further was changed; the spare was NOT deleted.`; journalSoft(item, sp, 'FAILED', halted, null); break; }
+              const intent = journal(item, sp, 'move-intent', '', chunk);        // saved BEFORE the PATCH; if this throws, nothing is sent
+              await _sleep(AT_PACE_MS);
+              try { await atFetch(TABLES.heroes, {method: 'PATCH', body: JSON.stringify({records: chunk.map(h => ({id: h.id, fields: {PlayerID: item.canonical.id}}))})}); }
+              catch (e) {
+                // An error response does NOT prove Airtable changed nothing. Establish the truth with a fresh read before recording anything.
+                const em = e && e.message ? e.message : String(e), v = await reconcileMoveBatch(chunk, sp, item);
+                if (v.state === 'applied') {
+                  halted = `a request error occurred while moving PIDs for ${item.canonical.Name} (${em}), but a fresh read confirms that batch WAS applied (${chunk.length} PIDs). The run was halted; the delete step was never sent, so the spare still exists.`;
+                  journalSoft(item, sp, 'move-done', 'the request reported an error but a fresh read confirms the batch was applied', chunk, null, intent.seq, true);
+                } else if (v.state === 'not-applied') {
+                  halted = `moving PIDs for ${item.canonical.Name} failed (${em}); a fresh read confirms that batch was NOT applied (${b} of ${heroes.length} PIDs moved so far). The delete step was never sent, so the spare still exists.`;
+                  journalSoft(item, sp, 'move-failed', halted, null, null, intent.seq);
+                } else {
+                  halted = `moving PIDs for ${item.canonical.Name} returned an error (${em}) and the outcome is UNKNOWN${v.state === 'partial' ? ` (${v.moved} of ${chunk.length} PIDs in that batch show the new owner)` : ' (it could not be checked)'}. Check these PIDs in Airtable before doing anything else. The delete step was never sent, so the spare still exists.`;
+                  journalSoft(item, sp, 'move-unknown', halted, chunk, null, intent.seq, true);   // the intent stays UNRESOLVED
+                }
+                break;
+              }
+              journal(item, sp, 'move-done', '', chunk, null, intent.seq, true);   // outcome recorded (count only; ids are in the intent)
+            }
+            if (halted) break;
+
+            // 2b. read EVERY moved PID back
+            if (heroes.length) {
+              await _sleep(AT_PACE_MS);
+              const movedNow = await atFetchByIds(TABLES.heroes, heroes.map(h => h.id));
+              const wrong = heroes.filter(h => !movedNow.get(h.id) || _dn(movedNow.get(h.id).PlayerID) !== item.canonical.id);
+              if (wrong.length) { halted = `read-back failed for ${item.canonical.Name}: ${wrong.length} PIDs did not take the new owner. The spare was NOT deleted.`; journalSoft(item, sp, 'FAILED', halted, null); break; }
+            }
+
+            // 2c. FINAL check, after the read-back and immediately before the delete
+            await _sleep(AT_PACE_MS);
+            const remaining = item.spares.slice(si);                       // spares not yet deleted (this one first)
+            const fp2 = await atFetchByIds(TABLES.players, idsOf(item, remaining));
+            await _sleep(AT_PACE_MS);
+            const ac2 = (await atGetAll(TABLES.players, `AND({MDMActorID}='${item.actorId}',{ClubID}='${item.clubId}')`)).map(r => ({id: r.id, ...r.fields}));
+            await _sleep(AT_PACE_MS);
+            const still = (await atGetAll(TABLES.heroes, `{PlayerID}='${sp.id}'`)).map(r => ({id: r.id, ...r.fields}));
+            await _sleep(AT_PACE_MS);
+            const mdm2 = (await atGetAll(TABLES.mdmRosterMembers, `{PlayerID}='${sp.id}'`)).length;
+            const why2 = validateGroupLive({...item, spares: remaining}, {players: fp2, actorClub: ac2, spareHeroes: still, mdmRefs: mdm2, idx}, true);
+            if (why2) { halted = `final check failed for ${item.canonical.Name}: ${why2}. The PIDs are already safely moved; the spare was NOT deleted.`; journalSoft(item, sp, 'FAILED', halted, null); break; }
+            const spareNow = stripId(fp2.get(sp.id));                      // the ACTUAL pre-deletion record, for recovery
+
+            // 2d. WRITE-AHEAD: persist the live spare record + source/destination + every moved PID id BEFORE deleting. If this
+            //     cannot be saved, journal() throws and the spare is NOT deleted.
+            const di = journal(item, sp, 'delete-intent', '', heroes, spareNow);
+            await _sleep(AT_PACE_MS);
+            const mirrorMerge = () => {                                     // reflect a completed merge in memory
+              const heroById = new Map((CACHE.heroes || []).map(h => [h.id, h]));
+              heroes.forEach(h => { const ch = heroById.get(h.id); if (ch) ch.PlayerID = item.canonical.id; });
+              CACHE.players = (CACHE.players || []).filter(p => p.id !== sp.id);
+              merged++;
+            };
+            try { await atDelete(TABLES.players, sp.id); }
+            catch (e) {
+              // An error response does NOT prove the record survived. Ask Airtable.
+              const em = e && e.message ? e.message : String(e), v = await reconcileDelete(sp);
+              if (v === 'deleted') {
+                mirrorMerge();
+                halted = `the delete request for the spare of ${item.canonical.Name} reported an error (${em}), but a fresh read confirms the spare IS gone. Its PIDs were already moved. The run was halted for safety.`;
+                journalSoft(item, sp, 'merged', 'the delete reported an error but a fresh read confirms the record is gone', heroes, null, di.seq, true);
+              } else if (v === 'present') {
+                halted = `deleting the spare for ${item.canonical.Name} failed (${em}); a fresh read confirms it still exists. Its PIDs are already moved, so nothing is lost.`;
+                journalSoft(item, sp, 'delete-failed', halted, null, null, di.seq);
+              } else {
+                halted = `the delete request for the spare of ${item.canonical.Name} returned an error (${em}) and the outcome is UNKNOWN: the spare may or may not have been deleted. Its PIDs were already moved, so no PID is lost either way. Check the record in Airtable; the delete-intent in the run log holds its full details.`;
+                journalSoft(item, sp, 'delete-unknown', halted, null, null, di.seq);   // the intent stays UNRESOLVED
+              }
+              break;
+            }
+
+            // 2e. deleted: update memory first, then record the outcome
+            mirrorMerge();
+            journal(item, sp, 'merged', '', heroes, null, di.seq, true);
+          }
+        } catch (e) {
+          halted = e && e.isJournal
+            ? `the safety journal could not be saved (${e.message}). The run was stopped before any further change. DOWNLOAD THE RUN LOG NOW: it is held in memory and is lost if this page is closed. Check the last operation for ${item.canonical.Name} in Airtable.`
+            : `unexpected error on ${item.canonical.Name}: ${e && e.message ? e.message : e}. Moves already made are in the run log. Check the last operation for this player in Airtable before running again.`;
+          journalSoft(item, null, 'FAILED', halted, null);
+        }
+        if (_dedupStop) break;
+      }
+    }
+  } catch (e) {
+    halted = `run could not start: ${e && e.message ? e.message : e}`;
+  } finally {
+    _dedupRunning = false; _dedupPlan = null; _dedupEl('dedup-exec-backup').checked = false;
+    // The browser-stored copy of Players/Hero PIDs is now stale: drop it so a reload cannot resurrect deleted spares.
+    if (runLog.some(l => l.result === 'move-intent' || l.result === 'merged') && typeof invalidateCache === 'function') invalidateCache();
+    buildCacheMaps(); updateStats();
+    planBtn.disabled = false; sel.disabled = false; cnt.disabled = false; stopBtn.disabled = true;
+    const moved = runLog.filter(l => l.result === 'move-done').reduce((a, l) => a + l.moved, 0);
+    const parts = [`${merged} merged`, `${moved} PIDs moved`]; if (skipped) parts.push(`${skipped} skipped`);
+    if (halted) parts.push('HALTED');
+    const bad = !!halted;
+    outEl.innerHTML = `<div style="font-size:12px;"><b>Run result:</b> ${parts.join(' · ')}</div>
+      ${halted ? `<div style="font-size:12px;color:var(--red,#fc8181);margin-top:6px;">⛔ ${escHtml(halted)}</div>` : ''}
+      ${skipped ? `<div style="font-size:11px;color:var(--amber);margin-top:6px;">Skipped pairs were NOT changed: ${escHtml(runLog.filter(l => l.result === 'skipped').slice(0, 5).map(l => l.player + ' (' + l.reason + ')').join('; '))}${skipped > 5 ? '…' : ''}</div>` : ''}
+      <div style="font-size:11px;color:var(--text3);margin-top:6px;">Download the run log: it records every move and every deleted record's details. Then refresh, build a new plan and run the Data Integrity Check.</div>`;
+    outEl.style.display = '';
+    statusEl.textContent = `${bad ? '⚠' : '✓'} ${parts.join(' · ')}`;
+    toast(`Dedup: ${parts.join(', ')}`, bad ? 'error' : 'success');
+    dedupRenderJournalWarning(); dedupExecSyncButtons();
   }
 }
 
@@ -2290,7 +2790,7 @@ function showPage(page) {
   if (page==='bulkexport') initBulkExport();
   if (page==='fonts') renderFontsPage();
   if (page==='rostermappings') initRosterMappingsPage();
-  if (page==='cleanup') initBackfillSelects();
+  if (page==='cleanup') { initBackfillSelects(); if (typeof dedupRenderJournalWarning === 'function') dedupRenderJournalWarning(); }
   if (page==='datahealth') calcDataHealth();
   if (page==='analytics') initAnalyticsPage();
   if (page==='search') {
@@ -7240,6 +7740,17 @@ function initBackfillSelects() {
       document.getElementById('actor-sync-apply-btn').disabled = true;
       document.getElementById('actor-sync-output').style.display = 'none';
       document.getElementById('actor-sync-status').textContent = '';
+    });
+  }
+  // Dedup execution club selector ("All clubs" = blank)
+  const dxSel = document.getElementById('dedup-exec-club');
+  if (dxSel && dxSel.options.length === 0) {
+    const all = document.createElement('option'); all.value=''; all.textContent='All clubs'; dxSel.appendChild(all);
+    CACHE.clubs.forEach(c => { const o = document.createElement('option'); o.value=c.id; o.textContent=c.Name||c.id; dxSel.appendChild(o); });
+    dxSel.addEventListener('change', () => {
+      _dedupPlan = null; dedupExecSyncButtons();
+      document.getElementById('dedup-exec-output').style.display = 'none';
+      document.getElementById('dedup-exec-status').textContent = '';
     });
   }
   // Integrity check club selector ("All clubs" = blank)
