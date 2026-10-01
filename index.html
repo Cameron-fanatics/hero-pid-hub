@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v233.5 -->
+<!-- HEROPID-BUILD-v233.6 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1193,16 +1193,26 @@ function buildCacheMaps() {
 function resolveMdmLinks(actorId, clubId, seasonId, fontType, kitType) {
   const rmKey = `${clubId}|${seasonId}|${String(fontType||'').trim().toLowerCase()}|${String(kitType||'').trim().toLowerCase()}`;
   const rm = CACHE_MAPS.rosterMappingByKey.get(rmKey);
+  // A roster mapping whose RosterID is blank/0/-999 is as good as no mapping: never hand a placeholder on
+  const rosterId = (rm && isRealMdmId(rm.RosterID)) ? String(rm.RosterID).trim() : '';
   return {
-    actorId: actorId || '',
-    rosterId: rm ? (rm.RosterID || '') : '',
-    missingMapping: !rm,
+    actorId: isRealMdmId(actorId) ? String(actorId).trim() : '',
+    rosterId,
+    missingMapping: !rm || !rosterId,
   };
 }
 
 // Validate for duplicate RosterMemberIDs in the MDM Roster Members cache
 // Returns array of {rosterMemberId, count, records} for any duplicates found
 // ─── PLAYER ACTORID SYNC ──────────────────────────────────────────────────────
+// A "real" MDM identifier: non-empty and not a placeholder (0 or -999).
+// Use this everywhere an ActorID / RosterID / RosterMemberID is tested for presence,
+// so placeholder values are never counted as linked.
+function isRealMdmId(v) {
+  const t = String(v == null ? '' : v).trim();
+  return t !== '' && t !== '0' && t !== '-999';
+}
+
 function normSyncName(s) {
   return String(s||'').trim().toUpperCase().replace(/\s+/g,' ');
 }
@@ -1311,23 +1321,23 @@ async function _actorSyncInner(isDryRun) {
     return;
   }
 
-  // Ensure MDM Roster Members are loaded — they're lazy-loaded elsewhere
-  if (!CACHE.mdmRosterMembers) {
-    statusEl.textContent = 'Loading MDM Roster Members…';
-    try {
-      const recs = await atGetAll(TABLES.mdmRosterMembers);
-      CACHE.mdmRosterMembers = recs.map(x=>({id:x.id,...x.fields}));
-    } catch(e) {
-      toast('Failed to load MDM Roster Members', 'error');
-      statusEl.textContent = '⚠ Could not load MDM Roster Members — try again.';
-      dryBtn.disabled = false;
-      return;
-    }
+  // Always fetch MDM Roster Members fresh: they are the INPUT to a write, and a stale
+  // browser cache previously hid corrections made directly in Airtable.
+  statusEl.textContent = 'Loading MDM Roster Members…';
+  try {
+    const recs = await atGetAll(TABLES.mdmRosterMembers);
+    CACHE.mdmRosterMembers = recs.map(x=>({id:x.id,...x.fields}));
+  } catch(e) {
+    toast('Failed to load MDM Roster Members', 'error');
+    statusEl.textContent = '⚠ Could not load MDM Roster Members — try again.';
+    dryBtn.disabled = false;
+    return;
   }
 
   // Phase 1: Build lookup index from MDM Roster Members for this club
   const jerseyIndex = {}; // normJerseyName -> {actorId, conflicts: bool}
   const nameIndex   = {}; // normFullName   -> {actorId, conflicts: bool}
+  const actorRefs   = {}; // actorId -> {jersey, full, names:Set, shared:bool}  (reverse check)
 
   // Fix 4: only fall back to Club name match when ClubID is absent
   const mdmRows = (CACHE.mdmRosterMembers||[]).filter(r => {
@@ -1342,6 +1352,24 @@ async function _actorSyncInner(isDryRun) {
 
     const jersey = normSyncName(r.JerseyName||'');
     const full   = normSyncName(r.PlayerName||'');
+
+    // Reverse check: the same ActorID on rows for DIFFERENT people (differ on jersey AND full name).
+    // Rows that agree on either name are treated as the same person, so cosmetic spelling
+    // differences between rosters don't raise false alarms.
+    const label = r.PlayerName || r.JerseyName || '?';
+    const ref = actorRefs[actorId];
+    if (!ref) {
+      actorRefs[actorId] = {jersey, full, names: new Set([label]), shared: false};
+    } else {
+      // Rows count as the same person only if a NON-EMPTY jersey or full name matches.
+      // Two blank names prove nothing, so they must not be read as agreement.
+      const sameJersey = !!jersey && !!ref.jersey && jersey === ref.jersey;
+      const sameFull   = !!full   && !!ref.full   && full === ref.full;
+      if (!sameJersey && !sameFull) {
+        ref.shared = true;
+        ref.names.add(label);
+      }
+    }
 
     if (jersey) {
       if (!jerseyIndex[jersey]) {
@@ -1365,6 +1393,9 @@ async function _actorSyncInner(isDryRun) {
     ...Object.keys(nameIndex).filter(k=>nameIndex[k].conflicts)
   ];
   const indexConflicts = indexConflictKeys.length;
+  const sharedActors = Object.entries(actorRefs).filter(([,v]) => v.shared)
+    .map(([actorId, v]) => ({actorId, names: [...v.names]}));
+  const sharedActorSet = new Set(sharedActors.map(x => x.actorId));
 
   // Phase 2: Match players against index
   const players = (CACHE.players||[]).filter(p => p.ClubID === clubId);
@@ -1384,7 +1415,12 @@ async function _actorSyncInner(isDryRun) {
 
     let confidence, resolvedActorId, action;
 
-    if (jerseyMatch && nameMatch && jerseyMatch !== nameMatch) {
+    if ((jerseyMatch && sharedActorSet.has(jerseyMatch)) || (nameMatch && sharedActorSet.has(nameMatch))) {
+      // ActorID is claimed by more than one person in MDM — never write it
+      confidence = 'Conflict';
+      resolvedActorId = null;
+      action = 'Conflict';
+    } else if (jerseyMatch && nameMatch && jerseyMatch !== nameMatch) {
       // Fix 1: both matched but disagree — set action = 'Conflict' not 'Skip'
       confidence = 'Conflict';
       resolvedActorId = null;
@@ -1412,7 +1448,7 @@ async function _actorSyncInner(isDryRun) {
   const notFound   = results.filter(r => r.action === 'Not found');
   const skipped    = results.filter(r => r.action === 'Skip (has value)');
   // Fix 2: index conflicts also block Apply
-  const hasConflicts = conflicts.length > 0 || indexConflicts > 0;
+  const hasConflicts = conflicts.length > 0 || indexConflicts > 0 || sharedActors.length > 0;
 
   // Fix 5: store player IDs only — not player objects (which may be stale at Apply time)
   if (!hasConflicts && toUpdate.length > 0) {
@@ -1424,7 +1460,8 @@ async function _actorSyncInner(isDryRun) {
   // Render output
   const conflictWarning = hasConflicts
     ? `<div style="font-size:11px;color:var(--red,#fc8181);background:rgba(252,129,129,0.08);border:1px solid rgba(252,129,129,0.3);border-radius:4px;padding:8px 10px;margin-bottom:10px;">
-        ⚠ ${conflicts.length} player conflict${conflicts.length!==1?'s':''}${indexConflicts>0?` · ${indexConflicts} index conflict${indexConflicts!==1?'s':''}`:''}  — resolve before applying.
+        ⚠ ${conflicts.length} player conflict${conflicts.length!==1?'s':''}${indexConflicts>0?` · ${indexConflicts} index conflict${indexConflicts!==1?'s':''}`:''}${sharedActors.length>0?` · ${sharedActors.length} shared ActorID${sharedActors.length!==1?'s':''}`:''} — resolve before applying.
+        ${sharedActors.map(x=>`<div style="margin-top:4px;">ActorID <span style="font-family:monospace;">${escHtml(x.actorId)}</span> is used by different people in MDM: ${x.names.map(n=>escHtml(n)).join(', ')} — correct it in MDM / the MDM Roster Members table first.</div>`).join('')}
        </div>` : '';
 
   outputEl.innerHTML = `
@@ -1481,7 +1518,7 @@ function runDedupPreview() {
 
   const groups = {};
   (CACHE.players||[]).forEach(p => {
-    if (!p.MDMActorID) return;
+    if (!isRealMdmId(p.MDMActorID)) return; // blank, 0 and -999 are never eligible for dedup
     const key = `${p.MDMActorID}|${p.ClubID}`;
     if (!groups[key]) groups[key] = [];
     groups[key].push(p);
@@ -2016,6 +2053,8 @@ async function savePlayer() {
   const shirt = document.getElementById('player-shirt').value.trim();
   const clubId = document.getElementById('player-club').value;
   if (!name||!shirt||!clubId) { toast('Name, shirt name and club required','error'); return; }
+  const _mdmRaw = document.getElementById('player-mdm').value.trim();
+  if (_mdmRaw && !isRealMdmId(_mdmRaw)) { toast('ActorID cannot be 0 or -999 - leave it blank until MDM assigns one','error'); return; }
   try {
     const rec = await atCreate(TABLES.players, {Name:toProperName(name),ShirtName:toShirtName(shirt),SquadNumber:parseInt(document.getElementById('player-number').value)||null,Type:document.getElementById('player-type').value,ClubID:clubId,Status:document.getElementById('player-status').value,MDMActorID:document.getElementById('player-mdm').value.trim()});
     CACHE.players.push({id:rec.id,...rec.fields});
@@ -3421,8 +3460,8 @@ function calcDataHealth() {
   const incompleteParents = CACHE.parents.filter(p => !p.PID || (isUSSport(p.ClubID) && !p.CustomSKU)).length;
   const incompleteHeroes = CACHE.heroes.filter(h => !h.ParentPIDID || !h.KitType || !h.GarmentType || (isUSSport(h.ClubID) && (!h.ProductTitle || !h.Gender || !h.JerseyColour))).length;
   const incompleteMdm = (CACHE.mdmRosterMembers||[]).filter(m => !m.RosterMemberID || String(m.RosterMemberID)==='0' || !m.RosterID).length;
-  const missingRosterLink = CACHE.heroes.filter(h => h.Status==='active' && !h.RosterID).length;
-  const missingActorId = CACHE.heroes.filter(h => h.Status==='active' && !h.ActorID).length;
+  const missingRosterLink = CACHE.heroes.filter(h => h.Status==='active' && !isRealMdmId(h.RosterID)).length;
+  const missingActorId = CACHE.heroes.filter(h => h.Status==='active' && !isRealMdmId(h.ActorID)).length;
   const provisionalHeroes = CACHE.heroes.filter(h => h.Status === 'provisional').length;
   const total = CACHE.players.length + CACHE.parents.length + CACHE.heroes.length;
   const totalIncomplete = incompletePlayers + incompleteParents + incompleteHeroes + incompleteMdm;
@@ -3492,9 +3531,9 @@ function updateStats() {
   // MDM Linked % — active heroes with all three MDM fields
   const activeHeroes = CACHE.heroes.filter(h => h.Status === 'active');
   const fullyLinked = activeHeroes.filter(h =>
-    h.ActorID && String(h.ActorID) !== '0' &&
-    h.RosterID && String(h.RosterID) !== '0' &&
-    h.RosterMemberID && String(h.RosterMemberID) !== '0'
+    isRealMdmId(h.ActorID) &&
+    isRealMdmId(h.RosterID) &&
+    isRealMdmId(h.RosterMemberID)
   ).length;
   const mdmPct = activeHeroes.length > 0 ? Math.round((fullyLinked / activeHeroes.length) * 100) : 0;
   const mdmEl = document.getElementById('stat-mdm-linked');
@@ -3761,7 +3800,7 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
     const shirtName = shirtCol!==-1 ? String(row[shirtCol]||'').trim()||rawName.toUpperCase() : rawName.toUpperCase();
     const number = numberCol!==-1 ? (parseInt(row[numberCol])||null) : null;
     const _rawActorId = actorIdCol!==-1 ? String(row[actorIdCol]||'').trim() : '';
-    const mdmId = (_rawActorId.startsWith('=') || _rawActorId.startsWith('#') || !_rawActorId) ? '' : _rawActorId;
+    const mdmId = (_rawActorId.startsWith('=') || _rawActorId.startsWith('#') || !isRealMdmId(_rawActorId)) ? '' : _rawActorId;
     const isVariant = isVariantName(rawName);
     const type = isVariant ? 'variant' : 'player';
 
@@ -3945,7 +3984,7 @@ async function confirmImport() {
         Type: p.type || prev?.Type || 'player',
         ClubID: p.clubId,
         Status: 'active',
-        MDMActorID: p.mdmId || prev?.MDMActorID || '',
+        MDMActorID: isRealMdmId(p.mdmId) ? String(p.mdmId).trim() : (isRealMdmId(prev?.MDMActorID) ? String(prev.MDMActorID).trim() : ''),
         Goalkeeper: p.goalkeeper || prev?.Goalkeeper || false,
       };
       const rec=await atCreate(TABLES.players, fields);
@@ -4459,9 +4498,10 @@ async function confirmHomeplateResolve() {
       const rec=await atCreate(TABLES.players,{Name:toProperName(r.playerName),ShirtName:toShirtName(r.playerName),SquadNumber:r.squadNumber||null,Type:'player',ClubID:r.clubId,Status:'active'});
       CACHE.players.push({id:rec.id,...rec.fields}); player={id:rec.id,...rec.fields};
     }
-    await atUpdate(TABLES.heroes,r.heroId,{PlayerID:player.id,Status:'active',ActorID:player.MDMActorID||'',...(()=>{const{rosterId}=resolveMdmLinks(player.MDMActorID||'',r.clubId,r.seasonId,hero.FontType||'',hero.KitType||'');return rosterId?{RosterID:rosterId}:{};})()});
-    const {rosterId} = resolveMdmLinks(player.MDMActorID||'',r.clubId,r.seasonId,hero.FontType||'',hero.KitType||'');
-    hero.PlayerID=player.id; hero.Status='active'; if(player.MDMActorID) hero.ActorID=player.MDMActorID; if(rosterId) hero.RosterID=rosterId;
+    const linkActorId = isRealMdmId(player.MDMActorID) ? String(player.MDMActorID).trim() : ''; // never copy a -999/0 placeholder onto a hero
+    await atUpdate(TABLES.heroes,r.heroId,{PlayerID:player.id,Status:'active',ActorID:linkActorId,...(()=>{const{rosterId}=resolveMdmLinks(linkActorId,r.clubId,r.seasonId,hero.FontType||'',hero.KitType||'');return rosterId?{RosterID:rosterId}:{};})()});
+    const {rosterId} = resolveMdmLinks(linkActorId,r.clubId,r.seasonId,hero.FontType||'',hero.KitType||'');
+    hero.PlayerID=player.id; hero.Status='active'; if(linkActorId) hero.ActorID=linkActorId; if(rosterId) hero.RosterID=rosterId;
     resolved++;
   }
   CACHE.players=CACHE.players.filter(p=>{if(p.Status!=='provisional')return true;return CACHE.heroes.some(h=>h.PlayerID===p.id&&h.Status==='provisional');});
@@ -4827,7 +4867,7 @@ async function importMdmRoster() {
   const playerUpdates = [];
   CACHE.players.filter(p => p.ClubID === clubId).forEach(p => {
     // Match by MDMActorID first, fall back to jersey name match
-    let desired = p.MDMActorID ? actorToStatus[p.MDMActorID] : null;
+    let desired = isRealMdmId(p.MDMActorID) ? actorToStatus[p.MDMActorID] : null;
     let matchedEntry = null;
     if (!desired) {
       // Fallback: find MDM entry by jersey name matching shirt name
@@ -4838,7 +4878,7 @@ async function importMdmRoster() {
       matchedEntry = rows.find(r => r.actorId === p.MDMActorID);
     }
     const needsStatusUpdate = desired && p.Status !== desired;
-    const needsActorIdUpdate = matchedEntry && matchedEntry.actorId && !p.MDMActorID;
+    const needsActorIdUpdate = matchedEntry && isRealMdmId(matchedEntry.actorId) && !isRealMdmId(p.MDMActorID);
     if (needsStatusUpdate || needsActorIdUpdate) {
       playerUpdates.push({player: p, desired: desired||p.Status, actorId: needsActorIdUpdate ? matchedEntry.actorId : null});
     }
@@ -4880,8 +4920,8 @@ async function importMdmRoster() {
   (CACHE.heroes||[]).forEach(h => {
     if (h.ClubID !== clubId) return;
     if (h.SeasonID !== seasonId) return;
-    if (!h.ActorID || !h.RosterID) return;
-    if (h.RosterMemberID && String(h.RosterMemberID) !== '0') return; // already set
+    if (!isRealMdmId(h.ActorID) || !isRealMdmId(h.RosterID)) return;
+    if (isRealMdmId(h.RosterMemberID)) return; // already set
     const rmid = actorRosterToRMID[`${h.ActorID}|${h.RosterID}`];
     if (rmid) heroUpdates.push({hero: h, rmid});
   });
@@ -5302,7 +5342,7 @@ async function applySquadUpdate() {
   });
   const squadPlayerUpdates = [];
   CACHE.players.filter(p => p.ClubID === clubId).forEach(p => {
-    if (!p.MDMActorID) return;
+    if (!isRealMdmId(p.MDMActorID)) return;
     const desired = squadActorStatus[p.MDMActorID];
     if (desired && p.Status !== desired) {
       squadPlayerUpdates.push({player: p, desired});
@@ -5783,8 +5823,8 @@ async function renderMdmPreview() {
   const heroByRosterMemberId = new Map();
   const heroByActorId = new Map();
   heroesForScope.forEach(h => {
-    if (h.RosterMemberID) heroByRosterMemberId.set(String(h.RosterMemberID), h);
-    if (h.ActorID) {
+    if (isRealMdmId(h.RosterMemberID)) heroByRosterMemberId.set(String(h.RosterMemberID), h);
+    if (isRealMdmId(h.ActorID)) {
       if (!heroByActorId.has(h.ActorID)) heroByActorId.set(h.ActorID, []);
       heroByActorId.get(h.ActorID).push(h);
     }
@@ -6202,13 +6242,13 @@ function runLinkageReport() {
     const club = clubMap.get(clubId) || '—';
     const season = seasonMap.get(seasonId) || '—';
     const n = heroes.length;
-    const actor = heroes.filter(h => h.ActorID && String(h.ActorID) !== '0').length;
-    const roster = heroes.filter(h => h.RosterID && String(h.RosterID) !== '0').length;
-    const member = heroes.filter(h => h.RosterMemberID && String(h.RosterMemberID) !== '0').length;
+    const actor = heroes.filter(h => isRealMdmId(h.ActorID)).length;
+    const roster = heroes.filter(h => isRealMdmId(h.RosterID)).length;
+    const member = heroes.filter(h => isRealMdmId(h.RosterMemberID)).length;
     const full = heroes.filter(h =>
-      h.ActorID && String(h.ActorID) !== '0' &&
-      h.RosterID && String(h.RosterID) !== '0' &&
-      h.RosterMemberID && String(h.RosterMemberID) !== '0'
+      isRealMdmId(h.ActorID) &&
+      isRealMdmId(h.RosterID) &&
+      isRealMdmId(h.RosterMemberID)
     ).length;
     totalHeroes += n; totalActor += actor; totalRoster += roster; totalMember += member; totalFull += full;
     const fullPct = n > 0 ? Math.round((full/n)*100) : 0;
@@ -6292,7 +6332,7 @@ function computeAnalytics() {
   const archivedHeroes = heroes.filter(h=>h.Status==='archived');
 
   // ── Executive Summary ─────────────────────────────────────────────────────
-  const uniqueActorIds = new Set(players.filter(p=>p.MDMActorID).map(p=>String(p.MDMActorID)));
+  const uniqueActorIds = new Set(players.filter(p=>isRealMdmId(p.MDMActorID)).map(p=>String(p.MDMActorID)));
   const exec = {
     totalHeroes: heroes.length,
     activeHeroes: activeHeroes.length,
@@ -6327,7 +6367,7 @@ function computeAnalytics() {
     if (!h.ClubID) return;
     if (!clubStats[h.ClubID]) clubStats[h.ClubID] = {club:clubMap.get(h.ClubID), active:0, players:new Set(), parents:new Set()};
     clubStats[h.ClubID].active++;
-    const playerKey = h.ActorID ? `A:${h.ActorID}` : h.PlayerID ? `P:${h.PlayerID}` : null;
+    const playerKey = isRealMdmId(h.ActorID) ? `A:${h.ActorID}` : h.PlayerID ? `P:${h.PlayerID}` : null;
     if (playerKey) clubStats[h.ClubID].players.add(playerKey);
     if (h.ParentPIDID) clubStats[h.ClubID].parents.add(h.ParentPIDID);
   });
@@ -6363,7 +6403,7 @@ function computeAnalytics() {
   });
 
   // ── MDM coverage ─────────────────────────────────────────────────────────
-  const fullyLinked = activeHeroes.filter(h=>h.ActorID&&String(h.ActorID)!=='0'&&h.RosterID&&String(h.RosterID)!=='0'&&h.RosterMemberID&&String(h.RosterMemberID)!=='0').length;
+  const fullyLinked = activeHeroes.filter(h=>isRealMdmId(h.ActorID)&&isRealMdmId(h.RosterID)&&isRealMdmId(h.RosterMemberID)).length;
   const mdmPct = activeHeroes.length > 0 ? Math.round((fullyLinked/activeHeroes.length)*100) : 0;
 
   ANALYTICS_CACHE = {exec, seasonGroups, clubRows, byGarment, byKit, byFont, gkCount, specialsCount, playerCount, mensCount, womensCount, kidsCount, mdmPct, activeTotal:activeHeroes.length};
@@ -6586,9 +6626,9 @@ function runAnalytics() {
   document.getElementById('an-clubs-count').textContent = CACHE.clubs.length;
 
   const fullyLinked = activeHeroes.filter(h =>
-    h.ActorID && String(h.ActorID) !== '0' &&
-    h.RosterID && String(h.RosterID) !== '0' &&
-    h.RosterMemberID && String(h.RosterMemberID) !== '0'
+    isRealMdmId(h.ActorID) &&
+    isRealMdmId(h.RosterID) &&
+    isRealMdmId(h.RosterMemberID)
   ).length;
   const mdmPct = totalActive > 0 ? Math.round((fullyLinked / totalActive) * 100) : 0;
   const mdmColour = mdmPct >= 90 ? 'var(--green)' : mdmPct >= 50 ? 'var(--amber)' : 'var(--red,#fc8181)';
@@ -6603,9 +6643,9 @@ function runAnalytics() {
   else { healthEl.textContent = `🔴 ${health.totalIssues} items`; healthEl.style.color = 'var(--red,#fc8181)'; }
 
   // ── Attention Required ───────────────────────────────────────────────────
-  const missingActor = activeHeroes.filter(h => !h.ActorID || String(h.ActorID) === '0').length;
-  const missingRoster = activeHeroes.filter(h => !h.RosterID || String(h.RosterID) === '0').length;
-  const missingMember = activeHeroes.filter(h => !h.RosterMemberID || String(h.RosterMemberID) === '0').length;
+  const missingActor = activeHeroes.filter(h => !isRealMdmId(h.ActorID)).length;
+  const missingRoster = activeHeroes.filter(h => !isRealMdmId(h.RosterID)).length;
+  const missingMember = activeHeroes.filter(h => !isRealMdmId(h.RosterMemberID)).length;
   const missingParent = activeHeroes.filter(h => !h.ParentPIDID).length;
   const provisionalCount = (CACHE.heroes||[]).filter(h => h.Status === 'provisional').length;
   const attentionItems = [
@@ -6648,10 +6688,10 @@ function runAnalytics() {
     const club = clubMap.get(clubId)||'—';
     const season = seasonMap.get(seasonId)||'—';
     const n = heroes.length;
-    const actor = heroes.filter(h=>h.ActorID&&String(h.ActorID)!=='0').length;
-    const roster = heroes.filter(h=>h.RosterID&&String(h.RosterID)!=='0').length;
-    const member = heroes.filter(h=>h.RosterMemberID&&String(h.RosterMemberID)!=='0').length;
-    const full = heroes.filter(h=>h.ActorID&&String(h.ActorID)!=='0'&&h.RosterID&&String(h.RosterID)!=='0'&&h.RosterMemberID&&String(h.RosterMemberID)!=='0').length;
+    const actor = heroes.filter(h=>isRealMdmId(h.ActorID)).length;
+    const roster = heroes.filter(h=>isRealMdmId(h.RosterID)).length;
+    const member = heroes.filter(h=>isRealMdmId(h.RosterMemberID)).length;
+    const full = heroes.filter(h=>isRealMdmId(h.ActorID)&&isRealMdmId(h.RosterID)&&isRealMdmId(h.RosterMemberID)).length;
     ltHeroes+=n;ltActor+=actor;ltRoster+=roster;ltMember+=member;ltFull+=full;
     const fp = n>0?Math.round((full/n)*100):0;
     const fc = fp>=90?'var(--green)':fp>=50?'var(--amber)':'var(--red,#fc8181)';
@@ -6873,7 +6913,7 @@ async function runMdmBackfill(dryRun) {
     if (h.Status !== 'active') return false;
     if (clubFilter && h.ClubID !== clubFilter) return false;
     if (seasonFilter && h.SeasonID !== seasonFilter) return false;
-    return !h.ActorID || !h.RosterID;
+    return !isRealMdmId(h.ActorID) || !isRealMdmId(h.RosterID);
   });
 
   if (candidates.length === 0) {
@@ -6886,15 +6926,18 @@ async function runMdmBackfill(dryRun) {
   let skippedNoActor = 0, skippedNoMapping = 0, skippedAlreadyComplete = 0, skippedOther = 0;
   for (const hero of candidates) {
     const player = CACHE_MAPS.playerById.get(hero.PlayerID);
-    const actorId = player?.MDMActorID || hero.ActorID || '';
+    // Only real IDs count: a -999/0 placeholder on the hero must never be fed into the roster lookup
+    const playerActor = isRealMdmId(player?.MDMActorID) ? String(player.MDMActorID).trim() : '';
+    const heroActor   = isRealMdmId(hero.ActorID) ? String(hero.ActorID).trim() : '';
+    const actorId = playerActor || heroActor;
     const {rosterId, missingMapping} = resolveMdmLinks(actorId, hero.ClubID, hero.SeasonID, hero.FontType||'', hero.KitType||'');
     const fields = {};
-    if (!hero.ActorID && actorId) fields.ActorID = actorId;
-    if (!hero.RosterID && rosterId) fields.RosterID = rosterId;
+    if (!isRealMdmId(hero.ActorID) && isRealMdmId(actorId)) fields.ActorID = String(actorId).trim();
+    if (!isRealMdmId(hero.RosterID) && isRealMdmId(rosterId)) fields.RosterID = String(rosterId).trim();
     if (Object.keys(fields).length === 0) {
       if (!actorId) skippedNoActor++;
-      else if (missingMapping && !hero.RosterID) skippedNoMapping++;
-      else if (hero.ActorID && hero.RosterID) skippedAlreadyComplete++;
+      else if (missingMapping && !isRealMdmId(hero.RosterID)) skippedNoMapping++;
+      else if (isRealMdmId(hero.ActorID) && isRealMdmId(hero.RosterID)) skippedAlreadyComplete++;
       else skippedOther++;
       continue;
     }
@@ -7130,7 +7173,7 @@ function renderRmCoverageBanner(clubFilter, seasonFilter) {
   if (!banner) return;
   // Group active heroes by ClubID+SeasonID+FontType+KitType and check mapping
   const missingByClubSeason = new Map();
-  (CACHE.heroes||[]).filter(h => h.Status === 'active' && !h.RosterID).forEach(h => {
+  (CACHE.heroes||[]).filter(h => h.Status === 'active' && !isRealMdmId(h.RosterID)).forEach(h => {
     const clubId = h.ClubID || '';
     const seasonId = h.SeasonID || '';
     if (clubFilter && clubId !== clubFilter) return;
