@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v234 -->
+<!-- HEROPID-BUILD-v235 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -704,6 +704,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         <select class="form-select" id="integrity-club" style="width:200px;"></select>
         <button class="btn btn-ghost btn-sm" id="integrity-run-btn" onclick="runIntegrityCheck()">⊙ Run Check</button>
         <button class="btn btn-primary btn-sm" id="integrity-apply-btn" onclick="applyIntegrityRepair()" disabled>✓ Apply Repair</button>
+        <button class="btn btn-ghost btn-sm" id="integrity-xlsx-btn" onclick="exportIntegrityXlsx()" disabled title="One sheet per kind of problem, in MDM roster-member format">⬇ Fix list (Excel)</button>
         <span id="integrity-status" style="font-size:11px;color:var(--text3);"></span>
       </div>
       <div id="integrity-output" style="display:none;"></div>
@@ -1197,7 +1198,7 @@ const BRAND_ANCHORS = ['FRANCE NIKE','FRANCE ADIDAS','FRANCE PUMA','DFB ADIDAS',
 // Local cache for search performance
 let CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null,catalogues:[],fonts:[],rosterMappings:[],kitColours:[]};
 let ANALYTICS_CACHE = null;
-function invalidateDerivedReports() { ANALYTICS_CACHE = null; }
+function invalidateDerivedReports() { ANALYTICS_CACHE = null; if (typeof invalidateIntegrityExport === 'function') invalidateIntegrityExport(); }
 // O(1) lookup maps — rebuilt whenever CACHE arrays change
 let CACHE_MAPS = {
   heroByPID: new Map(),       // String(PID) -> hero
@@ -1711,11 +1712,11 @@ function computeIntegrity({heroes, players, mdmRows, clubs, clubId}) {
   heroes.filter(inHero).forEach(h => { if (isRealMdmId(h.RosterMemberID)) { const k = String(h.RosterMemberID).trim(); heldBy.set(k, (heldBy.get(k) || 0) + 1); } });
   const rmidConflicts = [];
   idx.rmidActors.forEach((set, k) => { if (set.size > 1 && (!clubId || heldBy.has(k))) rmidConflicts.push({rmid: k, actors: [...set], pids: heldBy.get(k) || 0}); });
-  const rmidMismatch = []; let rmidNotInMdm = 0;
+  const rmidMismatch = [], rmidNotInMdmList = []; let rmidNotInMdm = 0;
   heroes.filter(inHero).forEach(h => {
     if (!isRealMdmId(h.RosterMemberID) || !isRealMdmId(h.ActorID)) return;
     const k = String(h.RosterMemberID).trim();
-    if (!idx.rmidSeen.has(k)) { rmidNotInMdm++; return; }
+    if (!idx.rmidSeen.has(k)) { rmidNotInMdm++; rmidNotInMdmList.push(h); return; }
     const set = idx.rmidActors.get(k);
     if (set && !set.has(String(h.ActorID).trim())) rmidMismatch.push({hero: h, mdmActors: [...set]});
   });
@@ -1723,7 +1724,315 @@ function computeIntegrity({heroes, players, mdmRows, clubs, clubId}) {
   return {playerMismatch, playerAmbiguous, playerUnverified, playersValidated,
           repairable, blockedByPlayer, unverifiedPlayer, hasRmid, clubMismatch,
           heroesChecked, heroesOk, heroBlank, orphans, playerNoId,
-          rmidConflicts, rmidMismatch, rmidNotInMdm};
+          rmidConflicts, rmidMismatch, rmidNotInMdm, rmidNotInMdmList};
+}
+
+// ─── FIX-LIST EXCEL EXPORT (v235) ────────────────────────────────────────────
+// One workbook, one sheet per KIND of problem. Sheets 1-7 are rows in MDM roster-member format (columns A-N) that a person can fix
+// directly; columns headed "REF" are reference only. Sheet 8 is NOT upload-ready: it lists contradictions a person must resolve
+// first (we never turn a contradiction into an upload-ready row). The workbook is built ONCE, at check time, and frozen.
+const MDM_RM_HEAD = ['id', 'rosterId', 'name', 'jerseyName', 'jerseyNumber', 'jerseyNumberString', 'position', 'actorId', 'rosterStatus', 'displayStatus', 'startDate', 'endDate', 'nickname', 'playerTier'];
+// digit-only text -> number, EXCEPT identifiers with leading zeros ("000123"), which must stay text. Max 15 digits (exact in a double).
+const _cellVal = v => { const t = String(v == null ? '' : v).trim(); return /^(?:0|[1-9]\d{0,14})$/.test(t) ? Number(t) : t; };
+const _selName = v => (v && typeof v === 'object') ? String(v.name || '') : String(v == null ? '' : v);
+const _ordRows = (a, b) => (Number(a.RosterID) || 0) - (Number(b.RosterID) || 0) || String(a.RosterMemberID == null ? '' : a.RosterMemberID).localeCompare(String(b.RosterMemberID == null ? '' : b.RosterMemberID));
+// What PRINTS on the back of a shirt is compared separately from how a person's NAME is matched. Here only case, spacing and Unicode
+// composition are formatting; punctuation, hyphens and accents are NOT (S.PERSON / SPERSON, SMITH-JONES / SMITH JONES and ZAÏRE / ZAIRE print differently).
+const _shirtTidy = v => String(v == null ? '' : v).normalize('NFC').replace(/\s+/g, ' ').trim();      // trim + collapse whitespace, nothing else
+const _shirtKey = v => _shirtTidy(v).toUpperCase();
+function _deepFreeze(o) { if (o && typeof o === 'object' && !Object.isFrozen(o)) { Object.freeze(o); Object.values(o).forEach(_deepFreeze); } return o; }
+
+function _mdmRowOut(r) {                                   // an existing MDM row, as MDM has it
+  const n = String(r.JerseyNumber == null ? '' : r.JerseyNumber).trim();
+  return [_cellVal(r.RosterMemberID), _cellVal(r.RosterID), r.PlayerName || '', r.JerseyName || '', _cellVal(n), n, r.Position || '',
+          _cellVal(r.ActorID), _selName(r.RosterStatus), _selName(r.DisplayStatus), '', '', '', 5];
+}
+function _playerRowOut(p, rosterId, rmid, actorId) {      // one of OUR players, as an MDM row (id / rosterId blank when we don't know them)
+  const active = (p.Status || 'active') === 'active', sn = p.SquadNumber == null ? '' : String(p.SquadNumber).trim();
+  return [_cellVal(rmid || ''), _cellVal(rosterId || ''), p.Name || '', p.ShirtName || '', _cellVal(sn), sn, p.Goalkeeper ? 'GK' : 'UK',
+          _cellVal(actorId != null ? actorId : p.MDMActorID), active ? 'A' : 'I', active ? 'V' : 'H', '', '', '', 5];
+}
+
+// Everything MDM tells us, indexed once. Placeholder-ActorID rows (blank / 0 / -999) are KEPT as evidence that the entry exists.
+function _mdmEvidenceIndex(mdmRows, clubs) {
+  const clubIdByName = new Map((clubs || []).map(c => [String(c.Name || '').trim().toLowerCase(), c.id]));
+  const clubOf = r => r.ClubID || clubIdByName.get(String(r.Club || '').trim().toLowerCase()) || '';
+  const byActor = new Map(), byName = new Map(), byClubName = new Map(), byClubNameAny = new Map(), byRmid = new Map(), rosterClubs = new Map();
+  const push = (m, k, v) => { if (!m.has(k)) m.set(k, []); m.get(k).push(v); };
+  (mdmRows || []).forEach(r => {
+    const a = String(r.ActorID == null ? '' : r.ActorID).trim(), nm = foldName(r.PlayerName), club = clubOf(r);
+    if (isRealMdmId(a)) push(byActor, a, r);
+    if (nm) push(byClubNameAny, club + '|' + nm, r);
+    if (nm && isRealMdmId(a)) { push(byName, nm, r); push(byClubName, club + '|' + nm, r); }
+    if (isRealMdmId(r.RosterMemberID)) push(byRmid, String(r.RosterMemberID).trim(), r);
+    if (isRealMdmId(r.RosterID) && club) { const k = String(r.RosterID).trim(); if (!rosterClubs.has(k)) rosterClubs.set(k, new Set()); rosterClubs.get(k).add(club); }
+  });
+  return {clubOf, byActor, byName, byClubName, byClubNameAny, byRmid, rosterClubs};
+}
+
+// WHY can't MDM confirm this player?
+//  name-differs : MDM has this ActorID at this club, under a different name
+//  mdm-blank    : MDM already has this NAME at this club, but with no usable ActorID (blank / 0 / -999): fix THAT row, don't add another
+//  other-club   : MDM has the ActorID (or the name) only at another club
+//  missing      : MDM has neither the ActorID nor the name for this club
+function explainUnverified(p, ev) {
+  const a = String(p.MDMActorID).trim(), nm = foldName(p.Name);
+  const actorRows = ev.byActor.get(a) || [];
+  const atClub = actorRows.filter(r => ev.clubOf(r) === p.ClubID);
+  if (atClub.length) return {reason: 'name-differs', rows: atClub};
+  const blankHere = (ev.byClubNameAny.get(p.ClubID + '|' + nm) || []).filter(r => !isRealMdmId(r.ActorID));
+  if (blankHere.length) return {reason: 'mdm-blank', rows: blankHere};
+  const seen = new Set(), rows = [];
+  [...actorRows, ...(ev.byName.get(nm) || []).filter(r => ev.clubOf(r) !== p.ClubID)].forEach(r => { const k = r.id || JSON.stringify(r); if (!seen.has(k)) { seen.add(k); rows.push(r); } });
+  return rows.length ? {reason: 'other-club', rows} : {reason: 'missing', rows: []};
+}
+
+function buildIntegrityWorkbook(r, ctx) {
+  const heroes = ctx.heroes || [], players = ctx.players || [], clubs = ctx.clubs || [];
+  const scope = ctx.scopeName || 'All clubs', stamp = ctx.today || new Date().toISOString().slice(0, 16).replace('T', ' ');
+  const clubName = id => (clubs.find(c => c.id === id) || {}).Name || '';
+  const ev = _mdmEvidenceIndex(ctx.mdmRows, clubs);
+  const playerById = new Map(players.map(p => [p.id, p]));
+  const heroesOf = new Map(); heroes.forEach(h => { if (!heroesOf.has(h.PlayerID)) heroesOf.set(h.PlayerID, []); heroesOf.get(h.PlayerID).push(h); });
+  const str = v => String(v == null ? '' : v).trim();
+  const idList = set => [...set].filter(Boolean).join(' / ');
+
+  const missing = [], nameDiff = [], otherClub = [], mdmBlank = [];
+  (r.playerUnverified || []).forEach(m => {
+    const ex = explainUnverified(m.player, ev);
+    ({'missing': missing, 'name-differs': nameDiff, 'other-club': otherClub, 'mdm-blank': mdmBlank})[ex.reason].push({...m, ...ex});
+  });
+  const sheets = [], review = [];
+  const addSheet = (name, what, todo, ref, rows, nPlayers) => { if (rows.length) sheets.push({name, what, todo, mdmFormat: true, head: MDM_RM_HEAD.concat(ref), rows, players: nPlayers}); };
+  const addReview = (problem, who, club, actor, member, detail, rec) => review.push([problem, who, club, actor, member, detail, rec]);
+
+  // ── ONE shared member-evidence check, used by BOTH sheet 1 and sheet 6 ─────────────────────────────────────────────────
+  // A member id taken from PIDs may appear in an upload-ready row only if EVERY cached PID holding it (any club, any ActorID, including
+  // blank / placeholder ones) agrees on player identity, ActorID and roster, and each PID agrees with its OWN player (ActorID, club).
+  // A conflicted member is withheld from EVERY MDM-format sheet and reported once on the review sheet.
+  const holders = new Map();
+  heroes.forEach(h => { if (isRealMdmId(h.RosterMemberID)) { const k = str(h.RosterMemberID); if (!holders.has(k)) holders.set(k, []); holders.get(k).push(h); } });
+  const identOf = h => { const pl = playerById.get(h.PlayerID); return pl ? foldName(pl.Name) + '|' + (pl.ClubID || h.ClubID || '') : 'no-player:' + h.PlayerID; };
+  const pidProblem = h => {                                  // does this PID contradict its OWN player?
+    const pl = playerById.get(h.PlayerID);
+    if (!pl) return `PID ${h.PID} has no player record`;
+    const pa = isRealMdmId(pl.MDMActorID) ? str(pl.MDMActorID) : '', ha = isRealMdmId(h.ActorID) ? str(h.ActorID) : '';
+    if (pa && ha && pa !== ha) return `PID ${h.PID} says ActorID ${ha}, but its player "${pl.Name}" is ${pa}`;
+    if (!pa && ha) return `"${pl.Name}" has no ActorID of its own, so PID ${h.PID}'s ActorID ${ha} cannot be cross-checked`;
+    const hc = str(h.ClubID), pc = str(pl.ClubID);
+    if (hc && pc && hc !== pc) return `PID ${h.PID} is filed under ${clubName(hc) || hc}, but its player is at ${clubName(pc) || pc}`;
+    return null;
+  };
+  const evidences = new Map();
+  // RESOLVED evidence for a member id, not just pass/fail. Rows are built from THIS, never from "the first holder":
+  //   actor  : the single real ActorID, collected from the holders' PIDs AND their Player records (a blank PID ActorID cannot hide a
+  //            conflicting Player ActorID)
+  //   roster : the single real roster, collected from ALL holders (a blank roster on one PID cannot hide another PID's roster), then
+  //            checked against MDM for EVERY holder's club
+  //   why    : set when the member cannot be resolved safely (different players / ActorIDs / rosters, a PID contradicting its own
+  //            player, or the resolved roster belonging to another club in MDM)
+  const memberEvidence = rm => {
+    if (evidences.has(rm)) return evidences.get(rm);
+    const hs = holders.get(rm) || [];
+    const idents = new Set(hs.map(identOf)), actors = new Set(), rosters = new Set(hs.filter(h => isRealMdmId(h.RosterID)).map(h => str(h.RosterID)));
+    hs.forEach(h => { if (isRealMdmId(h.ActorID)) actors.add(str(h.ActorID)); const pl = playerById.get(h.PlayerID); if (pl && isRealMdmId(pl.MDMActorID)) actors.add(str(pl.MDMActorID)); });
+    let why = null;
+    if (idents.size > 1) why = `${hs.length} PID(s) of different players hold it`;
+    else for (const h of hs) { const w = pidProblem(h); if (w) { why = w; break; } }          // the most specific explanation first: this PID vs ITS player
+    if (!why && actors.size > 1) why = `its PIDs / players carry different ActorIDs (${idList(actors)})`;
+    if (!why && rosters.size > 1) why = `its PIDs sit on different rosters (${idList(rosters)})`;
+    const roster = rosters.size === 1 ? [...rosters][0] : '', actor = actors.size === 1 ? [...actors][0] : '';
+    if (!why && roster) {
+      const oc = ev.rosterClubs.get(roster);
+      if (oc) for (const h of hs) {
+        const pl = playerById.get(h.PlayerID), club = (pl && pl.ClubID) || str(h.ClubID);
+        if (club && !oc.has(club)) { why = `roster ${roster} is a ${[...oc].map(clubName).join(' / ') || 'different club'} roster in MDM, but "${(pl || {}).Name || h.PID}" is at ${clubName(club) || 'another club'}`; break; }
+      }
+    }
+    // The UPLOAD FIELDS must agree across every Player record that holds this member id. Harmless formatting differences (case, accents,
+    // spacing) resolve to ONE deterministic row; a genuine disagreement (shirt name, squad number, goalkeeper flag, status) is withheld
+    // and reported. A blank field is "no claim": it is filled from the other record. Deterministic order: the record with the MOST PIDs on
+    // this member first, ties by lowest record id.
+    let fields = null;
+    if (!why) {
+      const cnt = new Map(); hs.forEach(h => cnt.set(h.PlayerID, (cnt.get(h.PlayerID) || 0) + 1));
+      const pls = [...cnt.keys()].map(id => playerById.get(id)).filter(Boolean).sort((a, b) => (cnt.get(b.id) - cnt.get(a.id)) || String(a.id).localeCompare(String(b.id)));
+      const distinct = (get, norm) => { const m = new Map(); pls.forEach(pl => { const v = get(pl), k = norm(v); if (k && !m.has(k)) m.set(k, v); }); return m; };
+      const shirts = distinct(pl => _shirtTidy(pl.ShirtName), _shirtKey), nums = distinct(pl => str(pl.SquadNumber), x => x),
+            poss = distinct(pl => pl.Goalkeeper ? 'GK' : 'UK', x => x), stats = distinct(pl => (pl.Status || 'active') === 'active' ? 'active' : 'not active', x => x);
+      const show = m => [...m.values()].map(v => `"${v}"`).join(' / '), bad = [];
+      if (shirts.size > 1) bad.push(`shirt name (${show(shirts)})`);
+      if (nums.size > 1) bad.push(`squad number (${show(nums)})`);
+      if (poss.size > 1) bad.push(`goalkeeper flag (${show(poss)})`);
+      if (stats.size > 1) bad.push(`status (${show(stats)})`);
+      if (bad.length) why = `its Player records for one person disagree about the ${bad.join(', ')}`;
+      else if (pls.length) fields = {name: pls[0].Name || '', shirt: [...shirts.values()][0] || '', num: [...nums.values()][0] || '', gk: !!pls[0].Goalkeeper, status: pls[0].Status, base: pls[0], ids: pls.map(pl => pl.id)};
+      else why = `no Player record found for its PIDs`;
+    }
+    const v = {rm, hs, why, roster, actor, fields}; evidences.set(rm, v); return v;
+  };
+  // the MDM-format row fields for a resolved member (a stand-in "player" built from the resolved evidence, not from whichever record came first)
+  const rowPlayer = e => ({Name: e.fields.name, ShirtName: e.fields.shirt, SquadNumber: e.fields.num, Goalkeeper: e.fields.gk, Status: e.fields.status, MDMActorID: e.actor});
+  const reviewedMembers = new Set();
+  const reviewMember = (rm, v) => {                          // one review row per conflicted member, however many sheets noticed it
+    if (reviewedMembers.has(rm)) return; reviewedMembers.add(rm);
+    const pls = [...new Set(v.hs.map(h => (playerById.get(h.PlayerID) || {}).Name || '(no player)'))];
+    const acts = new Set(); v.hs.forEach(h => { if (isRealMdmId(h.ActorID)) acts.add(str(h.ActorID)); const pl = playerById.get(h.PlayerID); if (pl && isRealMdmId(pl.MDMActorID)) acts.add(str(pl.MDMActorID)); });
+    addReview('A member id cannot be used safely', pls.join(', '), [...new Set(v.hs.map(h => clubName(h.ClubID)).filter(Boolean))].join(', '), idList(acts), rm,
+      `Member ${rm}: ${v.why}. Held by ${v.hs.length} PID(s) of "${pls.join('", "')}". Withheld from every upload sheet: decide which side is right first.`, [...new Set(v.hs.map(h => h.PlayerID))].join(', '));
+  };
+
+  // 1. Missing from MDM: our players. A member id / roster taken from a PID is used only if (a) the SHARED member check passes (no conflict
+  //    among ALL holders, and each PID agrees with its player), (b) MDM does not give that member id to another ActorID, and (c) MDM does not
+  //    know the roster only at another club. Anything else is withheld and reported, never turned into an upload row.
+  const s1 = [], proposedMembers = new Set(), seenS1 = new Set(), s1entries = [];     // proposedMembers: member ids already proposed here: sheet 6 must not propose the same row again
+  const keyOf = (name, club, actor, ro) => [ro, foldName(name), club, str(actor)].join('|');
+  // rows WITHOUT a member id: the roster-based handling (an identical row is emitted once)
+  const addPlain = (p, ro, n, issue) => {
+    const row = _playerRowOut(p, ro, '').concat([issue, clubName(p.ClubID), p.id, n]), k = row.slice(0, 14).join('|');
+    if (seenS1.has(k)) return; seenS1.add(k);
+    s1entries.push({row, member: '', key: keyOf(p.Name, p.ClubID, p.MDMActorID, ro)});
+  };
+  // rows WITH a member id: ONE per member id, built from the RESOLVED evidence (never from whichever player was visited first)
+  const addMember = (rm, issue) => {
+    if (proposedMembers.has(rm)) return; proposedMembers.add(rm);
+    const e = memberEvidence(rm), rp = rowPlayer(e), club = e.fields.base.ClubID;
+    s1entries.push({row: _playerRowOut(rp, e.roster, rm, e.actor).concat([issue, clubName(club), e.fields.ids.join(', '), e.hs.length]), member: rm, key: keyOf(rp.Name, club, e.actor, e.roster)});
+  };
+  missing.forEach(m => {
+    const p = m.player, hs = heroesOf.get(p.id) || [], pairs = new Map(), clash = new Map();
+    hs.forEach(h => {
+      let ro = isRealMdmId(h.RosterID) ? str(h.RosterID) : '';
+      const rm = isRealMdmId(h.RosterMemberID) ? str(h.RosterMemberID) : '';
+      if (!ro && !rm) return;
+      if (rm) { const e = memberEvidence(rm); if (e.why) { reviewMember(rm, e); return; } ro = e.roster; }   // conflicted member: withheld everywhere; otherwise the roster is the one RESOLVED from ALL holders
+      else { const w = pidProblem(h); if (w) { const k = 'pid ' + h.PID; if (!clash.has(k)) clash.set(k, {n: 1, why: w, member: ''}); return; } }   // no member id: the roster-based handling, as before
+      const owners = rm ? (ev.byRmid.get(rm) || []) : [];
+      const rosterOwnerClubs = ro ? ev.rosterClubs.get(ro) : null;
+      if (owners.length) { const k = 'member ' + rm; if (!clash.has(k)) clash.set(k, {n: 0, why: `MDM lists member ${rm} under ActorID ${idList(new Set(owners.map(o => str(o.ActorID))))} ("${[...new Set(owners.map(o => o.PlayerName))].join('", "')}"), not ${m.stored}`, member: rm}); clash.get(k).n++; return; }
+      if (rosterOwnerClubs && p.ClubID && !rosterOwnerClubs.has(p.ClubID)) { const k = 'roster ' + ro; if (!clash.has(k)) clash.set(k, {n: 0, why: `roster ${ro} is a ${[...rosterOwnerClubs].map(clubName).join(' / ') || 'different club'} roster in MDM, but our player is at ${clubName(p.ClubID) || 'another club'}`, member: rm}); clash.get(k).n++; return; }
+      const k = ro + '|' + rm; pairs.set(k, (pairs.get(k) || 0) + 1);
+    });
+    for (const k of [...pairs.keys()]) {                       // a roster that already has a member-id row needs no second, id-less row
+      const [ro0, rm0] = k.split('|');
+      if (!rm0 && ro0 && [...pairs.keys()].some(k2 => k2 !== k && k2.startsWith(ro0 + '|') && k2.split('|')[1])) pairs.delete(k);
+    }
+    clash.forEach(c => addReview('A PID points at someone else\'s entry in MDM', p.Name, clubName(p.ClubID), m.stored, c.member, `${c.n} PID(s) of "${p.Name}": ${c.why}. Not proposed as a row: decide which side is wrong first.`, p.id));
+    const issue = `ActorID ${m.stored} has no row in MDM for ${clubName(p.ClubID) || 'this club'}. Add this roster member in MDM, or correct our ActorID/name if MDM is right.`;
+    if (!pairs.size) addPlain(p, '', hs.length, issue);
+    else [...pairs].sort().forEach(([k, n]) => { const [ro, rm] = k.split('|'); if (rm) addMember(rm, issue); else addPlain(p, ro, n, issue); });
+  });
+  // an id-less row whose roster + person already has a member row is redundant (this also works ACROSS records of the same person)
+  const memberKeys = new Set(s1entries.filter(x => x.member).map(x => x.key));
+  s1entries.forEach(x => { if (x.member || !memberKeys.has(x.key)) s1.push(x.row); });
+  addSheet('1 Missing from MDM', 'Our player has an ActorID that MDM does not have for this club.',
+    'Add the roster member in MDM (id and rosterId are filled only where MDM does not contradict our PIDs), or correct our ActorID if MDM is right.',
+    ['REF - Issue', 'REF - Club', 'REF - Our record', 'REF - PIDs on this roster'], s1, missing.length);
+
+  // 2. Name differs: MDM's own rows for that ActorID at this club
+  const s2 = [];
+  nameDiff.forEach(m => {
+    const p = m.player;
+    m.rows.slice().sort(_ordRows).forEach(row => {
+      s2.push(_mdmRowOut(row).concat([`MDM calls ActorID ${m.stored} "${row.PlayerName}"; our player is "${p.Name}". Make them match: edit the name here (MDM) or rename our player.`, p.Name, clubName(p.ClubID), p.id]));
+    });
+  });
+  addSheet('2 Name differs', 'MDM has this ActorID at this club, but under a different name from ours.',
+    'Decide which name is right. Fix the name here for MDM, or tell us to rename our player.',
+    ['REF - Issue', 'REF - Our name', 'REF - Club', 'REF - Our record'], s2, nameDiff.length);
+
+  // 3. Other club only
+  const s3 = [];
+  otherClub.forEach(m => {
+    const p = m.player, clubsSeen = [...new Set(m.rows.map(row => row.Club || clubName(ev.clubOf(row))).filter(Boolean))].join(', ');
+    m.rows.slice().sort(_ordRows).forEach(row => {
+      s3.push(_mdmRowOut(row).concat([`"${p.Name}" (ActorID ${m.stored}) is in MDM only at ${clubsSeen || 'another club'}. Is our club wrong, or is the roster entry for ${clubName(p.ClubID) || 'our club'} missing?`, p.Name, clubName(p.ClubID), row.Club || clubName(ev.clubOf(row))]));
+    });
+  });
+  addSheet('3 Other club only', 'MDM has this player (or ActorID) only at a different club from ours.',
+    'Check which club is right. Either correct our player\'s club, or add the roster entry for our club in MDM.',
+    ['REF - Issue', 'REF - Our name', 'REF - Our club', 'REF - MDM club'], s3, otherClub.length);
+
+  // 4 + 5. ActorID disagrees / several ActorIDs: MDM's rows for that name at that club
+  const rowsFor = p => (ev.byClubName.get(p.ClubID + '|' + foldName(p.Name)) || []).slice().sort(_ordRows);
+  const s4 = [], s5 = [];
+  (r.playerMismatch || []).forEach(m => rowsFor(m.player).forEach(row => s4.push(_mdmRowOut(row).concat([`Ours says ${m.stored}; MDM says ${m.mdmIds.join(' / ')} for "${m.player.Name}" at ${clubName(m.player.ClubID)}. Decide which ID is right and fix the other side.`, m.stored, clubName(m.player.ClubID), m.player.id]))));
+  addSheet('4 ActorID disagrees', 'Same name, same club, but our ActorID is not the one MDM uses.', 'Decide which ActorID is right, then fix our player or the MDM rows.',
+    ['REF - Issue', 'REF - Our ActorID', 'REF - Club', 'REF - Our record'], s4, (r.playerMismatch || []).length);
+  (r.playerAmbiguous || []).forEach(m => rowsFor(m.player).forEach(row => s5.push(_mdmRowOut(row).concat([`MDM lists "${m.player.Name}" at ${clubName(m.player.ClubID)} under more than one ActorID (${m.mdmIds.join(' / ')}). Pick the right one and correct the others.`, m.stored, clubName(m.player.ClubID), m.player.id]))));
+  addSheet('5 Several ActorIDs', 'MDM lists one name at one club under more than one ActorID.', 'Pick the right ActorID and correct the other rows in MDM.',
+    ['REF - Issue', 'REF - Our ActorID', 'REF - Club', 'REF - Our record'], s5, (r.playerAmbiguous || []).length);
+
+  // 6. RosterMemberIDs that PIDs hold but MDM doesn't have: rows to ADD (id = the RosterMemberID). The candidate member ids come from the
+  //    check, but each is judged by the SHARED member evidence over ALL cached holders (any club, blank / placeholder fields included).
+  //    ONE row per member id, built from the RESOLVED actor and roster: never from the first holder.
+  const cand = new Map();
+  (r.rmidNotInMdmList || []).forEach(h => { const k = str(h.RosterMemberID); if (!cand.has(k)) cand.set(k, h); });
+  const s6 = [], s6players = new Set();
+  [...cand.entries()].sort((a, b) => (Number(a[0]) || 0) - (Number(b[0]) || 0)).forEach(([rm, h0]) => {
+    const e = memberEvidence(rm);
+    if (e.why) { reviewMember(rm, e); return; }
+    if (proposedMembers.has(rm)) return;            // already an upload row on sheet 1 (the player is missing too): one row, not two
+    const hs = e.hs.length ? e.hs : [h0], holder = hs[0], rp = rowPlayer(e);
+    const clubId = e.fields.base.ClubID || holder.ClubID || '';
+    e.fields.ids.forEach(id => s6players.add(id));
+    s6.push(_playerRowOut(rp, e.roster, rm, e.actor).concat([`${hs.length} PID(s) hold RosterMemberID ${rm}, which is not in our MDM Roster Members table. Add this row (or reload the roster), or correct the PIDs.`, clubName(clubId), hs.length, holder.PID]));
+  });
+  addSheet('6 Member not in MDM', 'PIDs hold a RosterMemberID that our MDM table does not contain.', 'Add these rows to MDM (or reload that roster here), or correct the PIDs.',
+    ['REF - Issue', 'REF - Club', 'REF - PIDs holding it', 'REF - Example PID'], s6, s6players.size);
+
+  // 7. MDM already has this player at this club but WITHOUT a usable ActorID: give THAT row the ActorID (no new row)
+  const s7 = [];
+  mdmBlank.forEach(m => {
+    const p = m.player;
+    m.rows.slice().sort(_ordRows).forEach(row => s7.push(_mdmRowOut(row).concat([`MDM already has "${row.PlayerName}" at ${clubName(p.ClubID) || 'this club'}, but its ActorID is blank or a placeholder (${str(row.ActorID) || 'blank'}). If this is the same person as our "${p.Name}", set it to ${m.stored} instead of adding another row.`, m.stored, clubName(p.ClubID), p.id])));
+  });
+  addSheet('7 MDM row has no ActorID', 'MDM already lists this name at this club, but with no usable ActorID.', 'Confirm it is the same person, then put the ActorID on that existing row.',
+    ['REF - Issue', 'REF - Our ActorID', 'REF - Club', 'REF - Our record'], s7, mdmBlank.length);
+
+  // 8. Needs review: contradictions. NOT upload-ready.
+  if (review.length) sheets.push({name: '8 Needs review', what: 'Contradictions between our PIDs and MDM. Nothing on this sheet is upload-ready.', todo: 'Decide which side is wrong BEFORE touching either. Then re-run the check.',
+    mdmFormat: false, head: ['Problem', 'Player(s)', 'Club', 'Our ActorID', 'Member id', 'What we found', 'Our record(s)'], rows: review, players: new Set(review.map(x => x[1])).size});
+
+  const readme = [
+    [`MDM fix list: ${scope}`], [`Made ${stamp} from the Data Integrity Check, as it stood at that moment. Nothing here has been changed in Airtable or MDM.`], [],
+    ['How to use this file'],
+    ['1. Each sheet is ONE kind of problem. Work through them one at a time.'],
+    ['2. Columns A to N on sheets 1-7 are in MDM roster-member format, so you can fix them in place.'],
+    ['3. Columns headed "REF" are for reference only. Delete them before uploading anywhere.'],
+    ['4. A blank id or rosterId means our data does not know it (or MDM contradicts it): fill it in from MDM.'],
+    ['5. Sheet 8 (if present) is NOT upload-ready: it lists contradictions to resolve first.'],
+    ['6. Identical names are not proof of the same person: confirm identity before assigning an ActorID.'], [],
+    ['Sheet', 'Rows', 'Players', 'What is wrong', 'What to do'],
+    ...(sheets.length ? sheets.map(sh => [sh.name, sh.rows.length, sh.players, sh.what, sh.todo]) : [['Nothing to fix', 0, 0, 'The check found nothing that needs an MDM or data fix.', '']])
+  ];
+  return {readme, sheets, counts: {missing: missing.length, nameDiff: nameDiff.length, otherClub: otherClub.length, mdmBlank: mdmBlank.length, review: review.length}};
+}
+
+// The stored export is an IMMUTABLE snapshot of the workbook as it stood when the check ran. It is dropped whenever the app writes to
+// Airtable, reloads its data, or clears its cache, so the button can never offer a result the data has moved on from.
+let _integrityLast = null;   // {data, scopeName}
+function invalidateIntegrityExport() {
+  try { _integrityLast = null; const b = document.getElementById('integrity-xlsx-btn'); if (b) b.disabled = true; } catch (e) { /* not initialised yet */ }
+}
+
+function exportIntegrityXlsx() {
+  if (!_integrityLast) { toast('Run the check first', 'error'); return; }
+  const data = _integrityLast.data;
+  if (!data.sheets.length) { toast('Nothing to export: no problems found', 'success'); return; }
+  const width = (head, rows, i) => Math.min(60, Math.max(String(head[i]).length, ...rows.map(rw => String(rw[i] == null ? '' : rw[i]).length)) + 2);
+  const wb = XLSX.utils.book_new();
+  const rd = XLSX.utils.aoa_to_sheet(data.readme);
+  rd['!cols'] = [{wch: 26}, {wch: 8}, {wch: 9}, {wch: 62}, {wch: 80}];
+  XLSX.utils.book_append_sheet(wb, rd, 'Read me');
+  data.sheets.forEach(sh => {
+    const ws = XLSX.utils.aoa_to_sheet([sh.head, ...sh.rows]);
+    ws['!cols'] = sh.head.map((_, i) => ({wch: width(sh.head, sh.rows, i)}));
+    XLSX.utils.book_append_sheet(wb, ws, sh.name);
+  });
+  const scope = String(_integrityLast.scopeName || 'All clubs').replace(/[^A-Za-z0-9]+/g, '_');
+  XLSX.writeFile(wb, `MDM_fix_list_${scope}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  toast(`Exported ${data.sheets.length} sheet${data.sheets.length !== 1 ? 's' : ''} of fixes`, 'success');
 }
 
 let _integrityPending = null; // {clubId, items:[{heroId, playerId, from, to}]}
@@ -1742,8 +2051,10 @@ async function runIntegrityCheck() {
   const sel = document.getElementById('integrity-club');
   const statusEl = document.getElementById('integrity-status'), outEl = document.getElementById('integrity-output');
   const applyBtn = document.getElementById('integrity-apply-btn'), runBtn = document.getElementById('integrity-run-btn');
+  const xlsxBtn = document.getElementById('integrity-xlsx-btn');
   const clubId = sel.value;
-  _integrityPending = null;
+  _integrityPending = null; _integrityLast = null;
+  if (xlsxBtn) xlsxBtn.disabled = true;
   applyBtn.disabled = true; runBtn.disabled = true; sel.disabled = true;
   outEl.style.display = 'none';
   try {
@@ -1753,6 +2064,12 @@ async function runIntegrityCheck() {
     statusEl.textContent = 'Comparing…';
     const r = computeIntegrity({heroes: CACHE.heroes || [], players: CACHE.players || [], mdmRows: CACHE.mdmRosterMembers, clubs: CACHE.clubs || [], clubId});
     const clubName = id => (CACHE.clubs.find(c => c.id === id) || {}).Name || '—';
+    const scopeName = clubId ? (clubName(clubId) !== '—' ? clubName(clubId) : 'Club') : 'All clubs';
+    const ctx = {heroes: CACHE.heroes || [], players: CACHE.players || [], mdmRows: CACHE.mdmRosterMembers, clubs: CACHE.clubs || [], clubId, scopeName};
+    let fix = null;
+    try { fix = buildIntegrityWorkbook(r, ctx); } catch (e) { console.error('[Integrity] fix list failed:', e); }
+    _integrityLast = fix && fix.sheets.length ? {data: _deepFreeze(fix), scopeName} : null;
+    if (xlsxBtn) xlsxBtn.disabled = !_integrityLast;
     const tbl = (head, rows) => rows.length ? `<div style="overflow-x:auto;max-height:260px;overflow-y:auto;margin:6px 0 14px;"><table class="data-table" style="font-size:11px;width:100%;"><thead><tr style="position:sticky;top:0;background:var(--bg2);">${head.map(h => `<th style="padding:4px 8px;text-align:left;">${h}</th>`).join('')}</tr></thead><tbody>${rows.map(rw => `<tr>${rw.map(c => `<td style="padding:4px 8px;">${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '';
     const line = (label, n, extra = '') => `<div style="font-size:12px;margin:3px 0;color:${n === 0 ? 'var(--green)' : 'var(--amber)'};">${n === 0 ? '✓' : '⚠'} <b>${n.toLocaleString()}</b> ${label}${extra}</div>`;
     const mono = v => `<span class="mono">${escHtml(String(v))}</span>`;
@@ -1770,6 +2087,7 @@ async function runIntegrityCheck() {
       ${tbl(['Player', 'Club', 'Stored ActorID', 'MDM lists'], r.playerAmbiguous.map(m => [escHtml(m.player.Name || '—'), escHtml(clubName(m.player.ClubID)), mono(m.stored), mono(m.mdmIds.join(', '))]))}
       ${line('players that cannot be confirmed (name not in MDM for their club)', r.playerUnverified.length, ' (never used for automatic repair)')}
       <div style="font-size:11px;color:var(--text3);">${r.playerUnverified.filter(m => m.scope === 'other-club').length} of these exist in MDM under a different club only.</div>
+      ${fix && r.playerUnverified.length ? `<div style="font-size:11px;color:var(--text3);">By cause: <b>${fix.counts.missing}</b> not in MDM at all · <b>${fix.counts.nameDiff}</b> name differs · <b>${fix.counts.otherClub}</b> at another club only${fix.counts.mdmBlank ? ` · <b>${fix.counts.mdmBlank}</b> MDM row has no ActorID` : ''}${fix.counts.review ? ` · <b>${fix.counts.review}</b> need review first` : ''}. <b>⬇ Fix list (Excel)</b> gives them to you as MDM-format sheets, one sheet per cause.</div>` : ''}
       <div style="font-weight:600;font-size:12px;margin-top:10px;">B · Hero PID ActorID vs its own player</div>
       ${line('PIDs can be repaired automatically', r.repairable.length, ' (player confirmed by MDM, PID has the wrong ActorID, no RosterMemberID yet)')}
       ${line('PIDs need the PLAYER fixed first', r.blockedByPlayer.length, ' (the player itself disagrees with MDM)')}
@@ -1800,7 +2118,7 @@ async function runIntegrityCheck() {
     }
   } catch (e) {
     console.error('[Integrity] check failed:', e);
-    _integrityPending = null; applyBtn.disabled = true;
+    _integrityPending = null; _integrityLast = null; applyBtn.disabled = true; if (xlsxBtn) xlsxBtn.disabled = true;
     statusEl.textContent = `⚠ Check failed — ${e && e.message ? e.message : 'unknown error'}.`;
     toast('Integrity check failed', 'error');
   } finally {
@@ -1919,6 +2237,7 @@ async function applyIntegrityRepair() {
     toast('Integrity repair failed', 'error');
   } finally {
     applyBtn.disabled = true; runBtn.disabled = false; sel.disabled = false;
+    invalidateIntegrityExport();          // the repair changed PIDs: any stored fix list is now out of date
   }
 }
 
@@ -2401,7 +2720,7 @@ function runDedupPreview() {
   const dupGroups = Object.entries(groups).filter(([,players]) => players.length > 1);
   window._dedupMixedGroups = 0;
   if (dupGroups.length === 0) {
-    outputEl.innerHTML = `<div style="color:var(--green);font-size:12px;">✓ No duplicate player records found.</div>`;
+    outputEl.innerHTML = `<div style="color:var(--green);font-size:12px;">✓ No duplicate player records found.</div>${dedupHiddenWarningHtml()}`;
     return;
   }
 
@@ -2434,7 +2753,7 @@ function runDedupPreview() {
        </div>` : '') +
     (mixed === 0 && review === 0 ? `<div style="font-size:12px;color:var(--green);margin-bottom:10px;">✓ Names are identical within every group.</div>` : '');
 
-  outputEl.innerHTML = `${banner}<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
+  outputEl.innerHTML = `${banner}${dedupHiddenWarningHtml()}<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
     <span style="font-weight:600;color:var(--amber);">${dupGroups.length} duplicate groups</span>
     <span style="color:var(--text3);margin-left:8px;">${totalDups} records to delete · ${totalRepoints} Hero PIDs to re-point</span>
   </div>
@@ -2470,6 +2789,63 @@ function runDedupPreview() {
   </table></div>`;
 }
 
+// ─── HIDDEN DUPLICATES (v235) ───────────────────────────────────────────────
+// A name that still carries a product / audience tag is NOT a player name. Tags: womens, mens, kids, infants, youth, boys, girls,
+// ladies, little kids (+ singular / possessive forms) at the START of the name, followed by a space, a dash or nothing at all.
+// A spaced dash anywhere in a name is also suspicious (a real name has no spaced dash). ONE definition, shared by the importer and the preview.
+const _AUDIENCE_START = /^(?:womens?|women's|ladies|mens|men's|kids?|kid's|infants?|youth|boys?|girls?|little\s+kids)(?=$|[\s\-–—])/i;
+function _looksTagged(name) {
+  const n = String(name || '').trim();
+  return /\s[-–—]\s/.test(n) || _AUDIENCE_START.test(n);
+}
+// The merge pairs records by ActorID + club, so a record with NO real ActorID is invisible to it and can hide a duplicate
+// (this is how Yamal, Vinicius and Essugo stayed hidden). Same club + same name, at least one without an ActorID.
+function findHiddenDuplicates(players, heroes) {
+  const pidCount = new Map(); (heroes || []).forEach(h => pidCount.set(h.PlayerID, (pidCount.get(h.PlayerID) || 0) + 1));
+  const byKey = new Map();
+  (players || []).forEach(p => {
+    if (p.Status === 'provisional') return;
+    const nm = foldName(p.Name); if (!nm || !p.ClubID) return;
+    const k = p.ClubID + '|' + nm; if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(p);
+  });
+  const out = [];
+  byKey.forEach(list => {
+    if (list.length < 2) return;
+    const blank = list.filter(p => !isRealMdmId(p.MDMActorID));
+    if (!blank.length) return;                       // every record has an ID: the normal duplicate groups already cover it
+    const mk = p => ({p, pids: pidCount.get(p.id) || 0});
+    out.push({name: list[0].Name, clubId: list[0].ClubID, blank: blank.map(mk), withId: list.filter(p => isRealMdmId(p.MDMActorID)).map(mk)});
+  });
+  return out.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+function findTaggedNames(players) {                   // player names that still carry a product tag ("Womens - X")
+  return (players || []).filter(p => p.Status !== 'provisional' && _looksTagged(p.Name));
+}
+function dedupHiddenWarningHtml() {
+  const clubMap = new Map((CACHE.clubs || []).map(c => [c.id, c.Name || '']));
+  const hidden = findHiddenDuplicates(CACHE.players, CACHE.heroes), tagged = findTaggedNames(CACHE.players);
+  window._dedupHiddenCount = hidden.length; window._dedupTaggedCount = tagged.length;
+  const box = 'font-size:12px;color:var(--amber);background:rgba(255,179,64,0.08);border:1px solid rgba(255,179,64,0.3);border-radius:4px;padding:8px 10px;margin:10px 0 8px;';
+  const short = id => String(id || '').slice(-6);
+  let html = '';
+  if (hidden.length) {
+    html += `<div style="${box}">⚠ <b>${hidden.length} player${hidden.length !== 1 ? 's' : ''} share a name and club with another record but have no ActorID: possible duplicates.</b>
+      The merge pairs records by ActorID, so these are invisible to it. An identical name is NOT proof of the same person: confirm identity first (shirt number, PIDs, MDM). Only then give the record with no ActorID the right one, refresh, and the pair will show up above.</div>
+      <div style="overflow-x:auto;max-height:240px;overflow-y:auto;"><table class="data-table" style="font-size:11px;width:100%;"><thead><tr style="position:sticky;top:0;background:var(--bg2);">
+        <th style="padding:4px 8px;text-align:left;">Player</th><th style="padding:4px 8px;text-align:left;">Club</th><th style="padding:4px 8px;text-align:left;">Record with NO ActorID</th><th style="padding:4px 8px;text-align:left;">Same name, has ActorID</th></tr></thead><tbody>
+        ${hidden.slice(0, 60).map(g => `<tr><td style="padding:4px 8px;">${escHtml(g.name || '—')}</td><td style="padding:4px 8px;">${escHtml(clubMap.get(g.clubId) || '—')}</td>
+          <td style="padding:4px 8px;">${g.blank.map(b => `…${escHtml(short(b.p.id))} (${b.pids} PIDs)`).join('<br>')}</td>
+          <td style="padding:4px 8px;">${g.withId.length ? g.withId.map(b => `<span class="mono">${escHtml(String(b.p.MDMActorID))}</span> …${escHtml(short(b.p.id))} (${b.pids} PIDs)`).join('<br>') : '<span style="color:var(--text3);">none: all copies lack an ActorID</span>'}</td></tr>`).join('')}
+      </tbody></table></div>${hidden.length > 60 ? `<div style="font-size:11px;color:var(--text3);">…and ${hidden.length - 60} more.</div>` : ''}`;
+  }
+  if (tagged.length) {
+    html += `<div style="${box}">⚠ <b>${tagged.length} player name${tagged.length !== 1 ? 's' : ''} look like they contain a product tag</b> (for example "Womens - …" or "Kids - …"). These usually come from an import. Check the name and shirt name:
+      ${tagged.slice(0, 10).map(p => `<span class="mono">${escHtml(p.Name || '')}</span> (${escHtml(clubMap.get(p.ClubID) || '—')})`).join('; ')}${tagged.length > 10 ? '…' : ''}</div>`;
+  }
+  return html;
+}
+
+
 function validateMdmRosterMemberDuplicates() {
   const counts = new Map();
   (CACHE.mdmRosterMembers||[]).forEach(m => {
@@ -2503,6 +2879,7 @@ let cacheLoaded = false;
 
 // ─── AIRTABLE API ─────────────────────────────────────────────────────────────
 async function atFetch(path, options={}) {
+  if (options && options.method && String(options.method).toUpperCase() !== 'GET' && typeof invalidateIntegrityExport === 'function') invalidateIntegrityExport();   // any write makes a stored fix list stale
   const res = await fetch(`${AT_API}/${AT_BASE}/${path}`, {
     ...options,
     headers: {'Authorization':`Bearer ${AT_TOKEN}`,'Content-Type':'application/json',...(options.headers||{})}
@@ -2744,7 +3121,7 @@ const CACHE_TTL=5*60*1000;
 const CACHE_KEYS={heroes:'hph_heroes',parents:'hph_parents',players:'hph_players'};
 function getCachedTable(k){try{const r=localStorage.getItem(k);if(!r)return null;const{data,ts}=JSON.parse(r);if(Date.now()-ts>CACHE_TTL){localStorage.removeItem(k);return null;}return data;}catch(e){return null;}}
 function setCachedTable(k,d){try{localStorage.setItem(k,JSON.stringify({data:d,ts:Date.now()}));}catch(e){}}
-function invalidateCache(){Object.values(CACHE_KEYS).forEach(k=>localStorage.removeItem(k));}
+function invalidateCache(){Object.values(CACHE_KEYS).forEach(k=>localStorage.removeItem(k)); if (typeof invalidateIntegrityExport === 'function') invalidateIntegrityExport();}
 async function loadCachedOrFetch(key,tid){const c=getCachedTable(key);if(c)return c;const r=await atGetAll(tid);const m=r.map(x=>({id:x.id,...x.fields}));setCachedTable(key,m);return m;}
 async function loadCache(force, dataOnly=false){
   // dataOnly=true: only refresh players/parents/heroes (skip clubs/seasons/catalogues)
@@ -5347,20 +5724,45 @@ function processHomeplateFile(file) {
   reader.readAsArrayBuffer(file);
 }
 
+// v235: a product name looks like "... 2026 - Womens - Nathan Ngoy 25". A SPACED dash separates segments; a hyphen inside a name
+// ("Fernandez-Pardo") has no spaces. The player is the LAST segment before the squad number. The old pattern started at the FIRST
+// dash and swallowed the product tag, creating players called "Womens - Nathan Ngoy" / "Kids - Nathan Ngoy".
+// Returns null (not a player line), {playerName, squadNumber}, or {ambiguous:true, ...} (never create a player from that).
+function _stripLeadingAudience(raw) {    // "Womens Nathan Ngoy" / "Kids - Nathan Ngoy" / "Mens-Nathan Ngoy" -> "Nathan Ngoy" (only if 2+ words remain)
+  let n = String(raw || '').trim();
+  for (let i = 0; i < 2; i++) { const m = n.match(/^(womens|kids|mens)(?:\s*[-–—]\s*|\s+)([A-ZÀ-ÿa-z]\S*(?:\s+\S+)+)$/i); if (!m) break; n = m[2].trim(); }
+  return n;
+}
+// Words that may legitimately appear in the product-title segments. Anything ELSE between the title and the name could be part of a
+// spaced-hyphen name ("Jean - Pierre"), so we never guess: that row goes to review.
+const _TAG_WORDS = new Set(['womens', 'women', 'mens', 'men', 'kids', 'kid', 'little', 'infants', 'infant', 'youth', 'boys', 'girls', 'ladies', 'cropped', 'long', 'short', 'sleeve', 'sleeves',
+  'authentic', 'dri-fit', 'adv', 'goalkeeper', 'gk', 'pro', 'replica', 'stadium', 'unsponsored', 'outsize', 'home', 'away', 'third', 'fourth', 'shirt', 'jersey', 'kit', 'football']);
+const _isTagSegment = seg => { const w = String(seg).toLowerCase().split(/\s+/).filter(Boolean); return w.length > 0 && w.every(x => _TAG_WORDS.has(x) || /^[\d/]+$/.test(x)); };
+function parseHomeplateProductName(name) {
+  const s = String(name || '').trim();
+  const withMatch = s.match(/with (.+?)\s+(\d+)\s+printing$/i);
+  if (withMatch) return {playerName: _stripLeadingAudience(withMatch[1]), squadNumber: parseInt(withMatch[2])};
+  const segs = s.split(/\s*[-—–]\s+/);                       // dash FOLLOWED BY A SPACE separates; "Fernandez-Pardo" does not
+  if (segs.length < 2) return null;
+  const m = segs[segs.length - 1].match(/^([A-ZÀ-ÿa-z][A-ZÀ-ÿa-z\s'.-]*?)\s+(\d+)\s*$/i);
+  if (!m) return null;
+  const squadNumber = parseInt(m[2]);
+  if (segs.slice(1, -1).some(seg => !_isTagSegment(seg))) return {ambiguous: true, playerName: segs.slice(1).join(' - ').replace(/\s+\d+\s*$/, ''), squadNumber};
+  return {playerName: _stripLeadingAudience(m[1]), squadNumber};
+}
+
 function parseHomeplateWorkbook(wb,filename) {
   const ws=wb.Sheets[wb.SheetNames[0]];
   const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
-  homeplateData={filename,resolutions:[],notFound:[],alreadyActive:[]};
+  homeplateData={filename,resolutions:[],notFound:[],alreadyActive:[],review:[]};
   rows.forEach(row=>{
     const pid=String(row['Product ID']||row['productId']||'').trim();
     const name=fixEncoding(String(row['Name']||row['name']||'').trim());
     if (!pid||!name) return;
-    let playerName=null,squadNumber=null;
-    const withMatch=name.match(/with (.+?)\s+(\d+)\s+printing$/i);
-    const dashMatch=name.match(/[-—]\s+([A-ZÀ-ÿa-z][A-ZÀ-ÿa-z\s'-]+?)\s+(\d+)\s*$/i);
-    if (withMatch){playerName=withMatch[1].trim();squadNumber=parseInt(withMatch[2]);}
-    else if (dashMatch){playerName=dashMatch[1].trim();squadNumber=parseInt(dashMatch[2]);}
-    if (!playerName) return;
+    const parsed=parseHomeplateProductName(name);
+    if (!parsed) return;
+    const {playerName,squadNumber}=parsed;
+    if (parsed.ambiguous || _looksTagged(playerName)) { homeplateData.review.push({pid,playerName}); return; }   // never create a player from a name that still holds a product tag
     const hero=CACHE.heroes.find(h=>h.PID===pid&&h.Status==='provisional');
     if (!hero){const active=CACHE.heroes.find(h=>h.PID===pid);if(active)homeplateData.alreadyActive.push({pid,playerName});else homeplateData.notFound.push({pid,playerName});return;}
     homeplateData.resolutions.push({pid,playerName,squadNumber,heroId:hero.id,clubId:hero.ClubID,seasonId:hero.SeasonID});
@@ -5372,6 +5774,7 @@ function showHomeplatePreview(filename) {
   const d=homeplateData;
   document.getElementById('homeplate-preview').classList.remove('hidden');
   let html=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;"><div class="stat-pill"><span class="stat-label">Resolved</span><span class="stat-value" style="color:var(--green);">${d.resolutions.length}</span></div><div class="stat-pill"><span class="stat-label">Not found</span><span class="stat-value" style="color:var(--red);">${d.notFound.length}</span></div><div class="stat-pill"><span class="stat-label">Already active</span><span class="stat-value" style="color:var(--text3);">${d.alreadyActive.length}</span></div></div>`;
+  if (d.review&&d.review.length) html+=`<div style="font-size:12px;color:var(--amber);background:rgba(255,179,64,0.08);border:1px solid rgba(255,179,64,0.3);border-radius:4px;padding:8px 10px;margin-bottom:10px;">⚠ <b>${d.review.length} row${d.review.length!==1?'s':''} skipped:</b> the name is ambiguous or still looks like it contains a product tag (e.g. "Womens - …", "Kids Saka"). Nothing was created for them: check the product name by hand. First few: ${d.review.slice(0,5).map(r=>escHtml(r.playerName)).join('; ')}</div>`;
   if (d.resolutions.length>0) html+=`<div style="max-height:260px;overflow-y:auto;"><table class="data-table" style="font-size:11px;"><thead><tr><th>PID</th><th>Player</th><th>No.</th><th>Club</th></tr></thead><tbody>${d.resolutions.map(r=>`<tr><td class="mono">${r.pid}</td><td style="color:var(--text);">${r.playerName}</td><td class="mono">${r.squadNumber||'—'}</td><td>${CACHE.clubs.find(c=>c.id===r.clubId)?.Name||'—'}</td></tr>`).join('')}</tbody></table></div>`;
   document.getElementById('homeplate-preview-content').innerHTML=html;
 }
@@ -7761,8 +8164,9 @@ function initBackfillSelects() {
       const o = document.createElement('option'); o.value=c.id; o.textContent=c.Name||c.id; integSel.appendChild(o);
     });
     integSel.addEventListener('change', () => {
-      _integrityPending = null;
+      _integrityPending = null; _integrityLast = null;
       document.getElementById('integrity-apply-btn').disabled = true;
+      document.getElementById('integrity-xlsx-btn').disabled = true;
       document.getElementById('integrity-output').style.display = 'none';
       document.getElementById('integrity-status').textContent = '';
     });
