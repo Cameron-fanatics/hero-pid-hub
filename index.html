@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v235 -->
+<!-- HEROPID-BUILD-v236 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -704,7 +704,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         <select class="form-select" id="integrity-club" style="width:200px;"></select>
         <button class="btn btn-ghost btn-sm" id="integrity-run-btn" onclick="runIntegrityCheck()">⊙ Run Check</button>
         <button class="btn btn-primary btn-sm" id="integrity-apply-btn" onclick="applyIntegrityRepair()" disabled>✓ Apply Repair</button>
-        <button class="btn btn-ghost btn-sm" id="integrity-xlsx-btn" onclick="exportIntegrityXlsx()" disabled title="One sheet per kind of problem, in MDM roster-member format">⬇ Fix list (Excel)</button>
+        <button class="btn btn-ghost btn-sm" id="integrity-xlsx-btn" onclick="exportIntegrityXlsx()" disabled title="One sheet per kind of problem, in MDM roster-member format. The cell to correct is highlighted yellow.">⬇ Fix list (Excel)</button>
         <span id="integrity-status" style="font-size:11px;color:var(--text3);"></span>
       </div>
       <div id="integrity-output" style="display:none;"></div>
@@ -1787,6 +1787,21 @@ function explainUnverified(p, ev) {
   return rows.length ? {reason: 'other-club', rows} : {reason: 'missing', rows: []};
 }
 
+// Which cell in a row is the one to CORRECT (highlighted yellow in the Excel), and the action-first sentence that starts the row's instruction.
+// A disagreement alone does not prove which system is wrong, so every "type" instruction is preceded by a DECISION. Sheet 3 has NO yellow cell:
+// its rows belong to ANOTHER club, so editing one (e.g. its roster) would MOVE an existing entry instead of adding the missing one.
+// 'blanks' = whichever of id / rosterId is empty (we do not know it: fill it in from MDM). Column numbers: 1 rosterId, 2 name, 7 actorId.
+const MARK_RULES = {'1': 'blanks', '2': [2], '3': [], '4': [7], '5': [7], '6': 'blanks', '7': [7]};
+const MARK_LEAD = {
+  '1': (row, m) => 'DECIDE FIRST: is MDM really missing this player? If yes: ' + (m.length ? 'TYPE the missing value(s) from MDM in the yellow cell(s), then add this row. ' : 'nothing to type, this row is ready to add. ') + 'If our ActorID is wrong: change nothing here and tell us. ',
+  '2': () => 'DECIDE FIRST which name is right. If MDM is wrong: TYPE the correct name in the yellow cell. If ours is wrong: change nothing here and tell us. ',
+  '3': () => 'DECIDE FIRST. Do NOT edit this row: it belongs to ANOTHER club. If our club is wrong: change nothing here and tell us. If the player really is at our club: MDM needs a NEW entry (its own member ID and a roster of our club), added in MDM itself. ',
+  '4': () => 'DECIDE FIRST which ActorID is right. If MDM is wrong: TYPE the correct ActorID in the yellow cell. If ours is wrong: change nothing here and tell us. ',
+  '5': () => 'DECIDE FIRST which ActorID is right. Then TYPE the correct ActorID in the yellow cell of each wrong row. ',
+  '6': (row, m) => m.length ? 'Load this roster from MDM into our tool, or TYPE the missing value(s) in the yellow cell(s). ' : 'Load this roster from MDM into our tool (best), or add this row. ',
+  '7': () => 'If this is the same person: TYPE our ActorID in the yellow cell. If it is a different person: change nothing here. '};
+const YELLOW = 'FFFFFF00';
+
 function buildIntegrityWorkbook(r, ctx) {
   const heroes = ctx.heroes || [], players = ctx.players || [], clubs = ctx.clubs || [];
   const scope = ctx.scopeName || 'All clubs', stamp = ctx.today || new Date().toISOString().slice(0, 16).replace('T', ' ');
@@ -1803,7 +1818,13 @@ function buildIntegrityWorkbook(r, ctx) {
     ({'missing': missing, 'name-differs': nameDiff, 'other-club': otherClub, 'mdm-blank': mdmBlank})[ex.reason].push({...m, ...ex});
   });
   const sheets = [], review = [];
-  const addSheet = (name, what, todo, ref, rows, nPlayers) => { if (rows.length) sheets.push({name, what, todo, mdmFormat: true, head: MDM_RM_HEAD.concat(ref), rows, players: nPlayers}); };
+  const addSheet = (name, what, todo, ref, rows, nPlayers) => {
+    if (!rows.length) return;
+    const k = name[0], rule = MARK_RULES[k] || [];
+    const marks = rows.map(rw => rule === 'blanks' ? [0, 1].filter(i => rw[i] === '' || rw[i] == null) : rule.slice());   // the cells to highlight, per row
+    rows.forEach((rw, i) => { rw[14] = (MARK_LEAD[k] ? MARK_LEAD[k](rw, marks[i]) : '') + rw[14]; });                     // the instruction starts with the action
+    sheets.push({name, what, todo, mdmFormat: true, head: MDM_RM_HEAD.concat(ref), rows, marks, players: nPlayers});
+  };
   const addReview = (problem, who, club, actor, member, detail, rec) => review.push([problem, who, club, actor, member, detail, rec]);
 
   // ── ONE shared member-evidence check, used by BOTH sheet 1 and sheet 6 ─────────────────────────────────────────────────
@@ -1927,7 +1948,7 @@ function buildIntegrityWorkbook(r, ctx) {
   s1entries.forEach(x => { if (x.member || !memberKeys.has(x.key)) s1.push(x.row); });
   addSheet('1 Missing from MDM', 'Our player has an ActorID that MDM does not have for this club.',
     'Add the roster member in MDM (id and rosterId are filled only where MDM does not contradict our PIDs), or correct our ActorID if MDM is right.',
-    ['REF - Issue', 'REF - Club', 'REF - Our record', 'REF - PIDs on this roster'], s1, missing.length);
+    ['REF - What to do', 'REF - Club', 'REF - Our record', 'REF - PIDs on this roster'], s1, missing.length);
 
   // 2. Name differs: MDM's own rows for that ActorID at this club
   const s2 = [];
@@ -1938,8 +1959,8 @@ function buildIntegrityWorkbook(r, ctx) {
     });
   });
   addSheet('2 Name differs', 'MDM has this ActorID at this club, but under a different name from ours.',
-    'Decide which name is right. Fix the name here for MDM, or tell us to rename our player.',
-    ['REF - Issue', 'REF - Our name', 'REF - Club', 'REF - Our record'], s2, nameDiff.length);
+    'Decide which name is right first. If MDM is wrong, type the correct name in the yellow cell; if ours is wrong, tell us.',
+    ['REF - What to do', 'REF - Our name', 'REF - Club', 'REF - Our record'], s2, nameDiff.length);
 
   // 3. Other club only
   const s3 = [];
@@ -1950,18 +1971,18 @@ function buildIntegrityWorkbook(r, ctx) {
     });
   });
   addSheet('3 Other club only', 'MDM has this player (or ActorID) only at a different club from ours.',
-    'Check which club is right. Either correct our player\'s club, or add the roster entry for our club in MDM.',
-    ['REF - Issue', 'REF - Our name', 'REF - Our club', 'REF - MDM club'], s3, otherClub.length);
+    'Decide which club is right. Do NOT edit these rows (they belong to another club): if our club is right, MDM needs a NEW entry added in MDM itself.',
+    ['REF - What to do', 'REF - Our name', 'REF - Our club', 'REF - MDM club'], s3, otherClub.length);
 
   // 4 + 5. ActorID disagrees / several ActorIDs: MDM's rows for that name at that club
   const rowsFor = p => (ev.byClubName.get(p.ClubID + '|' + foldName(p.Name)) || []).slice().sort(_ordRows);
   const s4 = [], s5 = [];
   (r.playerMismatch || []).forEach(m => rowsFor(m.player).forEach(row => s4.push(_mdmRowOut(row).concat([`Ours says ${m.stored}; MDM says ${m.mdmIds.join(' / ')} for "${m.player.Name}" at ${clubName(m.player.ClubID)}. Decide which ID is right and fix the other side.`, m.stored, clubName(m.player.ClubID), m.player.id]))));
-  addSheet('4 ActorID disagrees', 'Same name, same club, but our ActorID is not the one MDM uses.', 'Decide which ActorID is right, then fix our player or the MDM rows.',
-    ['REF - Issue', 'REF - Our ActorID', 'REF - Club', 'REF - Our record'], s4, (r.playerMismatch || []).length);
+  addSheet('4 ActorID disagrees', 'Same name, same club, but our ActorID is not the one MDM uses.', 'Decide which ActorID is right first. If MDM is wrong, type the correct ActorID in the yellow cell; if ours is wrong, tell us.',
+    ['REF - What to do', 'REF - Our ActorID', 'REF - Club', 'REF - Our record'], s4, (r.playerMismatch || []).length);
   (r.playerAmbiguous || []).forEach(m => rowsFor(m.player).forEach(row => s5.push(_mdmRowOut(row).concat([`MDM lists "${m.player.Name}" at ${clubName(m.player.ClubID)} under more than one ActorID (${m.mdmIds.join(' / ')}). Pick the right one and correct the others.`, m.stored, clubName(m.player.ClubID), m.player.id]))));
   addSheet('5 Several ActorIDs', 'MDM lists one name at one club under more than one ActorID.', 'Pick the right ActorID and correct the other rows in MDM.',
-    ['REF - Issue', 'REF - Our ActorID', 'REF - Club', 'REF - Our record'], s5, (r.playerAmbiguous || []).length);
+    ['REF - What to do', 'REF - Our ActorID', 'REF - Club', 'REF - Our record'], s5, (r.playerAmbiguous || []).length);
 
   // 6. RosterMemberIDs that PIDs hold but MDM doesn't have: rows to ADD (id = the RosterMemberID). The candidate member ids come from the
   //    check, but each is judged by the SHARED member evidence over ALL cached holders (any club, blank / placeholder fields included).
@@ -1979,7 +2000,7 @@ function buildIntegrityWorkbook(r, ctx) {
     s6.push(_playerRowOut(rp, e.roster, rm, e.actor).concat([`${hs.length} PID(s) hold RosterMemberID ${rm}, which is not in our MDM Roster Members table. Add this row (or reload the roster), or correct the PIDs.`, clubName(clubId), hs.length, holder.PID]));
   });
   addSheet('6 Member not in MDM', 'PIDs hold a RosterMemberID that our MDM table does not contain.', 'Add these rows to MDM (or reload that roster here), or correct the PIDs.',
-    ['REF - Issue', 'REF - Club', 'REF - PIDs holding it', 'REF - Example PID'], s6, s6players.size);
+    ['REF - What to do', 'REF - Club', 'REF - PIDs holding it', 'REF - Example PID'], s6, s6players.size);
 
   // 7. MDM already has this player at this club but WITHOUT a usable ActorID: give THAT row the ActorID (no new row)
   const s7 = [];
@@ -1988,21 +2009,23 @@ function buildIntegrityWorkbook(r, ctx) {
     m.rows.slice().sort(_ordRows).forEach(row => s7.push(_mdmRowOut(row).concat([`MDM already has "${row.PlayerName}" at ${clubName(p.ClubID) || 'this club'}, but its ActorID is blank or a placeholder (${str(row.ActorID) || 'blank'}). If this is the same person as our "${p.Name}", set it to ${m.stored} instead of adding another row.`, m.stored, clubName(p.ClubID), p.id])));
   });
   addSheet('7 MDM row has no ActorID', 'MDM already lists this name at this club, but with no usable ActorID.', 'Confirm it is the same person, then put the ActorID on that existing row.',
-    ['REF - Issue', 'REF - Our ActorID', 'REF - Club', 'REF - Our record'], s7, mdmBlank.length);
+    ['REF - What to do', 'REF - Our ActorID', 'REF - Club', 'REF - Our record'], s7, mdmBlank.length);
 
   // 8. Needs review: contradictions. NOT upload-ready.
   if (review.length) sheets.push({name: '8 Needs review', what: 'Contradictions between our PIDs and MDM. Nothing on this sheet is upload-ready.', todo: 'Decide which side is wrong BEFORE touching either. Then re-run the check.',
-    mdmFormat: false, head: ['Problem', 'Player(s)', 'Club', 'Our ActorID', 'Member id', 'What we found', 'Our record(s)'], rows: review, players: new Set(review.map(x => x[1])).size});
+    mdmFormat: false, head: ['Problem', 'Player(s)', 'Club', 'Our ActorID', 'Member id', 'What we found', 'Our record(s)'], rows: review, marks: review.map(() => []), players: new Set(review.map(x => x[1])).size});
 
   const readme = [
     [`MDM fix list: ${scope}`], [`Made ${stamp} from the Data Integrity Check, as it stood at that moment. Nothing here has been changed in Airtable or MDM.`], [],
     ['How to use this file'],
+    ['YELLOW CELL = the one cell you need to correct. Type the right value over it. Leave every other cell alone.'],
     ['1. Each sheet is ONE kind of problem. Work through them one at a time.'],
-    ['2. Columns A to N on sheets 1-7 are in MDM roster-member format, so you can fix them in place.'],
-    ['3. Columns headed "REF" are for reference only. Delete them before uploading anywhere.'],
-    ['4. A blank id or rosterId means our data does not know it (or MDM contradicts it): fill it in from MDM.'],
-    ['5. Sheet 8 (if present) is NOT upload-ready: it lists contradictions to resolve first.'],
-    ['6. Identical names are not proof of the same person: confirm identity before assigning an ActorID.'], [],
+    ['2. In every row, the column "REF - What to do" says exactly what to type in the yellow cell. An EMPTY yellow cell means: fill it in from MDM. It always tells you to DECIDE which system is wrong BEFORE you type.'],
+    ['3. Columns A to N on sheets 1-7 are in MDM roster-member format, so you can fix them in place.'],
+    ['4. Columns headed "REF" are for reference only. Delete them before uploading anywhere.'],
+    ['5. A blank id or rosterId means our data does not know it (or MDM contradicts it): fill it in from MDM.'],
+    ['6. Sheet 3 (if present) is for DECIDING, not typing: its rows belong to another club, so do not edit them. Sheet 8 (if present) is NOT upload-ready: it lists contradictions to resolve first. Neither has yellow cells.'],
+    ['7. Identical names are not proof of the same person: confirm identity before assigning an ActorID.'], [],
     ['Sheet', 'Rows', 'Players', 'What is wrong', 'What to do'],
     ...(sheets.length ? sheets.map(sh => [sh.name, sh.rows.length, sh.players, sh.what, sh.todo]) : [['Nothing to fix', 0, 0, 'The check found nothing that needs an MDM or data fix.', '']])
   ];
@@ -2016,23 +2039,47 @@ function invalidateIntegrityExport() {
   try { _integrityLast = null; const b = document.getElementById('integrity-xlsx-btn'); if (b) b.disabled = true; } catch (e) { /* not initialised yet */ }
 }
 
-function exportIntegrityXlsx() {
+async function exportIntegrityXlsx() {
   if (!_integrityLast) { toast('Run the check first', 'error'); return; }
-  const data = _integrityLast.data;
+  const snap = _integrityLast, data = snap.data, scopeName = snap.scopeName;      // captured NOW: nothing below may read the live variable
   if (!data.sheets.length) { toast('Nothing to export: no problems found', 'success'); return; }
-  const width = (head, rows, i) => Math.min(60, Math.max(String(head[i]).length, ...rows.map(rw => String(rw[i] == null ? '' : rw[i]).length)) + 2);
-  const wb = XLSX.utils.book_new();
-  const rd = XLSX.utils.aoa_to_sheet(data.readme);
-  rd['!cols'] = [{wch: 26}, {wch: 8}, {wch: 9}, {wch: 62}, {wch: 80}];
-  XLSX.utils.book_append_sheet(wb, rd, 'Read me');
-  data.sheets.forEach(sh => {
-    const ws = XLSX.utils.aoa_to_sheet([sh.head, ...sh.rows]);
-    ws['!cols'] = sh.head.map((_, i) => ({wch: width(sh.head, sh.rows, i)}));
-    XLSX.utils.book_append_sheet(wb, ws, sh.name);
-  });
-  const scope = String(_integrityLast.scopeName || 'All clubs').replace(/[^A-Za-z0-9]+/g, '_');
-  XLSX.writeFile(wb, `MDM_fix_list_${scope}_${new Date().toISOString().slice(0, 10)}.xlsx`);
-  toast(`Exported ${data.sheets.length} sheet${data.sheets.length !== 1 ? 's' : ''} of fixes`, 'success');
+  if (typeof ExcelJS === 'undefined') { toast('The Excel library is still loading: try again in a moment', 'error'); return; }
+  try {
+    const fill = argb => ({type: 'pattern', pattern: 'solid', fgColor: {argb}});
+    const width = (head, rows, i) => Math.min(i === 14 ? 70 : 60, Math.max(String(head[i]).length, ...rows.map(rw => String(rw[i] == null ? '' : rw[i]).length)) + 2);
+    const wb = new ExcelJS.Workbook(); wb.creator = 'HeroPID Hub';
+    const rd = wb.addWorksheet('Read me');
+    data.readme.forEach(rw => rd.addRow(rw));
+    [26, 8, 9, 62, 80].forEach((w, i) => { rd.getColumn(i + 1).width = w; });
+    rd.getRow(1).font = {bold: true, size: 14};
+    data.readme.forEach((rw, i) => {
+      const t = String(rw[0] == null ? '' : rw[0]);
+      if (t.startsWith('YELLOW CELL')) { rd.getRow(i + 1).getCell(1).fill = fill(YELLOW); rd.getRow(i + 1).font = {bold: true}; }
+      if (t === 'Sheet' || t === 'How to use this file') rd.getRow(i + 1).font = {bold: true};
+    });
+    data.sheets.forEach(sh => {
+      const ws = wb.addWorksheet(sh.name), hdr = ws.addRow(sh.head);
+      hdr.font = {bold: true};
+      sh.head.forEach((h, i) => { hdr.getCell(i + 1).fill = fill(sh.mdmFormat && i >= MDM_RM_HEAD.length ? 'FFD9D9D9' : 'FFDDEBF7'); });       // grey = reference, blue = MDM columns
+      sh.rows.forEach((rw, ri) => {
+        const row = ws.addRow(rw);
+        (sh.marks && sh.marks[ri] || []).forEach(c => { const cell = row.getCell(c + 1); cell.fill = fill(YELLOW); cell.font = {bold: true}; });  // THE cell to correct
+        if (sh.mdmFormat) row.getCell(15).alignment = {wrapText: true, vertical: 'top'}; else row.getCell(6).alignment = {wrapText: true, vertical: 'top'};
+      });
+      sh.head.forEach((_, i) => { ws.getColumn(i + 1).width = width(sh.head, sh.rows, i); });
+      ws.views = [{state: 'frozen', ySplit: 1}];
+    });
+    const buf = await wb.xlsx.writeBuffer();
+    if (_integrityLast !== snap) { toast('The data changed while the file was being made, so nothing was downloaded. Run the check again.', 'error'); return; }   // never hand out a file for a different check
+    const scope = String(scopeName || 'All clubs').replace(/[^A-Za-z0-9]+/g, '_');
+    const blob = new Blob([buf], {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `MDM_fix_list_${scope}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.click(); URL.revokeObjectURL(a.href);
+    toast(`Exported ${data.sheets.length} sheet${data.sheets.length !== 1 ? 's' : ''} of fixes`, 'success');
+  } catch (e) {
+    console.error('[Integrity] Excel export failed:', e);
+    toast(`Excel export failed: ${e && e.message ? e.message : 'unknown error'}`, 'error');
+  }
 }
 
 let _integrityPending = null; // {clubId, items:[{heroId, playerId, from, to}]}
