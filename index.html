@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v238-wip.4 -->
+<!-- HEROPID-BUILD-v238-wip.5 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -334,7 +334,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         <div class="card-header"><span class="card-title">Upload storage sheet</span></div>
         <div style="padding:20px;">
           <div class="form-row" style="margin-bottom:16px;">
-            <div class="form-group" style="margin:0;"><label class="form-label">Club</label><select class="form-select" id="import-club" onchange="filterSeasonDropdown('import-season', this.value, {blankLabel:'Select season...'})"><option value="">Select club...</option></select></div>
+            <div class="form-group" style="margin:0;"><label class="form-label">Club</label><select class="form-select" id="import-club" onchange="filterSeasonDropdown('import-season', this.value, {blankLabel:'Select season...', source:'all'})"><option value="">Select club...</option></select></div>
             <div class="form-group" style="margin:0;"><label class="form-label">Season</label><select class="form-select" id="import-season"><option value="">Select season...</option></select></div>
           </div>
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);">
@@ -9903,7 +9903,7 @@ function filterSeasonDropdown(seasonSelId, clubId, {allLabel='All seasons', blan
   const seasonSel = document.getElementById(seasonSelId);
   if (!seasonSel) return;
   let seasons;
-  if (!clubId) {
+  if (!clubId || source === 'all') {   // 'all': an import can create ANY season, so the list must not be limited to the seasons the club already has
     seasons = CACHE.seasons||[];
   } else if (source === 'rosterMappings') {
     const ids = new Set((CACHE.rosterMappings||[]).filter(r=>r.ClubID===clubId).map(r=>r.SeasonID).filter(Boolean));
