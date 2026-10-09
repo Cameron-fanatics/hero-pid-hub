@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v238-wip.2 -->
+<!-- HEROPID-BUILD-v238-wip.4 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -6449,7 +6449,7 @@ function parseHomeplateGarment(name) {
   if (aero && tier !== 'match') return no(`"${aeroWord}" without "Match" is not recognised`);
   if (tier === 'match' && gk) return no('"Match" on a goalkeeper product has not been seen in a Homeplate export');
   if (baseLS && !nike) return no('"Long Sleeve" before "Shirt" has only been seen in Nike names');
-  if (mt[5] && !adidas) return no('"<Kit> Goalkeeper Shirt" has only been seen in adidas names');
+  if (mt[5] && !(adidas || castore)) return no('"<Kit> Goalkeeper Shirt" has only been seen in adidas and Castore names');
   if (tokens.includes('mens') && !adidas) return no('"- Mens" has only been seen in adidas names');
   if (tokens.includes('unsponsored') && !castore) return no('"- Unsponsored" has only been seen in Castore names');
   if (tokens.includes('outsize') && !puma) return no('"- Outsize" has only been seen in PUMA names');
@@ -6530,7 +6530,7 @@ function parseHomeplateRows(sheetRows) {   // sheet_to_json rows -> [{pid, name,
 
 function planParentGarments({hpRows, parents, heroes, seasons}) {
   const low = v => _mdmStr(v).toLowerCase();
-  const plan = {rows: hpRows.length, verified: 0, alreadyRight: 0, parentUpdates: [], heroUpdates: [], review: [], notParent: [], writes: [], warnings: [], info: [], errors: [], gkLeftToSheet: 0, sheetDecides: []};
+  const plan = {rows: hpRows.length, verified: 0, alreadyRight: 0, parentUpdates: [], heroUpdates: [], review: [], notParent: [], writes: [], warnings: [], info: [], errors: [], gkProducts: 0, gkKitNotes: []};
   const parentsByPid = new Map(); (parents || []).forEach(p => { const k = String(p.PID); if (!parentsByPid.has(k)) parentsByPid.set(k, []); parentsByPid.get(k).push(p); });
   const parentByPid = new Map([...parentsByPid].map(([k, v]) => [k, v[0]])), seasonLabel = new Map((seasons || []).map(s => [s.id, s.Label]));
   const heroesByParent = new Map(); (heroes || []).forEach(h => { if (!h.ParentPIDID) return; if (!heroesByParent.has(h.ParentPIDID)) heroesByParent.set(h.ParentPIDID, []); heroesByParent.get(h.ParentPIDID).push(h); });
@@ -6545,19 +6545,24 @@ function planParentGarments({hpRows, parents, heroes, seasons}) {
     const names = [...new Set(rs.map(r => r.name))];
     if (names.length > 1) { plan.review.push({pid, name: names.join(' | '), why: 'Homeplate lists this PID more than once with different names'}); return; }
     const name = names[0];
-    // GOALKEEPER products: the same product is reused across kits and the name never shows the kit or the sleeve, so the SHEET decides. Nothing is changed from the name;
-    // a name that suggests a different garment is only listed for information.
-    if (/\bgoalkeeper\b/i.test(name)) {
-      plan.gkLeftToSheet++;
-      const gg = parseHomeplateGarment(name);
-      if (!gg.unrecognised && gg.garment && low(parent.GarmentType) !== gg.garment) plan.sheetDecides.push({pid, name, sheet: _mdmStr(parent.GarmentType), nameSays: gg.garment, kit: parent.KitType || ''});
-      return;
+    // GOALKEEPER products: the same product is reused across kits, so the NAME cannot tell Home / Away / Third apart: the SHEET decides the kit (no kit check below).
+    // The garment and sleeve still come from the name. Several PIDs sharing one goalkeeper name are only used if the sheet gives them all the same garment (otherwise the name cannot tell them apart).
+    const isGk = /\bgoalkeeper\b/i.test(name);
+    if (isGk) {
+      plan.gkProducts++;
+      // the WHOLE group is judged on EVERY parent record of EVERY member (never "the first record per PID", which made the outcome depend on record order)
+      const members = [...(pidsByName.get(name.toLowerCase()) || [])];
+      const dupMember = members.find(x => (parentsByPid.get(x) || []).length > 1);
+      if (dupMember) { plan.review.push({pid, name, why: `${members.length} goalkeeper product${members.length !== 1 ? 's' : ''} share exactly this name and PID ${dupMember} has ${parentsByPid.get(dupMember).length} parent records in Airtable, so the whole group is held until the duplicates are merged`}); return; }
+      const sameName = members.flatMap(x => parentsByPid.get(x) || []);
+      if (new Set(sameName.map(x => low(x.GarmentType))).size > 1) { plan.review.push({pid, name, why: `${members.length} goalkeeper products share exactly this name but the sheet gives them different garments (${[...new Set(sameName.map(x => _mdmStr(x.GarmentType) || '∅'))].join(', ')}), so the name cannot tell them apart`}); return; }
     }
     // any other name shared by several PIDs cannot say which is which
-    if ((pidsByName.get(name.toLowerCase()) || new Set()).size > 1) { plan.review.push({pid, name, why: `${pidsByName.get(name.toLowerCase()).size} different products have exactly this name, so it cannot tell them apart`}); return; }
+    else if ((pidsByName.get(name.toLowerCase()) || new Set()).size > 1) { plan.review.push({pid, name, why: `${pidsByName.get(name.toLowerCase()).size} different products have exactly this name, so it cannot tell them apart`}); return; }
     const g = parseHomeplateGarment(name);
     if (g.unrecognised) { plan.review.push({pid, name, why: g.why}); return; }
-    if (['Home', 'Away', 'Third'].includes(g.kit) && parent.KitType && low(parent.KitType) !== low(g.kit)) { plan.review.push({pid, name, why: `the name says ${g.kit} but the parent is ${parent.KitType}`}); return; }
+    if (isGk && ['Home', 'Away', 'Third'].includes(g.kit) && parent.KitType && low(parent.KitType) !== low(g.kit)) plan.gkKitNotes.push({pid, name, nameKit: g.kit, sheetKit: parent.KitType});   // the sheet decides a goalkeeper's kit: noted, not held
+    else if (['Home', 'Away', 'Third'].includes(g.kit) && parent.KitType && low(parent.KitType) !== low(g.kit)) { plan.review.push({pid, name, why: `the name says ${g.kit} but the parent is ${parent.KitType}`}); return; }
     const lab = seasonLabel.get(parent.SeasonID);
     if (g.season && lab) {   // a pair season ("2026-27") must equal the label's digits; a bare year ("2026", national teams) must be the START of them ("2026" or "2026-27")
       const ld = String(lab).replace(/\D/g, ''), nd = g.season.replace(/\D/g, ''), ok = nd.length === 4 ? ld.startsWith(nd) : ld === nd;
@@ -6580,9 +6585,9 @@ function planParentGarments({hpRows, parents, heroes, seasons}) {
   });
   if (plan.review.length) plan.warnings.push(`${plan.review.length} Homeplate product${plan.review.length !== 1 ? 's' : ''} could not be turned into a garment and ${plan.review.length !== 1 ? 'were' : 'was'} NOT used: ${plan.review.slice(0, 4).map(r => `${r.pid} (${r.why})`).join('; ')}${plan.review.length > 4 ? '; …' : ''}.`);
   if (plan.notParent.length) plan.info.push(`${plan.notParent.length} Product ID${plan.notParent.length !== 1 ? 's are' : ' is'} not a parent PID in this database and ${plan.notParent.length !== 1 ? 'were' : 'was'} ignored.`);
-  if (plan.gkLeftToSheet) plan.info.push(`${plan.gkLeftToSheet} goalkeeper product${plan.gkLeftToSheet !== 1 ? 's were' : ' was'} left to the sheet: a goalkeeper name cannot show the kit or the sleeve.` + (plan.sheetDecides.length ? ` ${plan.sheetDecides.length} of them ${plan.sheetDecides.length !== 1 ? 'have' : 'has'} a name that suggests a different garment (${plan.sheetDecides.slice(0, 3).map(x => x.pid + ': sheet ' + x.sheet + ', name ' + x.nameSays).join('; ')}${plan.sheetDecides.length > 3 ? '; …' : ''}): check those in the sheet.` : ''));
+  if (plan.gkProducts) plan.info.push(`${plan.gkProducts} goalkeeper product${plan.gkProducts !== 1 ? 's' : ''}: the garment and sleeve come from the name, the kit (Home / Away / Third) stays as the sheet has it.` + (plan.gkKitNotes.length ? ` ${plan.gkKitNotes.length} name${plan.gkKitNotes.length !== 1 ? 's' : ''} mention${plan.gkKitNotes.length === 1 ? 's' : ''} a different kit than the sheet (${plan.gkKitNotes.slice(0, 3).map(x => x.pid + ': name ' + x.nameKit + ', sheet ' + x.sheetKit).join('; ')}${plan.gkKitNotes.length > 3 ? '; …' : ''}): check those in the sheet.` : ''));
   if (!plan.parentUpdates.length && plan.heroUpdates.length) plan.info.push('No parent garment changes; only hero PIDs that disagree with their parent are re-derived.');
-  plan.counts = {rows: plan.rows, verified: plan.verified, alreadyRight: plan.alreadyRight, parents: plan.parentUpdates.length, heroes: plan.heroUpdates.length, review: plan.review.length, gk: plan.gkLeftToSheet};
+  plan.counts = {rows: plan.rows, verified: plan.verified, alreadyRight: plan.alreadyRight, parents: plan.parentUpdates.length, heroes: plan.heroUpdates.length, review: plan.review.length, gk: plan.gkProducts};
   plan.total = plan.writes.length;
   // the signature covers every planned write AND the record values it was planned against (identity and context)
   plan.signature = _mdmHash(plan.writes.map(w => JSON.stringify({k: w.kind, id: w.id, snap: w.snap, f: w.fields, g: w.guard || null})).sort().join('\n'));
@@ -6594,12 +6599,12 @@ function hpParentsHtml(plan) {
   const box = (items, bg, bd, col, icon) => items.length ? `<div style="background:${bg};border:1px solid ${bd};border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:${col};margin-bottom:8px;">${items.map(x => `<div style="margin:2px 0;">${icon} ${e(x)}</div>`).join('')}</div>` : '';
   const det = (t, rows, n) => n ? `<details style="margin:6px 0;"><summary style="cursor:pointer;font-size:12px;color:var(--text2);">${t}</summary><div style="max-height:260px;overflow-y:auto;"><table class="data-table" style="font-size:11px;"><tbody>${rows}</tbody></table></div></details>` : '';
   const byParent = {}; plan.heroUpdates.forEach(h => { byParent[h.parentPid] = (byParent[h.parentPid] || 0) + 1; });
-  return `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">${tile('Products in file', c.rows)}${tile('Garment confirmed', c.verified, 'var(--green)')}${tile('Already right', c.alreadyRight)}${tile('Parents to change', c.parents, c.parents ? 'var(--amber)' : '')}${tile('Hero PIDs to re-derive', c.heroes, c.heroes ? 'var(--amber)' : '')}${tile('Needs review', c.review, c.review ? 'var(--amber)' : '')}${c.gk ? tile('Goalkeepers: sheet decides', c.gk) : ''}</div>`
+  return `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">${tile('Products in file', c.rows)}${tile('Garment confirmed', c.verified, 'var(--green)')}${tile('Already right', c.alreadyRight)}${tile('Parents to change', c.parents, c.parents ? 'var(--amber)' : '')}${tile('Hero PIDs to re-derive', c.heroes, c.heroes ? 'var(--amber)' : '')}${tile('Needs review', c.review, c.review ? 'var(--amber)' : '')}${c.gk ? tile('Goalkeeper products', c.gk) : ''}</div>`
     + box(plan.errors, 'rgba(255,82,82,0.10)', 'rgba(255,82,82,0.35)', '#ff6b6b', '⛔') + box(plan.warnings, 'var(--amber-bg)', 'rgba(255,179,64,0.25)', 'var(--amber)', '⚠') + box(plan.info, 'rgba(99,179,237,0.08)', 'rgba(99,179,237,0.2)', '#63b3ed', 'ℹ')
     + (plan.total === 0 && !plan.errors.length ? `<div style="font-size:12px;color:var(--green);margin:6px 0;">✓ Nothing to change: every confirmed parent already has the garment Homeplate's name gives, and so do its hero PIDs.</div>` : '')
     + det(`Parent garments that change (${plan.parentUpdates.length})`, plan.parentUpdates.map(u => `<tr><td class="mono">${e(u.pid)}</td><td>${e(u.kit)}</td><td>${e(u.from || '∅')} → <b>${e(u.to)}</b></td><td style="color:var(--text2);">${e(u.name)}</td></tr>`).join(''), plan.parentUpdates.length)
     + det(`Hero PIDs re-derived (${plan.heroUpdates.length}) by parent`, Object.entries(byParent).map(([p, n]) => `<tr><td class="mono">${e(p)}</td><td>${n} hero PID${n !== 1 ? 's' : ''}</td></tr>`).join(''), plan.heroUpdates.length)
-    + det(`Goalkeeper names that suggest a different garment than the sheet (${plan.sheetDecides.length}): sheet kept`, plan.sheetDecides.map(x => `<tr><td class="mono">${e(x.pid)}</td><td>${e(x.kit)}</td><td>sheet: <b>${e(x.sheet || '∅')}</b> · name: ${e(x.nameSays)}</td><td style="color:var(--text2);">${e(x.name)}</td></tr>`).join(''), plan.sheetDecides.length)
+    + det(`Goalkeeper names that mention a different kit than the sheet (${plan.gkKitNotes.length}): the sheet's kit is kept`, plan.gkKitNotes.map(x => `<tr><td class="mono">${e(x.pid)}</td><td>name: ${e(x.nameKit)} · sheet: <b>${e(x.sheetKit)}</b></td><td style="color:var(--text2);">${e(x.name)}</td></tr>`).join(''), plan.gkKitNotes.length)
     + det(`Needs review (${plan.review.length}): not used`, plan.review.map(r => `<tr><td class="mono">${e(r.pid)}</td><td style="color:var(--text2);">${e(r.name)}</td><td style="color:var(--amber);">${e(r.why)}</td></tr>`).join(''), plan.review.length);
 }
 
