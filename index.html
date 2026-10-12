@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v238-wip.6 -->
+<!-- HEROPID-BUILD-v238-wip.8 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -334,8 +334,8 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         <div class="card-header"><span class="card-title">Upload storage sheet</span></div>
         <div style="padding:20px;">
           <div class="form-row" style="margin-bottom:16px;">
-            <div class="form-group" style="margin:0;"><label class="form-label">Club</label><select class="form-select" id="import-club" onchange="filterSeasonDropdown('import-season', this.value, {blankLabel:'Select season...', source:'all'})"><option value="">Select club...</option></select></div>
-            <div class="form-group" style="margin:0;"><label class="form-label">Season</label><select class="form-select" id="import-season"><option value="">Select season...</option></select></div>
+            <div class="form-group" style="margin:0;"><label class="form-label">Club</label><select class="form-select" id="import-club" onchange="filterSeasonDropdown('import-season', this.value, {blankLabel:'Select season...', source:'all'});resetImportTab('storage')"><option value="">Select club...</option></select></div>
+            <div class="form-group" style="margin:0;"><label class="form-label">Season</label><select class="form-select" id="import-season" onchange="resetImportTab('storage')"><option value="">Select season...</option></select></div>
           </div>
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text2);">
@@ -432,7 +432,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
             </div>
             <div>
               <label class="form-label">Season</label>
-              <select id="mdm-roster-season" class="form-select"></select>
+              <select id="mdm-roster-season" class="form-select" onchange="resetImportTab('mdmroster')"></select>
             </div>
           </div>
           <div class="dropzone" id="mdm-roster-dropzone" onclick="document.getElementById('mdm-roster-file').click()"
@@ -472,7 +472,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
           <p style="color:var(--text2);font-size:12px;margin-bottom:12px;">1) Export the parent PIDs and put them into Homeplate. 2) Drop Homeplate's product export (columns Product ID and Name) below. The garment is read from the product name (Home/Away/Third/Goalkeeper Shirt, "- Long Sleeve", "- Womens", "- Kids", "Infant/BabyKit"). Names that do not fit that pattern, or whose kit or season disagrees with the parent, are listed for review and never used. Parent garments change first; hero PIDs on those parents are then re-derived to match.</p>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
             <select id="hpp-club" class="form-select" style="width:200px;" onchange="hpParentsClubChanged()"></select>
-            <select id="hpp-season" class="form-select" style="width:150px;"></select>
+            <select id="hpp-season" class="form-select" style="width:150px;" onchange="resetImportTab('hpparents')"></select>
             <button class="btn btn-ghost btn-sm" onclick="hpParentsExport()">⬇ Export parent PIDs for Homeplate</button>
           </div>
           <div class="drop-zone" id="drop-zone-hpparents" onclick="document.getElementById('file-input-hpparents').click()">
@@ -3307,7 +3307,8 @@ function switchImportTab(tab) {
     const lbl = document.getElementById('provisional-count-label');
     if (lbl) lbl.textContent = provisionals.length ? `${provisionals.length} provisional PID${provisionals.length!==1?'s':''} currently in AT` : 'No provisional PIDs in AT';
   }
-  if (tab === 'hpparents') { fillSelect('hpp-club', CACHE.clubs, c=>({v:c.id,l:c.Name||''}), {v:'',l:'Choose club'}); hpParentsClubChanged(); renderHpRecords(); renderHpParentsPlan(); }
+  if (tab === 'hpparents') { resetImportTab('hpparents'); fillSelect('hpp-club', CACHE.clubs, c=>({v:c.id,l:c.Name||''}), {v:'',l:'Choose club'}); hpParentsClubChanged(); renderHpRecords(); renderHpParentsPlan(); }
+  if (tab === 'storage' || tab === 'mdmroster') resetImportTab(tab);
   if (tab === 'mdmpreview') initMdmPreviewTab();
 }
 
@@ -5117,6 +5118,10 @@ function parseImportWorkbook(wb, clubId, seasonId, filename, keepDecisions) {
     importData.sheets.push(sheetName);
   });
   importData._rawHeroCount = importData.heroes.length;
+  // a player row with NO PID anywhere in the file has nothing to import, so no Players record is created for it (they can be added when their PIDs arrive)
+  { const _withPids = new Set(importData.heroes.map(h => importNameKey(h.playerName, h.clubId || clubId)));
+    const _none = importData.players.filter(p => !_withPids.has(importNameKey(p.name, p.clubId || clubId)));
+    if (_none.length) { importData.noPidPlayers = [...new Set(_none.map(p => p.name))]; importData.players = importData.players.filter(p => _withPids.has(importNameKey(p.name, p.clubId || clubId))); } }
   applyRosterEvidence(importData);
   // v237: importData.players keeps EVERY occurrence of a player (one per section / sheet row, whatever its font type). Nothing is discarded here:
   // planImportPlayers() reconciles them with fixed rules, so the written shirt name / number no longer depend on which sheet or section comes first.
@@ -5325,6 +5330,8 @@ function parseSingleSection(rows, startRow, endRow, fontType, kitType, clubId, s
     const nameLower = rawName.toLowerCase();
     if (['actor name','actor id','name','font type','assembley name','assembly name'].includes(nameLower)) continue;
 
+    // a row whose name is just "Removed" is a note in the sheet (a player taken out), never a player; any PIDs on it are reported as skipped
+    if (/^\s*removed\s*$/i.test(rawName)) { if (row.some(isPidVal)) _recordSkipped(row, i); continue; }
     const shirtName = shirtCol!==-1 ? String(row[shirtCol]||'').trim()||rawName.toUpperCase() : rawName.toUpperCase();
     const number = numberCol!==-1 ? (parseInt(row[numberCol])||null) : null;
     const _rawActorId = actorIdCol!==-1 ? String(row[actorIdCol]||'').trim() : '';
@@ -5835,6 +5842,8 @@ function showImportPreview(club, season, filename) {
   if (_gkCand.length>0) html+=`<div style="background:rgba(255,179,64,0.10);border:1px solid rgba(255,179,64,0.45);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;"><b>⛔ ${_gkCand.length} unlabelled row${_gkCand.length!==1?'s':''} of PIDs need${_gkCand.length===1?'s':''} you to say what they are.</b> Nothing is written until each is confirmed. A row of PIDs with no name between the Blank row and the "Actor Name" header could be goalkeeper parent PIDs, or hero PIDs whose names are missing. Look at the sheet row, then choose:${_gkCand.map(x=>`<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,179,64,0.25);">${_escHtml(x.sheet)} · ${_escHtml(x.kitType)} · row ${x.row}: <span class="mono">${x.pids.join(', ')}</span><br><button class="btn btn-ghost btn-sm" data-k="${_escHtml(x.key)}" onclick="resolveGkCandidate(this.dataset.k,'gk')" style="margin:4px 6px 0 0;">These are goalkeeper parent PIDs</button><button class="btn btn-ghost btn-sm" data-k="${_escHtml(x.key)}" onclick="resolveGkCandidate(this.dataset.k,'nameless')" style="margin-top:4px;">These are hero PIDs missing names (skip them)</button></div>`).join('')}</div>`;
   const _gkInf = d.gkInferred||[];
   if (_gkInf.length>0) html+=`<div style="background:rgba(99,179,237,0.08);border:1px solid rgba(99,179,237,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:#63b3ed;margin-bottom:10px;">ℹ ${_gkInf.length} unlabelled row${_gkInf.length!==1?'s were':' was'} treated as goalkeeper parent PIDs because you confirmed ${_gkInf.length!==1?'them':'it'}: ${_gkInf.map(x=>_escHtml(x.sheet)+' '+_escHtml(x.kitType)+' row '+x.row).join('; ')}. Goalkeepers in those sections link to these parents, not the outfield ones.</div>`;
+  const _noPid = d.noPidPlayers||[];
+  if (_noPid.length>0) html+=`<div style="background:rgba(99,179,237,0.08);border:1px solid rgba(99,179,237,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:#63b3ed;margin-bottom:10px;">ℹ ${_noPid.length} name${_noPid.length!==1?'s':''} in the sheet ${_noPid.length!==1?'have':'has'} no PIDs, so no player will be created for ${_noPid.length!==1?'them':'it'}: ${_noPid.slice(0,8).map(_escHtml).join(', ')}${_noPid.length>8?', …':''}.</div>`;
   const _skipped = d.skipped||[];
   if (_skipped.length>0) { const _n=_skipped.reduce((t,x)=>t+x.pids.length,0); html+=`<div style="background:rgba(255,82,82,0.10);border:1px solid rgba(255,82,82,0.35);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:#ff6b6b;margin-bottom:10px;">⚠ ${_n} PID${_n!==1?'s':''} in ${_skipped.length} row${_skipped.length!==1?'s':''} will NOT be imported because the row has no player name: ${_skipped.slice(0,8).map(x=>_escHtml(x.sheet)+' row '+x.row+' ('+x.pids.join(', ')+')').join('; ')}${_skipped.length>8?'; …and '+(_skipped.length-8)+' more':''}. Add the names to the sheet and upload again, or carry on knowing these are left out.</div>`; }
   const _routes = d.sheetRouting||[];
@@ -5879,13 +5888,16 @@ function showAllImportPreview() {
   if (wrap) { const link = wrap.querySelector('a'); if(link) link.parentElement.style.display='none'; }
 }
 
+let _storageImportRunning = false;   // true from the moment the first write starts until it has finished or failed: nothing may clear, reload or re-run the import meanwhile
 async function confirmImport() {
   if (!importData) return;
+  if (_storageImportRunning) { toast('An import is already running. Wait for it to finish.', 'error'); return; }
   // v237: never write while any player's identity is unresolved (the preview shows them in a red box)
   const _plan = planImportPlayers(importData.players, CACHE.players);
   const _heldAll = _plan.held.concat(_importParseHeld(importData));
   if (_heldAll.length) { toast(`Import blocked: ${_heldAll.length} item${_heldAll.length!==1?'s':''} need${_heldAll.length===1?'s':''} review (see the red box in the preview). Nothing was written.`, 'error'); return; }
   const btn = document.getElementById('import-confirm-btn');
+  _storageImportRunning = true;
   btn.textContent = 'Importing...';
   btn.disabled = true;
   // Add progress bar below the stat pills, above sheets info
@@ -5996,7 +6008,7 @@ async function confirmImport() {
     updateStats(); refreshFilterSelects();
     const _impSeen = new Set();
     const _importedPlayerList = d.players.filter(p => { const k = importNameKey(p.name, p.clubId); if (_impSeen.has(k)) return false; _impSeen.add(k); return true; }).map(p=>({name:p.name,clubId:p.clubId,seasonId:p.seasonId}));
-    clearImport();
+    clearImport(true);
     // Check if import introduced any incomplete entries
     const health = calcDataHealth();
     if (health.totalIncomplete > 0) {
@@ -6022,10 +6034,19 @@ async function confirmImport() {
     toast('Import error: '+e.message,'error');
     btn.textContent='Import all';
     btn.disabled=false;
+  } finally {
+    _storageImportRunning = false;
   }
 }
 
-function clearImport() {
+// Each import tab starts CLEAN: opening it, or changing its club or season, throws away the file and preview left from the last run. Never while a write is running.
+function resetImportTab(tab) {
+  if (tab === 'storage') { if (_storageImportRunning || !document.getElementById('import-preview')) return; clearImport(); }
+  else if (tab === 'hpparents') { if (_hpRunning) return; hpParentsData = null; const pv = document.getElementById('hpp-preview'); if (pv) pv.classList.add('hidden'); const st = document.getElementById('hpp-status'); if (st) st.textContent = ''; const fi = document.getElementById('file-input-hpparents'); if (fi) fi.value = ''; }
+  else if (tab === 'mdmroster') { if (_mdmImportRunning) return; mdmRosterData = null; const pv = document.getElementById('mdm-roster-preview'); if (pv) pv.classList.add('hidden'); const st = document.getElementById('mdm-roster-status'); if (st) st.style.display = 'none'; const fi = document.getElementById('mdm-roster-file'); if (fi) fi.value = ''; }
+}
+function clearImport(force) {
+  if (_storageImportRunning && !force) { toast('An import is running: it cannot be cancelled or cleared until it finishes.', 'error'); return; }
   importData=null; window._gkDecisions = {}; window._gkPlayerChoices = {}; window._importWb = null;   // v238: nothing from this upload session may outlive it
   document.getElementById('import-preview').classList.add('hidden');
   document.getElementById('file-input-storage').value='';
@@ -6392,7 +6413,7 @@ const HP_HELD_WORDS = ['pro','authentic','match','stadium','replica','elite','va
 // Pro / tier wording. Each tier word is accepted for ONE brand, in the place it was seen, and maps only the size/sleeve combinations that were seen in a real export; anything else is held.
 const HP_TIER_BRAND = {authentic_pre: 'puma', authentic_post: 'adidas', pro: 'castore', replica: 'castore', stadium: 'nike', match: 'nike'};
 // One table PER BRAND AND TIER WORD, each listing only the size/sleeve combinations seen in that brand's real exports (adidas Authentic: Man Utd, Liverpool, Aston Villa, DFB; PUMA Authentic: AC Milan, Man City, men's short sleeve only).
-const HP_PRO = {authentic_adidas: {mens_ss: 'pro_shirt', mens_ls: 'pro_shirt_ls', womens: 'womens_pro', kids_ss: 'pro_kids'}, authentic_puma: {mens_ss: 'pro_shirt'}, pro: {mens_ss: 'pro_shirt', womens: 'womens_pro'}, match: {mens_ss: 'pro_shirt', womens: 'womens_pro', kids_ss: 'pro_kids'}};
+const HP_PRO = {authentic_adidas: {mens_ss: 'pro_shirt', mens_ls: 'pro_shirt_ls', womens: 'womens_pro', kids_ss: 'pro_kids'}, authentic_puma: {mens_ss: 'pro_shirt'}, pro: {mens_ss: 'pro_shirt', mens_ls: 'pro_shirt_ls', womens: 'womens_pro'}, match: {mens_ss: 'pro_shirt', womens: 'womens_pro', kids_ss: 'pro_kids'}};
 const HP_REPLICA_OK = ['mens_ss', 'mens_ls', 'womens', 'kids_ss'];
 // Nike "Stadium": these five combinations, plus womens_ls but ONLY on a goalkeeper product (seen once, PSG)
 const HP_STADIUM_OK = ['mens_ss', 'mens_ls', 'womens', 'kids_ss', 'kids_ls'];
@@ -6727,8 +6748,23 @@ function hpParentsExport() {
   _downloadText(`parent_pids_for_homeplate_${new Date().toISOString().slice(0, 10)}.csv`, 'productId\n' + ps.map(p => p.PID).join('\n') + '\n');
   toast(`Exported ${ps.length} parent PID${ps.length !== 1 ? 's' : ''}`);
 }
-function hpParentsClubChanged() { filterSeasonDropdown('hpp-season', document.getElementById('hpp-club').value, {allLabel: 'All seasons'}); }
-function hpBuildPlan() { return planParentGarments({hpRows: hpParentsData.rows, parents: CACHE.parents || [], heroes: CACHE.heroes || [], seasons: CACHE.seasons || []}); }
+function hpParentsClubChanged() { filterSeasonDropdown('hpp-season', document.getElementById('hpp-club').value, {allLabel: 'All seasons', source: 'all'}); resetImportTab('hpparents'); }
+function hpBuildPlan() {
+  // ONLY the club (and season, unless "All seasons") picked above is looked at: other clubs' products in the same file are counted and set aside, never planned.
+  const clubId = (document.getElementById('hpp-club') || {}).value || '', seasonId = (document.getElementById('hpp-season') || {}).value || '';
+  const inScope = x => x.ClubID === clubId && (!seasonId || x.SeasonID === seasonId);
+  const allParents = CACHE.parents || [], parents = allParents.filter(inScope), heroes = (CACHE.heroes || []).filter(inScope);
+  const scopedPids = new Set(parents.map(p => String(p.PID))), anyPids = new Set(allParents.map(p => String(p.PID)));
+  // a PID that has more than one parent record ANYWHERE in Airtable (even one in another club) must stay ambiguous: the other records are passed to the planner as witnesses so it holds the PID
+  const seenCount = new Map(); allParents.forEach(p => { const k = String(p.PID); seenCount.set(k, (seenCount.get(k) || 0) + 1); });
+  const witnesses = allParents.filter(p => !inScope(p) && scopedPids.has(String(p.PID)) && seenCount.get(String(p.PID)) > 1);
+  const rows = hpParentsData.rows.filter(r => scopedPids.has(String(r.pid)) || !anyPids.has(String(r.pid)));
+  const plan = planParentGarments({hpRows: rows, parents: parents.concat(witnesses), heroes, seasons: CACHE.seasons || []});
+  const other = hpParentsData.rows.length - rows.length;
+  if (other) plan.info.unshift(`${other} product${other !== 1 ? 's' : ''} in the file belong to other clubs or seasons and ${other !== 1 ? 'were' : 'was'} not looked at: only the club and season you picked are checked.`);
+  plan.scope = {clubId, seasonId, other};
+  return plan;
+}
 function renderHpParentsPlan() {
   renderHpRecords();
   const d = hpParentsData; if (!d) return; d.plan = hpBuildPlan();
@@ -6744,6 +6780,7 @@ function renderHpRecords() {   // shown whenever the tab is open, whether or not
 }
 async function processHpParentsFile(file) {
   if (!file) return;
+  if (!(document.getElementById('hpp-club') || {}).value) { toast('Pick a club first, so only that club is checked.', 'error'); const fi = document.getElementById('file-input-hpparents'); if (fi) fi.value = ''; return; }
   try {
     const buf = await file.arrayBuffer(), wb = XLSX.read(buf, {type: 'array', codepage: 65001});
     const rows = parseHomeplateRows(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {defval: ''}));
@@ -6991,6 +7028,7 @@ function fixEncoding(str) {
 }
 
 function processImportFile(file) {
+  if (_storageImportRunning) { toast('An import is running: wait for it to finish before loading another file.', 'error'); const fi = document.getElementById('file-input-storage'); if (fi) fi.value = ''; return; }
   const clubId = document.getElementById('import-club').value;
   const seasonId = document.getElementById('import-season').value;
   if (!clubId||!seasonId) { toast('Please select a club and season','error'); return; }
@@ -7147,20 +7185,33 @@ function planMdmImport({rows, clubId, seasonId, clubName, existing, players, her
   if (plan.ambiguousJersey.length) plan.warnings.push(`${plan.ambiguousJersey.length} player${plan.ambiguousJersey.length !== 1 ? 's were' : ' was'} NOT matched because their shirt name belongs to more than one ActorID in the file: ${plan.ambiguousJersey.slice(0, 4).map(x => x.player.Name).join(', ')}. Give them an ActorID to include them.`);
   const archShirt = plan.playerUpdates.filter(u => u.change === 'archive' && u.matchedBy !== 'ActorID');
   if (archShirt.length) plan.warnings.push(`${archShirt.length} player${archShirt.length !== 1 ? 's' : ''} will be ARCHIVED on a shirt-name match only (no ActorID): ${archShirt.slice(0, 4).map(u => u.player.Name).join(', ')}. Check they are the right people.`);
-  // ── hero PIDs: RosterMemberID ──
+  // ── hero PIDs: fill a BLANK ActorID from the player (including an ActorID this same import fills in), then link RosterMemberID ──
   const key = {}, dupes = new Set();
   rows.forEach(r => { if (r.actorId && r.id && r.rosterId && String(r.id) !== '0' && String(r.id) !== '-999') { const k = `${r.actorId}|${r.rosterId}`; if (key[k] && key[k] !== String(r.id)) dupes.add(k); key[k] = String(r.id); } });
+  const playerById = new Map((players || []).map(p => [p.id, p]));
+  const filledActor = new Map(plan.playerUpdates.filter(u => u.actorId).map(u => [u.player.id, _mdmStr(u.actorId)]));
+  plan.heroActorMismatch = 0;
   (heroes || []).forEach(h => {
     if (h.ClubID !== clubId || h.SeasonID !== seasonId) return;
-    if (!isRealMdmId(h.ActorID) || !isRealMdmId(h.RosterID) || isRealMdmId(h.RosterMemberID)) return;
-    const k = `${h.ActorID}|${h.RosterID}`;
-    if (dupes.has(k)) { plan.ambiguousHeroes++; return; }
-    if (key[k]) plan.heroUpdates.push({hero: h, rmid: key[k]});
+    const pl = playerById.get(h.PlayerID);
+    const playerActor = pl && pl.ClubID === clubId ? (isRealMdmId(pl.MDMActorID) ? _mdmStr(pl.MDMActorID) : (filledActor.get(pl.id) || '')) : '';
+    const heroHasActor = isRealMdmId(h.ActorID);
+    // the hero and its player disagree about who this is: NOTHING is planned for this hero (no fill, no link), whether or not either ActorID exists in the file
+    if (heroHasActor && playerActor && _mdmStr(h.ActorID) !== playerActor) { plan.heroActorMismatch++; return; }
+    const fillActor = !heroHasActor && playerActor ? playerActor : '';          // only ever fills a BLANK ActorID, never overwrites one
+    const actor = heroHasActor ? _mdmStr(h.ActorID) : fillActor;
+    let rmid = '';
+    if (actor && isRealMdmId(h.RosterID) && !isRealMdmId(h.RosterMemberID)) {
+      const k = `${actor}|${h.RosterID}`;
+      if (dupes.has(k)) plan.ambiguousHeroes++; else if (key[k]) rmid = key[k];
+    }
+    if (fillActor || rmid) plan.heroUpdates.push({hero: h, rmid, actorId: fillActor});
   });
+  if (plan.heroActorMismatch) plan.warnings.push(`${plan.heroActorMismatch} hero PID${plan.heroActorMismatch !== 1 ? 's carry' : ' carries'} a different ActorID from ${plan.heroActorMismatch !== 1 ? 'their players' : 'their player'}: ${plan.heroActorMismatch !== 1 ? 'they are' : 'it is'} NOT touched (no ActorID filled, no link). Correct the ActorID on the hero PID or on the player, then import again.`);
   if (plan.ambiguousHeroes) plan.warnings.push(`${plan.ambiguousHeroes} hero PID${plan.ambiguousHeroes !== 1 ? 's' : ''} will NOT be linked: one ActorID is shared by different roster rows (${[...dupes].slice(0, 3).join(', ')}). Fix it in MDM, then import again.`);
   plan.counts = {rows: rows.length, create: plan.toCreate.length, update: plan.toUpdate.length, unchanged: plan.unchanged,
     archive: plan.playerUpdates.filter(u => u.change === 'archive').length, reactivate: plan.playerUpdates.filter(u => u.change === 'reactivate').length, actorFill: plan.playerUpdates.filter(u => u.actorId).length,
-    heroLinks: plan.heroUpdates.length, heroNotLinked: plan.ambiguousHeroes};
+    heroLinks: plan.heroUpdates.filter(u => u.rmid).length, heroActorFill: plan.heroUpdates.filter(u => u.actorId).length, heroNotLinked: plan.ambiguousHeroes};
   plan.total = plan.toCreate.length + plan.toUpdate.length + plan.playerUpdates.length + plan.heroUpdates.length;
   // The signature covers every planned write AND the values it was planned against (including identity and context), so a record edited in Airtable after the
   // preview changes it even when the same fields would be written. (Between the final re-read and the write itself a small race window remains; Airtable has no transactions.)
@@ -7170,7 +7221,7 @@ function planMdmImport({rows, clubId, seasonId, clubName, existing, players, her
     plan.toCreate.map(f => jx(f)).sort().join('\n'),
     plan.toUpdate.map(u => { const ex = exClub.get(u.key) || {}; return JSON.stringify({atId: u.atId, key: u.key, ctx: pick(ex, ['ClubID','RosterMemberID','RosterID','ActorID','PlayerName','JerseyName','JerseyNumber','Position','RosterStatus','DisplayStatus','RosterName']), changes: u.changes.map(c => [c.field, c.from, c.to]).sort()}); }).sort().join('\n'),
     plan.playerUpdates.map(u => JSON.stringify({id: u.player.id, ctx: pick(u.player, ['ClubID','Name','ShirtName','MDMActorID','Status']), desired: u.desired, actorId: u.actorId || '', by: u.matchedBy, change: u.change})).sort().join('\n'),
-    plan.heroUpdates.map(u => JSON.stringify({id: u.hero.id, ctx: pick(u.hero, ['PID','ClubID','SeasonID','ActorID','RosterID','RosterMemberID']), rmid: u.rmid})).sort().join('\n'),
+    plan.heroUpdates.map(u => JSON.stringify({id: u.hero.id, ctx: pick(u.hero, ['PID','ClubID','SeasonID','PlayerID','ActorID','RosterID','RosterMemberID']), rmid: u.rmid, actorId: u.actorId || ''})).sort().join('\n'),
     plan.identityConflicts.map(x => x.player.id + ':' + x.ownActor + ':' + x.fileActors.join(',')).sort().join('|')].join('\n#\n'));
   return plan;
 }
@@ -7181,12 +7232,12 @@ function mdmPlanHtml(plan, ctx) {   // pure string: the whole preview above the 
   const det = (title, rowsHtml, n) => n ? `<details style="margin:6px 0;"><summary style="cursor:pointer;font-size:12px;color:var(--text2);">${title}</summary><div style="max-height:240px;overflow-y:auto;"><table class="data-table" style="font-size:11px;"><tbody>${rowsHtml}</tbody></table></div></details>` : '';
   const players = plan.playerUpdates;
   return `<div style="font-size:12px;color:var(--text2);margin-bottom:8px;">${e(ctx.clubName)} · ${e(ctx.seasonName)} · ${plan.rosters.length} roster${plan.rosters.length !== 1 ? 's' : ''}: ${plan.rosters.map(r => e(r.id) + ' (' + r.count + ')').join(', ')}</div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">${tile('Rows in file', c.rows)}${tile('New roster rows', c.create, 'var(--green)')}${tile('Rows that change', c.update, 'var(--amber)')}${tile('Already identical', c.unchanged)}${tile('Players to archive', c.archive, c.archive ? 'var(--red,#ff6b6b)' : '')}${tile('Players to reactivate', c.reactivate)}${tile('ActorIDs to fill', c.actorFill)}${tile('Hero PIDs to link', c.heroLinks, 'var(--green)')}${c.heroNotLinked ? tile('Hero PIDs NOT linked', c.heroNotLinked, 'var(--amber)') : ''}</div>`
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">${tile('Rows in file', c.rows)}${tile('New roster rows', c.create, 'var(--green)')}${tile('Rows that change', c.update, 'var(--amber)')}${tile('Already identical', c.unchanged)}${tile('Players to archive', c.archive, c.archive ? 'var(--red,#ff6b6b)' : '')}${tile('Players to reactivate', c.reactivate)}${tile('ActorIDs to fill', c.actorFill)}${tile('Hero PIDs to link', c.heroLinks, 'var(--green)')}${c.heroActorFill ? tile('Hero ActorIDs to fill', c.heroActorFill, 'var(--green)') : ''}${c.heroNotLinked ? tile('Hero PIDs NOT linked', c.heroNotLinked, 'var(--amber)') : ''}</div>`
     + box(plan.errors, 'rgba(255,82,82,0.10)', 'rgba(255,82,82,0.35)', '#ff6b6b', '⛔') + box(plan.warnings, 'var(--amber-bg)', 'rgba(255,179,64,0.25)', 'var(--amber)', '⚠') + box(plan.info, 'rgba(99,179,237,0.08)', 'rgba(99,179,237,0.2)', '#63b3ed', 'ℹ')
     + (plan.total === 0 && !plan.errors.length ? `<div style="font-size:12px;color:var(--green);margin:6px 0;">✓ Nothing to do: Airtable already matches this file.</div>` : '')
     + det(`Rows that change (${plan.toUpdate.length}): what changes`, plan.toUpdate.slice(0, 80).map(u => `<tr><td style="color:var(--text);">${e(u.name)}</td><td class="mono">${e(u.key)}</td><td>${u.changes.map(ch => `${e(ch.field)}: <span style="opacity:.7;">${e(ch.from || '∅')}</span> → <b>${e(ch.to || '∅')}</b>`).join('; ')}</td></tr>`).join(''), plan.toUpdate.length)
     + det(`Players that change (${players.length})`, players.slice(0, 120).map(u => `<tr><td style="color:var(--text);">${e(u.player.Name)}</td><td>${u.change === 'archive' ? '<span style="color:var(--red,#ff6b6b);">archive</span>' : u.change === 'reactivate' ? 'reactivate' : 'fill ActorID'}${u.from && u.change !== 'actor' ? ' (' + e(u.from) + ' → ' + e(u.desired) + ')' : ''}</td><td>${u.actorId ? 'ActorID ← ' + e(u.actorId) : ''}</td><td>matched by ${e(u.matchedBy)}</td></tr>`).join(''), players.length)
-    + det(`Hero PIDs to link (${plan.heroUpdates.length})`, Object.entries(plan.heroUpdates.reduce((m, u) => { const k = u.hero.RosterID || '?'; m[k] = (m[k] || 0) + 1; return m; }, {})).map(([k, n]) => `<tr><td>roster ${e(k)}</td><td>${n} hero PID${n !== 1 ? 's' : ''}</td></tr>`).join(''), plan.heroUpdates.length)
+    + det(`Hero PIDs to update (${plan.heroUpdates.length})`, Object.entries(plan.heroUpdates.reduce((m, u) => { const k = u.hero.RosterID || '?'; (m[k] = m[k] || {n: 0, l: 0, f: 0}); m[k].n++; if (u.rmid) m[k].l++; if (u.actorId) m[k].f++; return m; }, {})).map(([k, x]) => `<tr><td>roster ${e(k)}</td><td>${x.n} hero PID${x.n !== 1 ? 's' : ''}</td><td>${x.l} to link${x.f ? ', ' + x.f + ' ActorID' + (x.f !== 1 ? 's' : '') + ' to fill' : ''}</td></tr>`).join(''), plan.heroUpdates.length)
     + det(`Existing numbers kept (${plan.keptNumbers.length})`, plan.keptNumbers.map(k => `<tr><td>${e(k.name)}</td><td>roster ${e(k.rosterId)}</td><td>keeps #${e(k.kept)} (${e(k.why)})</td></tr>`).join(''), plan.keptNumbers.length)
     + det(`Garbled names (${plan.garbled.length})`, plan.garbled.map(g => `<tr><td>line ${g.line}</td><td>${e(g.field)}</td><td style="color:var(--amber);">${e(g.value)}</td><td>${e(g.why)}</td></tr>`).join(''), plan.garbled.length)
     + det(`Names repaired (${plan.repaired.length})`, plan.repaired.slice(0, 60).map(r => `<tr><td>line ${r.line}</td><td>${e(r.field)}</td><td>${e(r.from)} → <b>${e(r.to)}</b></td></tr>`).join(''), plan.repaired.length);
@@ -7218,14 +7269,15 @@ async function runMdmImportPlan(plan, ui) {
   }
   for (let i = 0; i < plan.heroUpdates.length && !rep.aborted; i += 10) {
     const batch = plan.heroUpdates.slice(i, i + 10);
-    await Promise.all(batch.map(({hero, rmid}) => atUpdate(TABLES.heroes, hero.id, {RosterMemberID: rmid}).then(() => { rep.heroes++; hero.RosterMemberID = rmid; }).catch(e => fail('link hero PID', `PID ${hero.PID}`, e))));
-    tick(batch.length, '⟳ Linking hero PIDs');
+    await Promise.all(batch.map(({hero, rmid, actorId}) => { const f = {}; if (actorId) f.ActorID = actorId; if (rmid) f.RosterMemberID = rmid;
+      return atUpdate(TABLES.heroes, hero.id, f).then(() => { rep.heroes++; Object.assign(hero, f); }).catch(e => fail('update hero PID', `PID ${hero.PID}`, e)); }));
+    tick(batch.length, '⟳ Filling ActorIDs and linking hero PIDs');
   }
   return rep;
 }
 
 function mdmReportText(rep, plan) {
-  const parts = [`${rep.created} roster rows created`, `${rep.updated} updated`, `${rep.players} players synced`, `${rep.heroes} hero PIDs linked`];
+  const parts = [`${rep.created} roster rows created`, `${rep.updated} updated`, `${rep.players} players synced`, `${rep.heroes} hero PIDs updated (ActorID filled and/or linked)`];
   const expected = plan.toCreate.length + plan.toUpdate.length + plan.playerUpdates.length + plan.heroUpdates.length, did = rep.created + rep.updated + rep.players + rep.heroes;
   let t = parts.join(', ') + '.';
   if (rep.failed.length) t += ` ${rep.failed.length} FAILED (${rep.failed.slice(0, 5).map(f => f.phase + ': ' + f.what + ' (' + f.error + ')').join('; ')}${rep.failed.length > 5 ? '; …' : ''}).`;
@@ -7238,7 +7290,7 @@ let mdmRosterData = null, _mdmImportRunning = false;
 const _mdmBeforeUnload = ev => { ev.preventDefault(); ev.returnValue = 'The MDM import is still running. Leaving now stops it half way.'; return ev.returnValue; };
 
 function mdmRosterClubChanged() {
-  const clubId = document.getElementById('mdm-roster-club').value;
+  const clubId = document.getElementById('mdm-roster-club').value; resetImportTab('mdmroster');
   filterSeasonDropdown('mdm-roster-season', clubId, {blankLabel:'— Select season —', source:'rosterMappings'});
 }
 
