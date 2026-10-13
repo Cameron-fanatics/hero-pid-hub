@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v239-wip.8 -->
+<!-- HEROPID-BUILD-v239-wip.11 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -831,6 +831,20 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Scans cached MDM Roster Members for duplicate <span class="mono" style="font-size:11px;">RosterMemberID</span> values. Duplicates can cause incorrect backfill matches.</div>
       <button class="btn btn-ghost btn-sm" onclick="runMdmDupeCheck()">⊙ Check for duplicates</button>
       <div id="mdm-dupe-result" style="margin-top:10px;font-size:12px;"></div>
+    </div>
+
+    <!-- CORRECT ROSTERIDS -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Correct wrong RosterIDs from the mappings</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">
+        The backfill above only fills BLANK RosterIDs. This fixes active hero PIDs whose RosterID differs from the roster mapping for their font and kit, for ONE club and season. A corrected PID's roster-entry link (RosterMemberID) belonged to the old roster, so it is cleared: link again afterwards (Import &gt; MDM roster). Nothing is written until you tick groups and press the button.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+        <select id="rfix-club" class="filter-select" style="width:180px;font-size:12px;" onchange="onRosterFixClubChange()"><option value="">Select club...</option></select>
+        <select id="rfix-season" class="filter-select" style="width:140px;font-size:12px;" onchange="rosterFixClear()"><option value="">Select season...</option></select>
+        <button class="btn btn-ghost btn-sm" onclick="rosterFixPreview()">⊙ Preview</button>
+      </div>
+      <div id="rfix-out"></div>
     </div>
 
     <!-- MDM BACKFILL -->
@@ -3483,7 +3497,7 @@ function showPage(page) {
   if (page==='bulkexport') initBulkExport();
   if (page==='fonts') renderFontsPage();
   if (page==='rostermappings') initRosterMappingsPage();
-  if (page==='cleanup') { initBackfillSelects(); if (typeof dedupRenderJournalWarning === 'function') dedupRenderJournalWarning(); }
+  if (page==='cleanup') { initBackfillSelects(); if (typeof initRosterFixSelects === 'function') initRosterFixSelects(); if (typeof dedupRenderJournalWarning === 'function') dedupRenderJournalWarning(); }
   if (page==='datahealth') calcDataHealth();
   if (page==='analytics') initAnalyticsPage();
   if (page==='search') {
@@ -6418,6 +6432,119 @@ async function storedLinksApply() {
   } catch (e) { out.innerHTML = `<div style="font-size:12px;color:var(--red);">Stopped: ${_escHtml(e.message || e)}</div>`; }
   finally { _storedLinksRunning = false; }
 }
+// ─── v239: CORRECT WRONG ROSTERIDs FROM THE MAPPINGS ─────────────────────────
+// Pure. Active hero PIDs of ONE club and season whose RosterID differs from the active roster mapping for their font and kit.
+// A group is (current RosterID -> mapped RosterID). "stray" = the current RosterID is not a mapped roster of this club and season (safe to correct);
+// "mapped" = it IS another mapped roster (could be deliberate, e.g. Youth or Minikit moved by hand): shown, never ticked by default.
+function planRosterIdFix({heroes, rosterMappings, clubId, seasonId}) {
+  const plan = {total: 0, ok: 0, noMapping: 0, ambiguousMapping: 0, blank: 0, notActive: 0, groups: [], fixable: 0, linkedCleared: 0, signature: ''};
+  const lc = v => String(v == null ? '' : v).trim().toLowerCase();
+  const maps = new Map(), mapped = new Set(), amb = new Set();
+  (rosterMappings || []).forEach(m => {
+    if (!m.Active || m.ClubID !== clubId || m.SeasonID !== seasonId || !isRealMdmId(m.RosterID)) return;
+    const k = lc(m.FontType) + '|' + lc(m.KitType), rid = _mdmStr(m.RosterID);
+    mapped.add(rid);
+    if (maps.has(k) && maps.get(k) !== rid) amb.add(k); else maps.set(k, rid);
+  });
+  const groups = new Map(), sig = [];
+  (heroes || []).forEach(h => {
+    if (h.ClubID !== clubId || h.SeasonID !== seasonId) return;
+    plan.total++;
+    if (h.Status !== 'active') { plan.notActive++; return; }
+    if (!isRealMdmId(h.RosterID)) { plan.blank++; return; }          // a blank RosterID is the backfill's job
+    const k = lc(h.FontType) + '|' + lc(h.KitType);
+    if (amb.has(k)) { plan.ambiguousMapping++; return; }
+    const to = maps.get(k);
+    if (!to) { plan.noMapping++; return; }
+    const from = _mdmStr(h.RosterID);
+    if (from === to) { plan.ok++; return; }
+    const key = from + '>' + to, rmid = isRealMdmId(h.RosterMemberID) ? _mdmStr(h.RosterMemberID) : '';
+    if (!groups.has(key)) groups.set(key, {key, from, to, kind: mapped.has(from) ? 'mapped' : 'stray', fonts: new Set(), kits: new Set(), items: []});
+    const g = groups.get(key); g.fonts.add(String(h.FontType || '')); g.kits.add(String(h.KitType || '')); g.items.push({id: h.id, pid: h.PID, rmid, font: lc(h.FontType), kit: lc(h.KitType)});
+    sig.push(`${h.id}|${from}|${to}|${rmid}`);
+  });
+  plan.groups = [...groups.values()].map(g => ({...g, fonts: [...g.fonts].sort(), kits: [...g.kits].sort(), linked: g.items.filter(i => i.rmid).length}))
+    .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'stray' ? -1 : 1) || b.items.length - a.items.length || a.key.localeCompare(b.key));
+  plan.fixable = plan.groups.reduce((t, g) => t + g.items.length, 0); plan.linkedCleared = plan.groups.reduce((t, g) => t + g.linked, 0);
+  plan.signature = _mdmHash(JSON.stringify([sig.sort(), [...mapped].sort()]));
+  return plan;
+}
+async function _rosterFixRead(clubId, seasonId) {
+  const heroes = (await _atGetAllPaced(TABLES.heroes, `AND({ClubID}='${clubId}',{SeasonID}='${seasonId}')`)).map(r => ({id: r.id, ...r.fields}));
+  const rosterMappings = (await _atGetAllPaced(TABLES.rosterMappings)).map(r => ({id: r.id, ...r.fields}));   // fresh: the mappings may have been edited
+  return planRosterIdFix({heroes, rosterMappings, clubId, seasonId});
+}
+let _rosterFixRunning = false, _rosterFixPlan = null, _rosterFixSeq = 0;   // _rosterFixSeq: every Preview and every Clear moves it on, so a slow older Preview can never show up later
+function rosterFixClear() { _rosterFixSeq++; if (_rosterFixRunning) return; _rosterFixPlan = null; const o = document.getElementById('rfix-out'); if (o) o.innerHTML = ''; }
+function initRosterFixSelects() {
+  const sel = document.getElementById('rfix-club'); if (!sel || sel.options.length > 1) return;
+  (CACHE.clubs || []).forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.Name || c.id; sel.appendChild(o); });
+}
+function onRosterFixClubChange() { filterSeasonDropdown('rfix-season', document.getElementById('rfix-club').value, {blankLabel: 'Select season...', source: 'rosterMappings'}); rosterFixClear(); }
+async function rosterFixPreview() {
+  if (_rosterFixRunning) { toast('A correction is running. Wait for it to finish.', 'error'); return; }
+  const clubId = document.getElementById('rfix-club').value, seasonId = document.getElementById('rfix-season').value, out = document.getElementById('rfix-out');
+  if (!clubId || !seasonId) { toast('Pick a club and a season first.', 'error'); return; }
+  const seq = ++_rosterFixSeq; _rosterFixPlan = null;   // while reading, there is no plan to apply
+  out.innerHTML = '<div style="font-size:12px;color:var(--text2);">Reading Airtable…</div>';
+  try {
+    const plan = await _rosterFixRead(clubId, seasonId);
+    if (seq !== _rosterFixSeq || document.getElementById('rfix-club').value !== clubId || document.getElementById('rfix-season').value !== seasonId) return;   // cancelled, replaced by a newer Preview, or the club/season was changed meanwhile
+    plan.clubId = clubId; plan.seasonId = seasonId; _rosterFixPlan = plan;
+    const tile = (l, n, c) => `<div style="flex:1;min-width:110px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;"><div style="font-size:11px;color:var(--text2);">${l}</div><div style="font-size:18px;font-weight:600;${c ? 'color:' + c + ';' : ''}">${n}</div></div>`;
+    const name = id => { const r = (CACHE.rosterMappings || []).find(m => _mdmStr(m.RosterID) === id && m.ClubID === clubId && m.SeasonID === seasonId); return r ? ` (${_escHtml(r.RosterName || r.Kit || '')})` : ''; };
+    out.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${tile('Hero PIDs in this club and season', plan.total)}${tile('Already right', plan.ok)}${tile('Wrong RosterID', plan.fixable, plan.fixable ? 'var(--amber)' : '')}${tile('Links cleared if fixed', plan.linkedCleared)}${tile('No mapping', plan.noMapping)}${tile('Mapping unclear', plan.ambiguousMapping)}${tile('Blank (use backfill)', plan.blank)}${tile('Not active (left alone)', plan.notActive)}</div>`
+      + (plan.groups.length ? `<table class="data-table" style="font-size:11px;margin-bottom:10px;"><thead><tr><th></th><th>Now</th><th>Mapped</th><th>Font / kit</th><th>PIDs</th><th>Links cleared</th><th></th></tr></thead><tbody>${plan.groups.map(g => `<tr><td><input type="checkbox" class="rfix-cb" value="${_escHtml(g.key)}" ${g.kind === 'stray' ? 'checked' : ''}></td><td class="mono">${_escHtml(g.from)}</td><td class="mono">${_escHtml(g.to)}${name(g.to)}</td><td>${g.fonts.map(_escHtml).join(', ')} / ${g.kits.map(_escHtml).join(', ')}</td><td>${g.items.length}</td><td>${g.linked}</td><td style="color:${g.kind === 'stray' ? 'var(--text3)' : 'var(--amber)'};">${g.kind === 'stray' ? 'not a mapped roster' : '⚠ another mapped roster: may be deliberate (Youth, Minikit)'}</td></tr>`).join('')}</tbody></table>`
+        + `<button class="btn btn-primary btn-sm" id="rfix-apply-btn" onclick="rosterFixApply()">Correct the ticked groups</button> <button class="btn btn-ghost btn-sm" onclick="rosterFixClear()">Cancel</button>`
+        : `<div style="font-size:12px;color:var(--green);">✓ Every active hero PID with a mapping already has the mapped RosterID.</div>`);
+  } catch (e) { if (seq === _rosterFixSeq) out.innerHTML = `<div style="font-size:12px;color:var(--red);">Could not read Airtable: ${_escHtml(e.message || e)}</div>`; }
+}
+async function rosterFixApply() {
+  if (_rosterFixRunning || !_rosterFixPlan) return;
+  const prev = _rosterFixPlan, out = document.getElementById('rfix-out'), btn = document.getElementById('rfix-apply-btn');
+  if (document.getElementById('rfix-club').value !== prev.clubId || document.getElementById('rfix-season').value !== prev.seasonId) {   // the plan belongs to another club or season than the one now selected
+    _rosterFixPlan = null; out.innerHTML = '<div style="font-size:12px;color:var(--red);">The club or season changed since the preview, so nothing was written. Press Preview again.</div>'; return;
+  }
+  const keys = new Set([...document.querySelectorAll('.rfix-cb:checked')].map(x => x.value));
+  const chosen = prev.groups.filter(g => keys.has(g.key));
+  if (!chosen.length) { toast('Tick at least one group.', 'error'); return; }
+  const n = chosen.reduce((t, g) => t + g.items.length, 0), cleared = chosen.reduce((t, g) => t + g.linked, 0);
+  if (!confirm(`Change the RosterID of ${n} hero PID${n !== 1 ? 's' : ''}${cleared ? ` and clear ${cleared} roster-entry link${cleared !== 1 ? 's' : ''} (they need linking again)` : ''}?`)) return;
+  _rosterFixRunning = true; if (btn) { btn.disabled = true; btn.textContent = 'Correcting…'; }
+  try {
+    const fresh = await _rosterFixRead(prev.clubId, prev.seasonId);                       // always fresh: this drives a write
+    if (fresh.signature !== prev.signature) { out.innerHTML = '<div style="font-size:12px;color:var(--red);">Airtable changed since the preview, so nothing was written. Press Preview again.</div>'; _rosterFixPlan = null; return; }
+    const groups = fresh.groups.filter(g => keys.has(g.key));
+    const items = [], want = new Map();
+    groups.forEach(g => g.items.forEach(it => { items.push({id: it.id, fields: it.rmid ? {RosterID: g.to, RosterMemberID: ''} : {RosterID: g.to}, expect: {from: g.from, rmid: it.rmid, font: it.font, kit: it.kit}}); want.set(it.id, {to: g.to, rmid: it.rmid}); }));
+    const guard = async chunk => {                                                        // right before each PATCH: still exactly what was planned?
+      const cur = await _atRetry(() => atFetchByIds(TABLES.heroes, chunk.map(c => c.id)));
+      const keep = [], skip = [], lc = v => String(v == null ? '' : v).trim().toLowerCase();
+      chunk.forEach(c => { const r = cur.get(c.id), e = c.expect; const rm = r && isRealMdmId(r.RosterMemberID) ? _mdmStr(r.RosterMemberID) : '';
+        // the mapped roster was chosen for THIS font and kit: a PID whose font or kit changed since the plan must not get that roster
+        if (r && r.Status === 'active' && _mdmStr(r.RosterID) === e.from && rm === e.rmid && lc(r.FontType) === e.font && lc(r.KitType) === e.kit && r.ClubID === prev.clubId && r.SeasonID === prev.seasonId) keep.push(c); else skip.push(c); });
+      return {keep, skip};
+    };
+    let res = await atUpdateBatchSafe(TABLES.heroes, items, (done, total) => { out.innerHTML = `<div style="font-size:12px;color:var(--text2);">Correcting… ${done} of ${total}</div>`; }, guard);
+    if (res.failed.length) { const ids = new Set(res.failed.map(f => f.id)); const r2 = await atUpdateBatchSafe(TABLES.heroes, items.filter(it => ids.has(it.id)), null, guard); res = {ok: res.ok.concat(r2.ok), failed: r2.failed, skipped: res.skipped.concat(r2.skipped)}; }
+    const checkIds = [...new Set([...res.ok, ...res.skipped, ...res.failed.map(f => f.id)])];
+    let back = new Map(), readErr = '';
+    if (checkIds.length) { try { back = await _atFetchByIdsRetry(TABLES.heroes, checkIds); } catch (e) { readErr = (e && e.message) || String(e); } }
+    const confirmedSet = new Set(checkIds.filter(id => { const r = back.get(id), w = want.get(id); return !!r && _mdmStr(r.RosterID) === w.to && (!w.rmid || !isRealMdmId(r.RosterMemberID)); }));
+    const okSet = new Set(res.ok), recovered = [...confirmedSet].filter(id => !okSet.has(id)).length, unconfirmed = res.ok.filter(id => !confirmedSet.has(id)).length;
+    const leftAlone = res.skipped.filter(id => !confirmedSet.has(id)).length, failedLeft = res.failed.filter(f => !confirmedSet.has(f.id));
+    (CACHE.heroes || []).forEach(h => { if (confirmedSet.has(h.id)) { const w = want.get(h.id); h.RosterID = w.to; if (w.rmid) h.RosterMemberID = ''; } });   // the cache only holds what Airtable confirmed
+    if (typeof invalidateCache === 'function') invalidateCache();
+    const clearedDone = [...confirmedSet].filter(id => want.get(id).rmid).length, bad = unconfirmed || failedLeft.length || readErr;
+    out.innerHTML = `<div style="font-size:13px;color:${bad ? 'var(--amber)' : 'var(--green)'};">${confirmedSet.size} PID${confirmedSet.size !== 1 ? 's' : ''} corrected and confirmed by read-back`
+      + `${clearedDone ? `, ${clearedDone} roster-entry link${clearedDone !== 1 ? 's' : ''} cleared: link them again (Import > MDM roster)` : ''}${recovered ? ` (${recovered} found corrected after a lost response)` : ''}${unconfirmed ? `, ${unconfirmed} accepted by Airtable but NOT confirmed on read-back` : ''}${leftAlone ? `, ${leftAlone} left alone (changed since the check)` : ''}${failedLeft.length ? `, ${failedLeft.length} failed` : ''}.</div>`
+      + (failedLeft.length ? `<div style="font-size:12px;color:var(--text2);margin-top:6px;">First failure: ${_escHtml(failedLeft[0].error)}</div>` : '')
+      + (readErr ? `<div style="font-size:12px;color:var(--amber);margin-top:6px;">The read-back could not be done (${_escHtml(readErr)}), so nothing is confirmed. Press Preview again to see where things stand.</div>` : '')
+      + (bad || leftAlone ? `<div style="font-size:12px;color:var(--amber);margin-top:6px;">Press Preview again to see what is still wrong.</div>` : '');
+    _rosterFixPlan = null;
+  } catch (e) { out.innerHTML = `<div style="font-size:12px;color:var(--red);">Stopped: ${_escHtml(e.message || e)}</div>`; }
+  finally { _rosterFixRunning = false; }
+}
 function clearImport(force) {
   if (_storageImportRunning && !force) { toast('An import is running: it cannot be cancelled or cleared until it finishes.', 'error'); return; }
   importData=null; window._gkDecisions = {}; window._gkPlayerChoices = {}; window._importWb = null;   // v238: nothing from this upload session may outlive it
@@ -7123,7 +7250,7 @@ function hpParentsExport() {
   _downloadText(`parent_pids_for_homeplate_${new Date().toISOString().slice(0, 10)}.csv`, 'productId\n' + ps.map(p => p.PID).join('\n') + '\n');
   toast(`Exported ${ps.length} parent PID${ps.length !== 1 ? 's' : ''}`);
 }
-function hpParentsClubChanged() { filterSeasonDropdown('hpp-season', document.getElementById('hpp-club').value, {allLabel: 'All seasons', source: 'all'}); resetImportTab('hpparents'); }
+function hpParentsClubChanged() { filterSeasonDropdown('hpp-season', document.getElementById('hpp-club').value, {allLabel: 'All seasons', source: 'clubData'}); resetImportTab('hpparents'); }
 function hpBuildPlan() {
   // ONLY the club (and season, unless "All seasons") picked above is looked at: other clubs' products in the same file are counted and set aside, never planned.
   const clubId = (document.getElementById('hpp-club') || {}).value || '', seasonId = (document.getElementById('hpp-season') || {}).value || '';
@@ -7681,7 +7808,7 @@ const _mdmBeforeUnload = ev => { ev.preventDefault(); ev.returnValue = 'The MDM 
 
 function mdmRosterClubChanged() {
   const clubId = document.getElementById('mdm-roster-club').value; resetImportTab('mdmroster');
-  filterSeasonDropdown('mdm-roster-season', clubId, {blankLabel:'— Select season —', source:'rosterMappings'});
+  filterSeasonDropdown('mdm-roster-season', clubId, {blankLabel:'— Select season —', source:'clubData'});
 }
 
 function buildMdmPlanFromCache(d) {
@@ -8607,7 +8734,7 @@ function initMdmPreviewTab() {
 
 function mdmpOnClubChange() {
   const clubId = document.getElementById('mdmp-club')?.value || '';
-  filterSeasonDropdown('mdmp-season', clubId, {blankLabel:'— Select season —', source:'rosterMappings'});
+  filterSeasonDropdown('mdmp-season', clubId, {blankLabel:'— Select season —', source:'clubData'});
   document.getElementById('mdmp-content').innerHTML = '';
   document.getElementById('mdmp-summary-pills').innerHTML = '';
 }
@@ -10356,12 +10483,22 @@ function getExportSeasonsForClub(clubId) {
 
 // Generic: filter a season <select> based on a club selection
 // source: data source — 'heroes' (default) or 'rosterMappings'
+function seasonIdsWithClubData(clubId) {
+  const ids = new Set(seasonIdsForClub(clubId));
+  (CACHE.parents || []).forEach(p => { if (p.ClubID === clubId && p.SeasonID) ids.add(p.SeasonID); });
+  (CACHE.rosterMappings || []).forEach(r => { if (r.ClubID === clubId && r.SeasonID) ids.add(r.SeasonID); });
+  return ids;
+}
 function filterSeasonDropdown(seasonSelId, clubId, {allLabel='All seasons', blankLabel=null, source='heroes'}={}) {
   const seasonSel = document.getElementById(seasonSelId);
   if (!seasonSel) return;
   let seasons;
   if (!clubId || source === 'all') {   // 'all': an import can create ANY season, so the list must not be limited to the seasons the club already has
     seasons = CACHE.seasons||[];
+  } else if (source === 'clubData') {   // v239: every season this club has data for: hero PIDs (loaded or listed), parent PIDs, or roster mappings
+    const ids = seasonIdsWithClubData(clubId);
+    seasons = (CACHE.seasons||[]).filter(s=>ids.has(s.id));
+    if (!seasons.length) seasons = CACHE.seasons||[];   // a club with no data yet is offered every season, so its first import is possible
   } else if (source === 'rosterMappings') {
     const ids = new Set((CACHE.rosterMappings||[]).filter(r=>r.ClubID===clubId).map(r=>r.SeasonID).filter(Boolean));
     seasons = (CACHE.seasons||[]).filter(s=>ids.has(s.id));
@@ -10408,16 +10545,21 @@ function updateExportCounts() {
   ['content','excl','img'].forEach(prefix => {
     const el = document.getElementById('exp-'+prefix+'-count');
     if (!el) return;
-    const pids = getFilteredHeroPids(prefix);
-    el.textContent = pids.length ? `${pids.length} hero PID${pids.length!==1?'s':''} match filters` : 'No PIDs match current filters';
+    const covered = exportScopeCovered(prefix), pids = getFilteredHeroPids(prefix, true);
+    el.textContent = covered ? (pids.length ? `${pids.length} hero PID${pids.length!==1?'s':''} match filters` : 'No PIDs match current filters')
+      : (pids.length ? `${pids.length} in the loaded seasons only: pick one season, or load all seasons, before exporting` : 'None in the loaded seasons: pick a season to load it, or load all seasons');
     el.style.color = pids.length ? 'var(--accent)' : 'var(--text3)';
   });
 }
 
-function getFilteredHeroPids(prefix) {
+function exportScopeCovered(prefix) {   // true when every hero of the chosen scope is loaded
+  const seasonId = document.getElementById('exp-'+prefix+'-season')?.value || '';
+  return seasonId ? seasonLoaded(seasonId) : allSeasonsLoaded();
+}
+function getFilteredHeroPids(prefix, quiet) {   // quiet = just count what is loaded: no messages, no loading (the on-screen counts use this)
   const clubId = document.getElementById('exp-'+prefix+'-club')?.value || '';
   const seasonId = document.getElementById('exp-'+prefix+'-season')?.value || '';
-  if (seasonId ? !seasonLoaded(seasonId) : !allSeasonsLoaded()) {   // v239: never export a quietly partial list
+  if (!quiet && !exportScopeCovered(prefix)) {   // v239: never export a quietly partial list
     if (seasonId) needSeasonLoadedToast(seasonId); else toast('"All seasons" needs every season loaded. Pick one season, or tick all seasons in Settings (Save and reload).', 'error');
     return [];
   }
