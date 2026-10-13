@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v239 -->
+<!-- HEROPID-BUILD-v239.2 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -10,7 +10,7 @@
 <script>try{if(localStorage.getItem("hph_theme")==="light")document.documentElement.setAttribute("data-theme","light");}catch(e){}</script>
 <style>
 :root{--bg:#070c1c;--bg2:#0d1630;--bg3:#142044;--bg4:#1b2a58;--border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.14);--brand:#d93225;--brand-hover:#ea4a3c;--brand-text:#ff6a5b;--brand-glow:rgba(231,60,45,0.16);--accent:#86a2f2;--accent-rgb:134,162,242;--accent2:#8a7bd1;--accent-glow:rgba(134,162,242,0.14);--text:#f1f3fa;--text2:#aeb7d3;--text3:#7782a6;--green:#3dd68c;--green-bg:rgba(61,214,140,0.1);--red:#ff6b61;--red-bg:rgba(255,107,97,0.1);--amber:#ffb340;--amber-bg:rgba(255,179,64,0.1);--radius:10px;--radius-sm:6px}
-[data-theme="light"]{--bg:#f2f4fa;--bg2:#ffffff;--bg3:#e9edf6;--bg4:#dce2f0;--border:rgba(15,29,65,0.11);--border2:rgba(15,29,65,0.2);--brand:#d93225;--brand-hover:#c22a1e;--brand-text:#c42a1c;--brand-glow:rgba(217,50,37,0.10);--accent:#2a4bb0;--accent-rgb:42,75,176;--accent2:#6b4fa0;--accent-glow:rgba(42,75,176,0.10);--text:#0f1d41;--text2:#454f7c;--text3:#6a7494;--green:#0f7a4d;--green-bg:rgba(15,122,77,0.10);--red:#c0322c;--red-bg:rgba(192,50,44,0.09);--amber:#955300;--amber-bg:rgba(149,83,0,0.11)}
+[data-theme="light"]{--bg:#f2f4fa;--bg2:#ffffff;--bg3:#e9edf6;--bg4:#dce2f0;--border:rgba(15,29,65,0.11);--border2:rgba(15,29,65,0.2);--brand:#d93225;--brand-hover:#c22a1e;--brand-text:#c42a1c;--brand-glow:rgba(217,50,37,0.10);--accent:#2a4bb0;--accent-rgb:42,75,176;--accent2:#6b4fa0;--accent-glow:rgba(42,75,176,0.10);--text:#0f1d41;--text2:#454f7c;--text3:#6a7494;--green:#0f7a4d;--green-bg:rgba(15,122,77,0.10);--red:#b52a24;--red-bg:rgba(181,42,36,0.09);--amber:#955300;--amber-bg:rgba(149,83,0,0.11)}
 [data-theme="light"] .sidebar{background:#0f1d41;--bg2:#0f1d41;--bg3:#1a2a5e;--border:rgba(255,255,255,0.10);--border2:rgba(255,255,255,0.18);--text:#f1f3fa;--text2:#b4bdd9;--text3:#8d98bd;--brand-text:#ff6a5b;--brand-glow:rgba(231,60,45,0.18);--accent:#86a2f2;--green:#3dd68c;--amber:#ffb340;--red:#ff6b61}   /* the sidebar (and the Fanatics logo on it) stays navy in both themes */
 [data-theme="light"] .modal-overlay{background:rgba(15,29,65,0.45)}
 [data-theme="light"] [style*="color:#63b3ed"]{color:#1f5fa8!important}
@@ -36,6 +36,31 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 .stat-pill{display:flex;justify-content:space-between;align-items:center;background:var(--bg3);border-radius:var(--radius-sm);padding:6px 12px}
 @media (max-height:900px){.sidebar-logo{padding:14px 20px 10px}.nav-item{padding:6px 20px}.nav-section{padding:6px 16px 2px}.stat-value{font-size:14px}}
 @media (max-height:720px){.logo-sub,.logo-version{display:none}.nav-item{padding:4px 20px}.sidebar-logo{padding:10px 20px 8px}}
+.pv{margin-bottom:10px}
+.pv-ctx{font-size:12px;color:var(--text2);margin-bottom:4px}
+.pv-sum{font-size:15px;font-weight:600;color:var(--text);margin:2px 0 10px;line-height:1.4}
+.pv-note{border:1px solid;border-radius:var(--radius-sm);padding:8px 12px;font-size:12px;margin-bottom:8px;line-height:1.5}
+.pv-note .pv-lbl{font-weight:700;margin-right:6px;white-space:nowrap}
+.pv-fix{background:var(--red-bg);border-color:var(--red);color:var(--red)}
+.pv-check{background:var(--amber-bg);border-color:var(--amber);color:var(--amber)}
+.pv-info{background:rgba(var(--accent-rgb),0.10);border-color:var(--accent);color:var(--accent)}
+.pv-ok{font-size:12px;color:var(--green);margin:6px 0}
+.pv-sub{font-size:12px;color:var(--text2);margin:-4px 0 10px}
+.pv-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:12px 0}
+.pv-details{border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg2);margin-top:8px}
+.pv-details>summary{cursor:pointer;padding:8px 12px;font-size:12px;color:var(--text2);list-style:none}
+.pv-details>summary .pv-hide{display:none}.pv-details[open]>summary .pv-show{display:none}.pv-details[open]>summary .pv-hide{display:inline}
+.pv-details>.pv-body{padding:10px 12px;border-top:1px solid var(--border)}
+.pv-tech{display:none}body.pv-tech-on .pv-tech{display:inline}body.pv-tech-on .pv-plain{display:none}
+.pv-techbar{font-size:11px;color:var(--text3);margin-bottom:8px;display:flex;gap:6px;align-items:center}
+.squad-panel{position:absolute;z-index:60;top:100%;left:0;margin-top:4px;width:320px;max-height:360px;display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-sm);box-shadow:0 8px 24px rgba(0,0,0,0.35)}
+.squad-panel.hidden{display:none}
+.squad-head{display:flex;gap:6px;padding:8px;border-bottom:1px solid var(--border)}
+#squad-list{overflow-y:auto;padding:4px 0}
+.squad-row{display:flex;align-items:center;gap:8px;padding:5px 12px;font-size:12px;cursor:pointer;color:var(--text)}
+.squad-row:hover{background:var(--bg3)}
+.squad-num{width:30px;color:var(--text3);font-size:11px}
+.squad-gk{margin-left:auto;font-size:10px;color:var(--accent)}
 .activity-row{display:flex;gap:10px;padding:5px 12px;border-bottom:1px solid var(--border);font-size:12px}
 .activity-row .t{color:var(--text3);white-space:nowrap}.activity-row.error .m{color:var(--red)}.activity-badge{background:var(--red);color:#fff;border-radius:9px;font-size:10px;padding:0 6px;margin-left:auto}
 .stat-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em}
@@ -164,7 +189,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
   <div class="sidebar-logo">
     <img class="logo-img" alt="Fanatics" src="data:image/png;base64,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">
     <div class="logo-sub">Hero PID Hub</div>
-    <div class="logo-version" id="app-version" title="Build stamp: HEROPID-BUILD-v239">v239</div>
+    <div class="logo-version" id="app-version" title="Build stamp: HEROPID-BUILD-v239.2">v239.2</div>
   </div>
   <nav class="sidebar-nav">
     <div class="nav-section">Main</div>
@@ -254,19 +279,26 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       <div class="search-row">
         <div class="search-input-wrap">
           <span class="search-icon">⌕</span>
-          <input class="search-input" id="search-q" type="text" placeholder="e.g. Palmer, Palmer home mens, 203072419..." oninput="debounceSearch()" />
+          <input class="search-input" id="search-q" type="text" placeholder="e.g. Palmer, Palmer home mens, 203072419... (separate several players with commas)" oninput="debounceSearch();squadSyncChecks()" />
         </div>
         <button class="btn btn-primary" onclick="runSearch()">Search</button>
       </div>
       <div class="search-filters">
         <select class="filter-select" id="filter-club" onchange="onClubFilterChange()"><option value="">All clubs</option></select>
-        <select class="filter-select" id="filter-season" onchange="runSearch()"><option value="">All seasons</option></select>
+        <select class="filter-select" id="filter-season" onchange="runSearch();squadRefresh()"><option value="">All seasons</option></select>
         <select class="filter-select" id="filter-status" onchange="runSearch()">
           <option value="active" selected>Active</option>
           <option value="">Active + Archived</option>
           <option value="active">Active only</option>
           <option value="archived">Archived only</option>
         </select>
+      </div>
+      <div id="squad-wrap" style="display:none;margin-top:8px;position:relative;">
+        <button class="btn btn-ghost btn-sm" id="squad-btn" onclick="squadTogglePanel()">Squad ▾ <span id="squad-count"></span></button>
+        <div id="squad-panel" class="hidden squad-panel">
+          <div class="squad-head"><input class="filter-select" style="flex:1;" type="text" placeholder="Filter the squad..." oninput="squadFilter(this.value)"><button class="btn btn-ghost btn-sm" onclick="squadClear()">Clear</button></div>
+          <div id="squad-list"></div>
+        </div>
       </div>
       <div id="search-chips" style="display:none;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
       <div class="search-filters" id="filter-extra" style="display:none;margin-top:6px;">
@@ -385,12 +417,14 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         <div class="card">
           <div class="card-header">
             <span class="card-title" id="import-preview-title">Preview</span>
-            <div style="display:flex;gap:8px;">
-              <button class="btn btn-ghost btn-sm" onclick="clearImport()">Cancel</button>
-              <button class="btn btn-primary btn-sm" id="import-confirm-btn" onclick="confirmImport()">Import all</button>
-            </div>
           </div>
-          <div style="padding:16px;"><div id="import-preview-content"></div></div>
+          <div style="padding:16px;"><div id="import-preview-content"></div>
+            <div class="pv-actions">
+              <button class="btn btn-primary btn-sm" id="import-confirm-btn" onclick="confirmImport()">Add products</button>
+              <button class="btn btn-ghost btn-sm" onclick="clearImport()">Cancel</button>
+            </div>
+            <details class="pv-details"><summary><span class="pv-show">▸ Show details</span><span class="pv-hide">▾ Hide details</span></summary><div class="pv-body"><div class="pv-techbar"><label><input type="checkbox" class="pv-techcb" onchange="pvSetTech(this.checked)"> Technical view</label> (adds raw IDs and field names)</div><div id="import-preview-lists"></div></div></details>
+          </div>
         </div>
       </div>
     </div>
@@ -414,12 +448,14 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         <div class="card">
           <div class="card-header">
             <span class="card-title" id="creation-preview-title">Preview</span>
-            <div style="display:flex;gap:8px;">
-              <button class="btn btn-ghost btn-sm" onclick="clearCreationImport()">Cancel</button>
-              <button class="btn btn-primary btn-sm" id="creation-confirm-btn" onclick="confirmCreationImport()">Import all</button>
-            </div>
           </div>
-          <div style="padding:16px;"><div id="creation-preview-content"></div></div>
+          <div style="padding:16px;"><div id="creation-preview-content"></div>
+            <div class="pv-actions">
+              <button class="btn btn-primary btn-sm" id="creation-confirm-btn" onclick="confirmCreationImport()">Add products</button>
+              <button class="btn btn-ghost btn-sm" onclick="clearCreationImport()">Cancel</button>
+            </div>
+            <details class="pv-details"><summary><span class="pv-show">▸ Show details</span><span class="pv-hide">▾ Hide details</span></summary><div class="pv-body"><div class="pv-techbar"><label><input type="checkbox" class="pv-techcb" onchange="pvSetTech(this.checked)"> Technical view</label> (adds raw IDs and field names)</div><div id="creation-preview-lists"></div></div></details>
+          </div>
         </div>
       </div>
     </div>
@@ -485,12 +521,13 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       <div id="mdm-roster-lock" style="display:none;margin-bottom:12px;padding:10px 14px;background:rgba(255,179,64,0.12);border:1px solid rgba(255,179,64,0.5);border-radius:6px;font-size:12px;color:var(--amber);">⚠ <b>Import running: do not close, refresh or leave this tab.</b> Roster rows, player statuses and hero PIDs are being written. If it is interrupted, import the same file again: it only repeats what is outstanding.</div>
       <div id="mdm-roster-preview" class="hidden card" style="margin-bottom:20px;">
         <div style="padding:16px;">
-          <div id="mdm-roster-preview-stats" style="margin-bottom:12px;"></div>
-          <div id="mdm-roster-preview-table" style="max-height:400px;overflow-y:auto;"></div>
-          <div style="margin-top:12px;display:flex;gap:8px;">
-            <button class="btn btn-primary btn-sm" id="mdm-import-btn" onclick="importMdmRoster()">Import all</button>
+          <div id="mdm-roster-preview-stats"></div>
+          <div class="pv-actions">
+            <button class="btn btn-primary btn-sm" id="mdm-import-btn" onclick="importMdmRoster()">Apply changes</button>
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('mdm-roster-file').value='';renderMdmRosterPlan()">Preview again</button>
             <button class="btn btn-ghost btn-sm" onclick="document.getElementById('mdm-roster-preview').classList.add('hidden')">Cancel</button>
           </div>
+          <details class="pv-details"><summary><span class="pv-show">▸ Show details</span><span class="pv-hide">▾ Hide details</span></summary><div class="pv-body"><div class="pv-techbar"><label><input type="checkbox" class="pv-techcb" onchange="pvSetTech(this.checked)"> Technical view</label> (adds raw IDs and field names)</div><div id="mdm-roster-preview-lists"></div><div style="font-size:12px;color:var(--text2);margin:8px 0 4px;">The file's rows (click a cell to correct it):</div><div id="mdm-roster-preview-table" style="max-height:400px;overflow-y:auto;"></div></div></details>
         </div>
       </div>
 
@@ -525,10 +562,12 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       <div id="hpp-preview" class="hidden card" style="margin-bottom:20px;">
         <div style="padding:16px;">
           <div id="hpp-preview-content"></div>
-          <div style="margin-top:12px;display:flex;gap:8px;">
-            <button class="btn btn-primary btn-sm" id="hpp-apply-btn" onclick="applyHpParents()">Apply</button>
+          <div class="pv-actions">
+            <button class="btn btn-primary btn-sm" id="hpp-apply-btn" onclick="applyHpParents()">Apply changes</button>
+            <button class="btn btn-ghost btn-sm" onclick="renderHpParentsPlan()">Preview again</button>
             <button class="btn btn-ghost btn-sm" onclick="document.getElementById('hpp-preview').classList.add('hidden')">Cancel</button>
           </div>
+          <details class="pv-details"><summary><span class="pv-show">▸ Show details</span><span class="pv-hide">▾ Hide details</span></summary><div class="pv-body"><div class="pv-techbar"><label><input type="checkbox" class="pv-techcb" onchange="pvSetTech(this.checked)"> Technical view</label> (adds raw IDs and field names)</div><div id="hpp-preview-lists"></div></div></details>
         </div>
       </div>
     </div>
@@ -812,7 +851,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       <div style="font-size:11px;color:var(--amber);background:rgba(255,179,64,0.08);border:1px solid rgba(255,179,64,0.3);border-radius:4px;padding:8px 10px;margin-bottom:10px;">
         ⚠ Preview only. No Airtable records will be changed. Use the Merge Duplicate Players card below to act on it.
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="runDedupPreview()">⊙ Preview Player Deduplication</button>
+      <button class="btn btn-ghost btn-sm" onclick="runDedupPreview()">⊙ Preview duplicate players</button>
       <div id="dedup-preview-output" style="display:none;margin-top:12px;"></div>
     </div>
 
@@ -875,7 +914,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 
     <!-- MDM BACKFILL -->
     <div class="card" style="margin-bottom:16px;">
-      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">MDM Backfill — ActorID &amp; RosterID</div>
+      <div style="font-family:'Syne',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px;">Fill missing MDM links</div>
       <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">
         Populates <span class="mono" style="font-size:11px;">ActorID</span> and <span class="mono" style="font-size:11px;">RosterID</span> on Hero PIDs that are missing them, using the same match logic as imports (Player → MDMActorID → RosterMapping lookup).
         Run <b>Dry Run</b> first to preview changes before committing.
@@ -887,8 +926,8 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         <select id="backfill-season" class="filter-select" style="width:140px;font-size:12px;" onchange="onBackfillFilterChange()">
           <option value="">All seasons</option>
         </select>
-        <button class="btn btn-ghost btn-sm" onclick="runMdmBackfill(true)">⊙ Dry Run</button>
-        <button class="btn btn-primary btn-sm" id="backfill-apply-btn" style="display:none;" onclick="runMdmBackfill(false)">✓ Apply Backfill</button>
+        <button class="btn btn-ghost btn-sm" onclick="runMdmBackfill(true)">⊙ Preview</button>
+        <button class="btn btn-primary btn-sm" id="backfill-apply-btn" style="display:none;" onclick="runMdmBackfill(false)">✓ Fill missing links</button>
         <button class="btn btn-ghost btn-sm" id="backfill-cancel-btn" style="display:none;" onclick="clearBackfillPreview()">✕ Cancel</button>
       </div>
       <div id="backfill-status" style="display:none;font-size:11px;color:var(--accent);margin-bottom:8px;"></div>
@@ -2967,6 +3006,21 @@ async function runDedupMerge() {
 }
 
 // ─── PLAYER DEDUP PREVIEW (Step 9.0) ─────────────────────────────────────────
+function dedupPreviewViewHtml(v) {   // pure: v = {rows, totalDups, totalRepoints, hiddenHtml}; rows = [{actorId, clubName, players, canonical, dups, repoints, nameStatus}]
+  const e = _escHtml, rows = v.rows, mixed = rows.filter(r => r.nameStatus === 'different').length, review = rows.filter(r => r.nameStatus === 'similar').length, same = rows.length - mixed - review;
+  const notes = (mixed ? pvNote('fix', `${mixed} group${mixed !== 1 ? 's contain' : ' contains'} different people sharing one ActorID (shown first, in red). Merging them would delete a real player, so ${mixed !== 1 ? 'they are' : 'it is'} blocked. Fix the ActorIDs (Data Integrity Check) before any deduplication.`) : '')
+    + (review ? pvNote('check', `${review} group${review !== 1 ? 's have' : ' has'} name variations (amber): a shortened name, or a shared surname with the same shirt name. Confirm by eye that they are the same person. Only groups with identical names count as cleared.`) : '')
+    + (rows.length && !mixed && !review ? pvNote('info', 'Names are identical within every group.') : '')
+    + (v.hiddenHtml || '')
+    + (rows.length ? pvNote('info', 'This is a preview only: nothing has been changed. To act on it, use Merge Duplicate Players below. That DELETES the extra player records, so download its plan CSV first.') : '')
+    + pvNote('info', 'Every season is loaded, so every product of these players is counted.');
+  const table = rows.length ? `<div style="overflow-x:auto;max-height:420px;overflow-y:auto;margin:8px 0;"><table class="data-table" style="font-size:11px;width:100%;"><thead><tr style="position:sticky;top:0;background:var(--bg2);"><th style="padding:5px 8px;text-align:left;">Player</th><th style="padding:5px 8px;text-align:left;">Club</th><th style="padding:5px 8px;text-align:left;">Record kept and records removed</th><th style="padding:5px 8px;text-align:right;">Products moved</th></tr></thead><tbody>${rows.map(r => `<tr style="${r.nameStatus === 'different' ? 'background:var(--red-bg);' : r.nameStatus === 'similar' ? 'background:var(--amber-bg);' : ''}"><td style="padding:5px 8px;">${e(r.canonical.Name || '—')}${r.nameStatus === 'different' ? ' <span style="color:var(--red);font-weight:600;">⛔ different people: blocked</span>' : r.nameStatus === 'similar' ? ' <span style="color:var(--amber);font-weight:600;">⚠ check names</span>' : ''}<span class="pv-tech"> · ActorID ${e(r.actorId)}</span></td><td style="padding:5px 8px;">${e(r.clubName)}</td><td style="padding:5px 8px;vertical-align:top;">${r.players.map(p => { const isKeep = p.id === r.canonical.id; return `<div style="font-size:11px;${isKeep ? 'font-weight:600;' : 'opacity:0.8;'}">${isKeep ? '★ kept: ' : '✕ removed: '}${e(p.Name || '—')} <span class="pv-tech">(${e(p.id)}) </span>${p.Status === 'active' ? 'active' : 'archived'} · ${(v.heroCount ? v.heroCount(p.id) : 0)} products</div>`; }).join('')}</td><td style="padding:5px 8px;text-align:right;${r.repoints > 0 ? 'color:var(--amber);' : 'color:var(--text3);'}">${r.repoints > 0 ? pvNum(r.repoints) : '—'}</td></tr>`).join('')}</tbody></table></div>` : '';
+  const counts = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">${pvTile('Duplicate groups', pvNum(rows.length))}${pvTile('Names identical', pvNum(same), 'var(--green)')}${pvTile('Names differ a little', pvNum(review), review ? 'var(--amber)' : '')}${pvTile('Different people', pvNum(mixed), mixed ? 'var(--red)' : '')}${pvTile('Records to remove', pvNum(v.totalDups))}${pvTile('Products to move', pvNum(v.totalRepoints))}</div>`;
+  return pvShell({context: 'All clubs · All seasons',
+    summary: rows.length ? pvSummary([{n: same, text: pvPlural(same, 'player group to merge', 'player groups to merge')}, {n: mixed + review, text: 'needing attention'}]) : 'Nothing to change',
+    sub: rows.length ? `${pvNum(v.totalRepoints)} personalised product${v.totalRepoints !== 1 ? 's' : ''} would move to the record kept; ${pvNum(v.totalDups)} player record${v.totalDups !== 1 ? 's' : ''} would be removed.` : '',
+    notes: notes + table, ok: rows.length ? '' : '<div class="pv-ok">✓ No duplicate player records found.</div>', details: counts});
+}
 function runDedupPreview() {
   if (!allSeasonsLoaded()) { toast('Duplicate cleanup needs every season loaded. Tick all seasons in Settings first (Save and reload).', 'error'); return; }
   const outputEl = document.getElementById('dedup-preview-output');
@@ -2983,7 +3037,8 @@ function runDedupPreview() {
   const dupGroups = Object.entries(groups).filter(([,players]) => players.length > 1);
   window._dedupMixedGroups = 0;
   if (dupGroups.length === 0) {
-    outputEl.innerHTML = `<div style="color:var(--green);font-size:12px;">✓ No duplicate player records found.</div>${dedupHiddenWarningHtml()}`;
+    outputEl.innerHTML = dedupPreviewViewHtml({rows: [], totalDups: 0, totalRepoints: 0, hiddenHtml: dedupHiddenWarningHtml()});
+    pvApplyTech();
     return;
   }
 
@@ -3007,49 +3062,8 @@ function runDedupPreview() {
   const review = rows.filter(r => r.nameStatus === 'similar').length;
   window._dedupMixedGroups = mixed;      // PREVIEW ONLY: the executor (v234) must recompute this itself, never trust a flag
   window._dedupReviewGroups = review;
-  const banner =
-    (mixed > 0 ? `<div style="font-size:12px;color:var(--red,#fc8181);background:rgba(252,129,129,0.08);border:1px solid rgba(252,129,129,0.3);border-radius:4px;padding:8px 10px;margin-bottom:8px;">
-         ⛔ <b>${mixed} group${mixed!==1?'s':''} contain different people</b> sharing one ActorID (shown first, in red). Merging them would delete a real player. Fix the ActorIDs (Data Integrity Check) before any deduplication.
-       </div>` : '') +
-    (review > 0 ? `<div style="font-size:12px;color:var(--amber);background:rgba(255,179,64,0.08);border:1px solid rgba(255,179,64,0.3);border-radius:4px;padding:8px 10px;margin-bottom:8px;">
-         ⚠ <b>${review} group${review!==1?'s':''} have name variations</b> (amber): a shortened name, or a shared surname with the same shirt name. Confirm by eye that they are the same person. Only groups with identical names count as cleared.
-       </div>` : '') +
-    (mixed === 0 && review === 0 ? `<div style="font-size:12px;color:var(--green);margin-bottom:10px;">✓ Names are identical within every group.</div>` : '');
-
-  outputEl.innerHTML = `${banner}${dedupHiddenWarningHtml()}<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
-    <span style="font-weight:600;color:var(--amber);">${dupGroups.length} duplicate groups</span>
-    <span style="color:var(--text3);margin-left:8px;">${totalDups} records to delete · ${totalRepoints} Hero PIDs to re-point</span>
-  </div>
-  <div style="overflow-x:auto;max-height:400px;overflow-y:auto;">
-  <table class="data-table" style="font-size:11px;width:100%;">
-    <thead><tr style="position:sticky;top:0;background:var(--bg2);">
-      <th style="padding:5px 8px;text-align:left;">Player</th>
-      <th style="padding:5px 8px;text-align:left;">Club</th>
-      <th style="padding:5px 8px;text-align:left;">ActorID</th>
-      <th style="padding:5px 8px;text-align:left;">Records</th>
-      <th style="padding:5px 8px;text-align:left;">Canonical</th>
-      <th style="padding:5px 8px;text-align:right;">Re-points</th>
-    </tr></thead>
-    <tbody>${rows.map(r => `<tr style="${r.nameStatus==='different'?'background:rgba(252,129,129,0.10);':r.nameStatus==='similar'?'background:rgba(255,179,64,0.10);':''}">
-      <td style="padding:5px 8px;">${escHtml(r.canonical.Name||'—')}${r.nameStatus==='different'?' <span style="color:var(--red,#fc8181);font-weight:600;">⛔ different people</span>':r.nameStatus==='similar'?' <span style="color:var(--amber);font-weight:600;">⚠ check names</span>':''}</td>
-      <td style="padding:5px 8px;">${escHtml(r.clubName)}</td>
-      <td style="padding:5px 8px;font-family:monospace;">${escHtml(r.actorId)}</td>
-      <td style="padding:5px 8px;vertical-align:top;">
-        ${r.players.map(p => {
-          const isCanon = p.id === r.canonical.id;
-          const statusCol = p.Status === 'active' ? 'var(--green)' : 'var(--text3)';
-          const heroCount = CACHE.heroes.filter(h => h.PlayerID === p.id).length;
-          return `<div style="font-size:10px;${isCanon?'font-weight:600;':'opacity:0.7;'}">
-            ${isCanon?'★ ':''}${escHtml(p.Name||'—')} <span style="color:var(--text3);">${escHtml(p.id.slice(-6))}</span>
-            <span style="color:${statusCol};">${p.Status==='active'?'Active':'Archived'}</span>
-            · ${heroCount} PIDs
-          </div>`;
-        }).join('')}
-      </td>
-      <td style="padding:5px 8px;font-family:monospace;font-size:10px;">${escHtml(r.canonical.id)}</td>
-      <td style="padding:5px 8px;text-align:right;${r.repoints>0?'color:var(--amber);':'color:var(--text3);'}">${r.repoints>0?r.repoints:'—'}</td>
-    </tr>`).join('')}</tbody>
-  </table></div>`;
+  outputEl.innerHTML = dedupPreviewViewHtml({rows, totalDups, totalRepoints, hiddenHtml: dedupHiddenWarningHtml(), heroCount: id => CACHE.heroes.filter(h => h.PlayerID === id).length});
+  pvApplyTech();
 }
 
 // ─── HIDDEN DUPLICATES (v235) ───────────────────────────────────────────────
@@ -3584,6 +3598,47 @@ function copyActivity() {
 function downloadActivity() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([activityLines(ACTIVITY)], {type: 'text/plain'})); a.download = `hero-pid-hub-activity-${new Date().toISOString().slice(0, 10)}.txt`; a.click(); URL.revokeObjectURL(a.href); }
 function clearActivity() { ACTIVITY = []; ACTIVITY_UNSEEN = 0; try { localStorage.removeItem(ACTIVITY_KEY); } catch (e) { /* ignore */ } updateActivityBadge(); renderActivity(); }
 
+// ─── v239.1: PREVIEW SHELL ───────────────────────────────────────────────────
+// Presentation only. Every preview shows, in this order: club and season, a one-line summary, warnings (never hidden), the buttons, then "Show details".
+// Nothing that affects a write is ever put behind Show details; the technical view only ADDS raw IDs and wording, it never hides a warning or enables an action.
+const PV_LEVELS = {fix: {label: 'Must fix', icon: '⛔', cls: 'pv-fix'}, check: {label: 'Please check', icon: '⚠', cls: 'pv-check'}, info: {label: 'For information', icon: 'ℹ', cls: 'pv-info'}};
+const PV_PLAIN = [[/MDMActorID/g, 'MDM player ID'], [/Hero PIDs/g, 'Personalised products'], [/hero PIDs/g, 'personalised products'], [/Hero PID/g, 'Personalised product'], [/hero PID/g, 'personalised product'],
+  [/Parent PIDs/g, 'Base products'], [/parent PIDs/g, 'base products'], [/Parent PID/g, 'Base product'], [/parent PID/g, 'base product'],
+  [/RosterMemberIDs/g, 'MDM roster-entry IDs'], [/RosterMemberID/g, 'MDM roster-entry ID'], [/ActorIDs/g, 'MDM player IDs'], [/ActorID/g, 'MDM player ID'], [/RosterIDs/g, 'MDM roster IDs'], [/RosterID/g, 'MDM roster ID']];
+function pvContext(clubId, seasonId, extra) {   // club and season by NAME
+  const C = (typeof CACHE !== 'undefined' && CACHE) || {}, c = (C.clubs || []).find(x => x.id === clubId), se = (C.seasons || []).find(x => x.id === seasonId);
+  return [c ? c.Name : '', se ? (se.Label || '') : '', extra].filter(Boolean).map(_escHtml).join(' · ');
+}
+function pvTile(label, v, col) { return `<div style="flex:1;min-width:120px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;"><div style="font-size:11px;color:var(--text2);">${label}</div><div style="font-size:20px;font-weight:600;color:${col || 'var(--text)'};">${v}</div></div>`; }
+function pvNum(n) { return Number(n || 0).toLocaleString('en-GB'); }
+function pvPlain(text) { return PV_PLAIN.reduce((t, [re, to]) => t.replace(re, to), String(text == null ? '' : text)); }
+function pvText(raw) {   // plain wording for everyday use; the original wording appears in the technical view
+  const r = String(raw == null ? '' : raw), pl = pvPlain(r);
+  return pl === r ? _escHtml(r) : `<span class="pv-plain">${_escHtml(pl)}</span><span class="pv-tech">${_escHtml(r)}</span>`;
+}
+function pvNote(level, raw) { const L = PV_LEVELS[level]; return `<div class="pv-note ${L.cls}"><span class="pv-lbl">${L.icon} ${L.label}:</span>${pvText(raw)}</div>`; }   // the text label means colour never carries the meaning alone
+function pvNotes(level, items) { return (items || []).map(x => pvNote(level, x)).join(''); }
+function pvSummary(parts) {   // [{n, text}] -> "4 new products, 2,162 unchanged, 20 needing attention"; zero parts are left out
+  const used = (parts || []).filter(p => Number(p.n) > 0).map(p => `${pvNum(p.n)} ${p.text}`);
+  return used.length ? used.join(', ') : 'Nothing to change';
+}
+function pvPlural(n, one, many) { return Number(n) === 1 ? one : (many || one + 's'); }
+function pvApplyLabel(verb, n, one, many) { return `${verb} ${pvNum(n)} ${pvPlural(n, one, many)}`; }
+function pvTechOn() { try { return localStorage.getItem('hph_technical') === '1'; } catch (e) { return false; } }
+function pvApplyTech() { try { document.body.classList.toggle('pv-tech-on', pvTechOn()); document.querySelectorAll('.pv-techcb').forEach(cb => { cb.checked = pvTechOn(); }); } catch (e) { /* no page */ } }
+function pvSetTech(on) { try { localStorage.setItem('hph_technical', on ? '1' : '0'); } catch (e) { /* kept for this page only */ } try { document.body.classList.toggle('pv-tech-on', !!on); document.querySelectorAll('.pv-techcb').forEach(cb => { cb.checked = !!on; }); } catch (e) { /* no page */ } }
+function pvDetails(inner) {
+  return `<details class="pv-details"><summary><span class="pv-show">▸ Show details</span><span class="pv-hide">▾ Hide details</span></summary><div class="pv-body"><div class="pv-techbar"><label><input type="checkbox" class="pv-techcb" ${pvTechOn() ? 'checked' : ''} onchange="pvSetTech(this.checked)"> Technical view</label> (adds raw IDs and field names)</div>${inner}</div></details>`;
+}
+// o: {context, summary, notes (html), actions (html), details (html), ok (html, shown when nothing is to be done)}
+function pvTop(o) {   // club and season, summary, (players/products line), warnings: everything that must stay visible
+  return `<div class="pv">${o.context ? `<div class="pv-ctx">${o.context}</div>` : ''}<div class="pv-sum">${o.summary}</div>${o.sub ? `<div class="pv-sub">${o.sub}</div>` : ''}${o.notes || ''}${o.ok || ''}</div>`;
+}
+function pvShell(o) {   // the whole thing for screens that draw their own buttons
+  return pvTop(o).replace(/<\/div>$/, '') + `${o.actions ? `<div class="pv-actions">${o.actions}</div>` : ''}${o.details ? pvDetails(o.details) : ''}</div>`;
+}
+const PV_TECHBAR = '<div class="pv-techbar"><label><input type="checkbox" class="pv-techcb" onchange="pvSetTech(this.checked)"> Technical view</label> (adds raw IDs and field names)</div>';   // the same markup is written by hand into the screens whose buttons are part of the page
+
 const CACHE_TTL=5*60*1000;
 const CACHE_KEYS={heroes:'hph_heroes',parents:'hph_parents',players:'hph_players'};
 function getCachedTable(k){try{const r=localStorage.getItem(k);if(!r)return null;const{data,ts}=JSON.parse(r);if(Date.now()-ts>CACHE_TTL){localStorage.removeItem(k);return null;}return data;}catch(e){return null;}}
@@ -3915,6 +3970,59 @@ function repairMojibake(s) {
 }
 function searchMatch(h,n) { return normaliseAccents(h.toLowerCase()).includes(normaliseAccents(n.toLowerCase())); }
 
+// ─── v239.2: SEARCH SEVERAL PLAYERS ──────────────────────────────────────────
+// Names, shirt names or PIDs separated by commas are searched together (a player matches if ANY term matches). Once a club AND a season are chosen a squad
+// picker appears: ticking a player puts the name into the search box exactly as if it had been typed, unticking removes it.
+function searchTerms(raw) {   // "Palmer, jackson ,Palmer," -> ['Palmer', 'jackson'] (trimmed, no empties, no repeats ignoring case)
+  const seen = new Set(), out = [];
+  String(raw == null ? '' : raw).split(',').map(t => t.trim()).filter(Boolean).forEach(t => { const k = t.toLowerCase(); if (!seen.has(k)) { seen.add(k); out.push(t); } });
+  return out;
+}
+function searchTermPresent(raw, name) { const k = String(name || '').trim().toLowerCase(); return !!k && searchTerms(raw).some(t => t.toLowerCase() === k); }
+function searchToggleTerm(raw, name, on) {   // pure: the search box text after ticking or unticking a name
+  const k = String(name || '').trim().toLowerCase(), terms = searchTerms(raw).filter(t => t.toLowerCase() !== k);
+  if (on && k) terms.push(String(name).trim());
+  return terms.join(', ');
+}
+function searchRemoveTerm(raw, index) { const t = searchTerms(raw); t.splice(index, 1); return t.join(', '); }
+function squadMembers({players, heroes, clubId, seasonId, status}) {   // players of this club that have PIDs in this season
+  if (!clubId || !seasonId) return [];
+  const inSeason = new Set(); (heroes || []).forEach(h => { if (h.ClubID === clubId && h.SeasonID === seasonId) inSeason.add(h.PlayerID); });
+  return (players || []).filter(p => p.ClubID === clubId && inSeason.has(p.id) && (!status || p.Status === status) && p.Name && p.Name !== '__provisional__')
+    .map(p => ({id: p.id, name: p.Name, number: p.SquadNumber == null || p.SquadNumber === '' ? null : Number(p.SquadNumber), gk: !!p.Goalkeeper}))
+    .sort((a, b) => ((a.number == null) - (b.number == null)) || ((a.number || 0) - (b.number || 0)) || a.name.localeCompare(b.name));
+}
+function squadPickerVisible(clubId, seasonId) { return !!(clubId && seasonId); }
+function squadSyncChecks() {   // the ticks follow what is in the search box (typing a squad member's full name ticks them)
+  const raw = (document.getElementById('search-q') || {}).value || '';
+  document.querySelectorAll('.squad-cb').forEach(cb => { cb.checked = searchTermPresent(raw, cb.dataset.name); });
+  const n = searchTerms(raw).filter(t => document.querySelectorAll('.squad-cb').length && [...document.querySelectorAll('.squad-cb')].some(cb => cb.dataset.name.toLowerCase() === t.toLowerCase())).length;
+  const c = document.getElementById('squad-count'); if (c) c.textContent = n ? `(${n})` : '';
+}
+function squadRefresh() {
+  const wrap = document.getElementById('squad-wrap'); if (!wrap) return;
+  const clubId = (document.getElementById('filter-club') || {}).value || '', seasonId = (document.getElementById('filter-season') || {}).value || '';
+  if (!squadPickerVisible(clubId, seasonId)) { wrap.style.display = 'none'; const pn = document.getElementById('squad-panel'); if (pn) pn.classList.add('hidden'); return; }
+  wrap.style.display = '';
+  const list = document.getElementById('squad-list'); if (!list) return;
+  if (!seasonLoaded(seasonId)) { list.innerHTML = '<div style="padding:10px;font-size:12px;color:var(--text3);">Loading this season...</div>'; return; }
+  const status = (document.getElementById('filter-status') || {}).value || '';
+  const members = squadMembers({players: CACHE.players, heroes: CACHE.heroes, clubId, seasonId, status});
+  list.innerHTML = members.length ? members.map(m => `<label class="squad-row" data-n="${_escHtml(m.name.toLowerCase())}"><input type="checkbox" class="squad-cb" data-name="${_escHtml(m.name)}" onchange="squadToggle(this)"><span class="squad-num">${m.number == null ? '' : '#' + m.number}</span><span>${_escHtml(m.name)}</span>${m.gk ? '<span class="squad-gk">GK</span>' : ''}</label>`).join('') : '<div style="padding:10px;font-size:12px;color:var(--text3);">No players with PIDs for this club and season.</div>';
+  squadSyncChecks();
+}
+function squadToggle(cb) {
+  const box = document.getElementById('search-q'); if (!box) return;
+  box.value = searchToggleTerm(box.value, cb.dataset.name, cb.checked);
+  squadSyncChecks(); debounceSearch();
+}
+function squadClear() { const box = document.getElementById('search-q'); if (!box) return; const names = new Set([...document.querySelectorAll('.squad-cb')].map(cb => cb.dataset.name.toLowerCase())); box.value = searchTerms(box.value).filter(t => !names.has(t.toLowerCase())).join(', '); squadSyncChecks(); debounceSearch(); }
+function squadFilter(text) { const q = String(text || '').toLowerCase().trim(); document.querySelectorAll('.squad-row').forEach(r => { r.style.display = !q || r.dataset.n.includes(q) ? '' : 'none'; }); }
+function squadTogglePanel() { const pn = document.getElementById('squad-panel'); if (pn) pn.classList.toggle('hidden'); }
+function removeSearchTerm(i) { const box = document.getElementById('search-q'); if (!box) return; box.value = searchRemoveTerm(box.value, i); squadSyncChecks(); runSearch(); }
+document.addEventListener('click', e => { const w = document.getElementById('squad-wrap'), pn = document.getElementById('squad-panel'); if (w && pn && !pn.classList.contains('hidden') && !w.contains(e.target)) pn.classList.add('hidden'); });
+document.addEventListener('change', e => { const t = e.target; if (t && (t.id === 'filter-club' || t.id === 'filter-season' || t.id === 'filter-status')) squadRefresh(); });
+
 let searchTimer = null;
 function debounceSearch() { clearTimeout(searchTimer); searchTimer = setTimeout(runSearch, 300); }
 
@@ -3979,6 +4087,7 @@ async function onClubFilterChange(skipSearch = false) {
   if (!clubVal) {
     refreshFilterSelects();
   }
+  try { squadRefresh(); } catch (e) { /* the squad picker is optional */ }   // after the season list was rebuilt
   if (!skipSearch) runSearch();
 }
 
@@ -3994,6 +4103,11 @@ function runSearch() {
   if (!raw && !filterClub && !filterSeason && !filterFont && !filterStatus && !filterKit) {
     document.getElementById('search-results').innerHTML = `<div class="empty-state"><div class="empty-icon">⌕</div><div class="empty-title">Search for a player or PID</div><div class="empty-sub">Try "Palmer", "Palmer home mens", "203072419", or "Dembele cup"</div></div>`;
     document.getElementById('result-count').textContent = '';
+    return;
+  }
+  if (raw.includes(',')) {   // v239.2: a list of names or PIDs: searched as typed (use the dropdowns for kit and font)
+    window._lastSearchIntent = null;
+    executeSearch(raw, null, null, filterKit||null, filterClub, filterSeason, filterFont, filterStatus);
     return;
   }
   if (raw && !raw.match(/^\d{6,12}$/)) {
@@ -4108,6 +4222,7 @@ function localParseAndSearch(query, filterClub, filterSeason, filterFont, filter
 function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filterClub, filterSeason, filterFont, filterStatus, groupByClub) {
   const effectiveFont = resolvedFont||filterFont||null;
   const q = (nameQ||'').trim().toLowerCase();
+  const terms = q.includes(',') ? searchTerms(q) : (q ? [q] : []);   // v239.2: comma-separated names or PIDs: a player matches if ANY term matches
   // Build player name lookup for text matching — players drive name/status only
   const playerNameSet = new Set();
   CACHE.players.forEach(p => {
@@ -4115,13 +4230,13 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
     const statusMatch = !filterStatus || p.Status===filterStatus;
     if (!clubMatch||!statusMatch) return;
     if (groupByClub || !q) { playerNameSet.add(p.id); return; }
-    if (searchMatch(p.Name||'',q)||searchMatch(p.ShirtName||'',q)) playerNameSet.add(p.id);
+    if (terms.some(t => searchMatch(p.Name||'',t)||searchMatch(p.ShirtName||'',t))) playerNameSet.add(p.id);
   });
-  if (q && !groupByClub) CACHE.heroes.forEach(h => { if (h.PID&&h.PID.includes(q)) playerNameSet.add(h.PlayerID); });
+  if (q && !groupByClub) CACHE.heroes.forEach(h => { if (h.PID&&terms.some(t => h.PID.includes(t))) playerNameSet.add(h.PlayerID); });
   // v239: heroes of seasons that are not loaded cannot be listed. A PID search loads the season that holds it; anything else gets a clear note.
   let _ulNote = '';
   if (!LOAD_STATE.all) {
-    const ul = searchUnloadedHits({q, lightByPid: CACHE_MAPS.lightByPid, playerIds: playerNameSet, filterClub, filterSeason});
+    const ul = (terms.length ? terms : [q]).map(t => searchUnloadedHits({q: t, lightByPid: CACHE_MAPS.lightByPid, playerIds: playerNameSet, filterClub, filterSeason})).reduce((a, b) => { b.pidSeasons.forEach(x => a.pidSeasons.add(x)); b.playerSeasons.forEach((n, k) => { if (!a.playerSeasons.has(k)) a.playerSeasons.set(k, n); }); return a; }, {pidSeasons: new Set(), playerSeasons: new Map()});
     const _toLoad = [...ul.pidSeasons].filter(i => !seasonLoaded(i));   // a season that is already loaded cannot be the reason: never re-run a search for it (stale list safety)
     if (_toLoad.length) {
       const args = Array.from(arguments), ids = _toLoad;
@@ -5074,6 +5189,8 @@ function updateSearchChips() {
       if (intent.fontType && !font) chips.push({label: FONT_LABELS[intent.fontType]||intent.fontType, type:'queryFont'});
       if (intent.garmentType && !chips.find(c=>c.type==='query')) chips.push({label: GARMENT_LABELS[intent.garmentType]||intent.garmentType, type:'query'});
       if (!chips.length) chips.push({label: q, type:'query'});
+    } else if (q.includes(',')) {
+      searchTerms(q).forEach((t, i) => chips.push({label: t, type: 'term', click: `removeSearchTerm(${i})`}));   // v239.2: one chip per name, each with its own ×
     } else {
       chips.push({label: q, type:'query'});
     }
@@ -5099,8 +5216,8 @@ function updateSearchChips() {
   const nonStatusChips = chips.filter(c=>c.type!=='status');
   container.innerHTML = chips.map(chip => `
     <span style="display:inline-flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--accent);border-radius:20px;padding:3px 10px 3px 12px;font-size:11px;color:var(--accent);font-weight:500;">
-      ${chip.label}
-      <button onclick="removeChip('${chip.type}')" style="background:none;border:none;color:var(--red,#ff5c5c);cursor:pointer;font-size:13px;line-height:1;padding:0;opacity:0.8;" title="Remove">×</button>
+      ${_escHtml(chip.label)}
+      <button onclick="${chip.click || `removeChip('${chip.type}')`}" style="background:none;border:none;color:var(--red,#ff5c5c);cursor:pointer;font-size:13px;line-height:1;padding:0;opacity:0.8;" title="Remove">×</button>
     </span>
   `).join('') + (nonStatusChips.length >= 1 ? `
     <button onclick="clearAllSearchFilters()" style="background:none;border:1px solid rgba(255,92,92,0.4);border-radius:20px;padding:3px 12px;font-size:11px;color:var(--red,#ff5c5c);cursor:pointer;">✕ Clear all</button>` : '');
@@ -6220,6 +6337,7 @@ async function applyRelink() {
   }
 }
 
+function pvBox(level, innerHtml) { const L = PV_LEVELS[level]; return `<div class="pv-note ${L.cls}"><span class="pv-lbl">${L.icon} ${L.label}:</span>${innerHtml}</div>`; }   // for boxes that hold buttons or lists (inner HTML is already safe)
 function showImportPreview(club, season, filename) {
   const d=importData;
   const _plan = planImportPlayers(d.players, CACHE.players);
@@ -6236,56 +6354,55 @@ function showImportPreview(club, season, filename) {
   const dupHeroes=d.heroes.length-newHeroes.length;
   document.getElementById('import-preview-title').textContent=`Preview — ${filename}`;
   document.getElementById('import-preview').classList.remove('hidden');
-  let html=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">
-    <div class="stat-pill"><span class="stat-label">Rolled forward</span><span class="stat-value" style="color:var(--accent);">${rolledForward.length}</span></div>
-    <div class="stat-pill"><span class="stat-label">Brand new</span><span class="stat-value" style="color:var(--green);">${brandNew.length}</span></div>
-    <div class="stat-pill"><span class="stat-label">New hero PIDs</span><span class="stat-value" style="color:var(--green);">${newHeroes.length}</span></div>
-    <div class="stat-pill"><span class="stat-label">New parent PIDs</span><span class="stat-value" style="color:var(--amber);">${newParents.length}</span></div>
-  </div>`;
-  if (existingPlayers.length>0) html+=`<div style="background:rgba(99,179,237,0.08);border:1px solid rgba(99,179,237,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:#63b3ed;margin-bottom:10px;">ℹ ${existingPlayers.length} player${existingPlayers.length>1?'s':''} already in database from another club (${existingPlayers.map(p=>p.name).join(', ')}) — PIDs will still be imported</div>`;
-  if (dupHeroes>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${dupHeroes} duplicate hero PIDs will be skipped</div>`;
-  if (heldPlayers.length>0) html+=`<div style="background:rgba(255,82,82,0.10);border:1px solid rgba(255,82,82,0.35);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:#ff6b6b;margin-bottom:10px;">⛔ ${heldPlayers.length} player${heldPlayers.length!==1?'s':''} need${heldPlayers.length===1?'s':''} review. NOTHING will be imported until ${heldPlayers.length===1?'it is':'they are'} resolved:<ul style="margin:6px 0 0 18px;padding:0;">${heldPlayers.map(h=>`<li><b>${_escHtml(h.name)}</b>: ${_escHtml(h.reason)}${h.detail?`<br><span style="opacity:.85;">${_escHtml(h.detail)}</span>`:''}${h.playerKey?`<br><button class="btn btn-ghost btn-sm" data-k="${_escHtml(h.playerKey)}" onclick="setGkPlayerChoice(this.dataset.k,true)" style="margin:4px 6px 0 0;">He/she is a goalkeeper</button><button class="btn btn-ghost btn-sm" data-k="${_escHtml(h.playerKey)}" onclick="setGkPlayerChoice(this.dataset.k,false)" style="margin-top:4px;">Outfield player</button>`:''}</li>`).join('')}</ul></div>`;
+  const e = _escHtml, notesFix = [], notesCheck = [], notesInfo = [];
+  let tableHtml = '';
+  // ── must fix: nothing is written until these are answered ──
+  if (heldPlayers.length>0) notesFix.push(pvBox('fix', `${heldPlayers.length} player${heldPlayers.length!==1?'s':''} need${heldPlayers.length===1?'s':''} review. <b>NOTHING will be imported</b> until ${heldPlayers.length===1?'it is':'they are'} resolved:<ul style="margin:6px 0 0 18px;padding:0;">${heldPlayers.map(h=>`<li><b>${e(h.name)}</b>: ${e(h.reason)}${h.detail?`<br><span style="opacity:.85;">${e(h.detail)}</span>`:''}${h.playerKey?`<br><button class="btn btn-ghost btn-sm" data-k="${e(h.playerKey)}" onclick="setGkPlayerChoice(this.dataset.k,true)" style="margin:4px 6px 0 0;">He/she is a goalkeeper</button><button class="btn btn-ghost btn-sm" data-k="${e(h.playerKey)}" onclick="setGkPlayerChoice(this.dataset.k,false)" style="margin-top:4px;">Outfield player</button>`:''}</li>`).join('')}</ul>`));
+  const _gkCand = d.gkCandidates||[];
+  if (_gkCand.length>0) notesFix.push(pvBox('fix', `<b>${_gkCand.length} unlabelled row${_gkCand.length!==1?'s':''} of PIDs need${_gkCand.length===1?'s':''} you to say what they are.</b> Nothing is written until each is confirmed. A row of PIDs with no name between the Blank row and the "Actor Name" header could be goalkeeper base product PIDs, or personalised product PIDs whose names are missing. Look at the sheet row, then choose:${_gkCand.map(x=>`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border2);">${e(x.sheet)} · ${e(x.kitType)} · row ${x.row}: <span class="mono">${x.pids.join(', ')}</span><br><button class="btn btn-ghost btn-sm" data-k="${e(x.key)}" onclick="resolveGkCandidate(this.dataset.k,'gk')" style="margin:4px 6px 0 0;">These are goalkeeper base product PIDs</button><button class="btn btn-ghost btn-sm" data-k="${e(x.key)}" onclick="resolveGkCandidate(this.dataset.k,'nameless')" style="margin-top:4px;">These are personalised product PIDs missing names (skip them)</button></div>`).join('')}`));
+  // ── please check ──
   const _noPar = d.noParent || [];
-  if (_noPar.length>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${_noPar.length} PID${_noPar.length!==1?'s have':' has'} NO parent PID (the Blank row has no parent in that column). ${_noPar.length!==1?'They':'It'} will be imported UNLINKED: a goalkeeper parent is never borrowed. e.g. ${_noPar.slice(0,5).map(x=>_escHtml(x.pid)+' ('+_escHtml(x.playerName)+', '+_escHtml(x.kitType)+')').join(', ')}</div>`;
+  if (_noPar.length>0) notesCheck.push(pvNote('check', `${_noPar.length} PID${_noPar.length!==1?'s have':' has'} NO parent PID (the Blank row has no parent in that column). ${_noPar.length!==1?'They':'It'} will be imported UNLINKED: a goalkeeper parent is never borrowed. e.g. ${_noPar.slice(0,5).map(x=>x.pid+' ('+x.playerName+', '+x.kitType+')').join(', ')}`));
+  const _skipped = d.skipped||[], _skippedPids = _skipped.reduce((t,x)=>t+x.pids.length,0);
+  if (_skipped.length>0) notesCheck.push(pvNote('check', `${_skippedPids} PID${_skippedPids!==1?'s':''} in ${_skipped.length} row${_skipped.length!==1?'s':''} will NOT be imported because the row has no player name: ${_skipped.slice(0,8).map(x=>x.sheet+' row '+x.row+' ('+x.pids.join(', ')+')').join('; ')}${_skipped.length>8?'; …and '+(_skipped.length-8)+' more':''}. Add the names to the sheet and upload again, or carry on knowing these are left out.`));
   const _gMis = {};
   newHeroes.forEach(h => { const _par = CACHE_MAPS.parentByPID.get(String(h.parentPid)); if (_par && _par.GarmentType && _par.GarmentType !== h.garmentType) { const k = `parent ${h.parentPid}: sheet says ${h.garmentType}, database says ${_par.GarmentType}`; _gMis[k] = (_gMis[k]||0)+1; } });
-  if (Object.keys(_gMis).length>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ Some PIDs take their garment from the EXISTING parent in the database, which differs from the sheet's label (the database wins):<br>${Object.entries(_gMis).map(([k,n])=>_escHtml(k)+' ('+n+' PID'+(n!==1?'s':'')+')').join('<br>')}</div>`;
-  const _confirmBtn = document.getElementById('import-confirm-btn'); if (_confirmBtn) _confirmBtn.disabled = heldPlayers.length>0;
+  if (Object.keys(_gMis).length>0) notesCheck.push(pvBox('check', `Some PIDs take their garment from the EXISTING base product in the database, which differs from the sheet's label (the database wins):<br>${Object.entries(_gMis).map(([k,n])=>e(k)+' ('+n+' PID'+(n!==1?'s':'')+')').join('<br>')}`));
   const missingMappingCount = newHeroes.filter(h => resolveMdmLinks('', h.clubId, h.seasonId, h.fontType, h.kitType, finalImportGarment(h, CACHE.parents, d.parents)).missingMapping).length;
-  if (missingMappingCount>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${missingMappingCount} hero PID${missingMappingCount!==1?'s':''} have no roster mapping — RosterID will be blank (flagged later in Data Health)</div>`;
-  html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Sheets: ${d.sheets.join(', ')}</div>`;
-  if ((d.rerouted||[]).length>0) { const _by={}; d.rerouted.forEach(r=>{ const k=(FONT_LABELS[r.from]||r.from)+' → '+(FONT_LABELS[r.to]||r.to); (_by[k]=_by[k]||new Set()).add(r.name); }); html+=`<div style="background:rgba(99,179,237,0.08);border:1px solid rgba(99,179,237,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:#63b3ed;margin-bottom:10px;">ℹ Moved by MDM roster evidence (the sheet name gave no font): ${Object.keys(_by).map(k=>'<b>'+_escHtml(k)+'</b>: '+[..._by[k]].map(_escHtml).join(', ')).join(' · ')}. These players are on a women's roster for this club and season and on no men's roster. If one is wrong, fix the MDM roster or rename the sheet and upload again.</div>`; }
-  if ((d.routeWarnings||[]).length>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${[...new Set(d.routeWarnings.map(w=>w.name))].length} player${[...new Set(d.routeWarnings.map(w=>w.name))].length!==1?'s':''} on a sheet that says League / Mens ${[...new Set(d.routeWarnings.map(w=>w.name))].length!==1?'are':'is'} on a women's MDM roster only: ${[...new Set(d.routeWarnings.map(w=>w.name))].slice(0,10).map(_escHtml).join(', ')}. They were NOT moved because the sheet name is explicit.</div>`;
-  if ((d.routeUncertain||[]).length>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${d.routeUncertain.length} player${d.routeUncertain.length!==1?'s were':' was'} NOT moved because the MDM evidence is not clear: ${d.routeUncertain.slice(0,10).map(x=>_escHtml(x.name)+' ('+_escHtml(x.detail)+')').join('; ')}.</div>`;
-  if (d.routeEvidence==='not-loaded') html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ MDM roster members could not be loaded, so women's players on an unmarked sheet were not detected. Check the font by sheet below.</div>`;
-  if (d.routeEvidence==='no-mappings') html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ This club and season has no active roster mappings, so women's players on an unmarked sheet were not detected.</div>`;
+  if (missingMappingCount>0) notesCheck.push(pvNote('check', `${missingMappingCount} hero PID${missingMappingCount!==1?'s':''} ${missingMappingCount!==1?'have':'has'} no roster mapping, so RosterID will be blank (flagged later in Data Health).`));
+  if ((d.routeWarnings||[]).length>0) { const _n = [...new Set(d.routeWarnings.map(w=>w.name))]; notesCheck.push(pvNote('check', `${_n.length} player${_n.length!==1?'s':''} on a sheet that says League / Mens ${_n.length!==1?'are':'is'} on a women's MDM roster only: ${_n.slice(0,10).join(', ')}. They were NOT moved because the sheet name is explicit.`)); }
+  if ((d.routeUncertain||[]).length>0) notesCheck.push(pvNote('check', `${d.routeUncertain.length} player${d.routeUncertain.length!==1?'s were':' was'} NOT moved because the MDM evidence is not clear: ${d.routeUncertain.slice(0,10).map(x=>x.name+' ('+x.detail+')').join('; ')}.`));
+  if (d.routeEvidence==='not-loaded') notesCheck.push(pvNote('check', `MDM roster members could not be loaded, so women's players on an unmarked sheet were not detected. Check the font by sheet under Show details.`));
+  if (d.routeEvidence==='no-mappings') notesCheck.push(pvNote('check', `This club and season has no active roster mappings, so women's players on an unmarked sheet were not detected.`));
+  const _routes = d.sheetRouting||[], _defaulted = _routes.filter(r=>r.defaulted);
+  if (_defaulted.length>0) notesCheck.push(pvBox('check', `${_defaulted.length} sheet${_defaulted.length!==1?'s':''} had no font keyword in the name and defaulted to League: ${_defaulted.map(r=>'<b>'+e(r.sheet)+'</b>').join(', ')}. If a sheet is really Cup, Specials or Women's, rename it (e.g. add "Cup" or "WSL") and upload again.`));
   { const _rp = planRelink(d.heroes, {clubId: d.clubId, seasonId: d.seasonId, heroByPID: CACHE_MAPS.heroByPID, parentById: CACHE_MAPS.parentById, parentByPID: CACHE_MAPS.parentByPID,
       resolvePlayerId: sh => { const rec = _plan.existing.get(importNameKey(sh.playerName, sh.clubId)); return rec ? rec.id : ''; }, playerById: CACHE_MAPS.playerById}); window._relinkPlan = _rp;
     if (_rp.relink.length || _rp.parentMissing.length || _rp.needsHuman.length) {
       const _blocked = heldPlayers.length > 0;
-      html += `<div style="background:rgba(99,179,237,0.08);border:1px solid rgba(99,179,237,0.25);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--text2);margin-bottom:10px;"><b style="color:#63b3ed;">Existing PIDs and their parents</b> (the import itself never changes PIDs that already exist)
-        ${_rp.relink.length ? `<div style="margin-top:6px;">${_rp.relink.length} existing PID${_rp.relink.length!==1?'s are':' is'} linked to a different parent than this sheet says. <button class="btn btn-ghost btn-sm" id="relink-btn" onclick="applyRelink()" ${_blocked?'disabled title="Resolve the red items first"':''} style="margin-left:6px;">Re-link ${_rp.relink.length}</button> <span id="relink-status" style="font-size:11px;color:var(--text3);"></span>
-        <details style="margin-top:4px;"><summary style="cursor:pointer;font-size:11px;color:var(--text3);">Show the first ${Math.min(_rp.relink.length,40)}</summary><table class="data-table" style="font-size:11px;"><tbody>${_rp.relink.slice(0,40).map(x=>`<tr><td class="mono">${_escHtml(x.pid)}</td><td>${_escHtml(x.player)}</td><td class="mono">${_escHtml(x.fromParentPid||'none')} → ${_escHtml(x.toParentPid)}</td><td>${x.setGarment?_escHtml(x.fromGarment||'none')+' → '+_escHtml(x.toGarment):'garment unchanged'}</td></tr>`).join('')}</tbody></table></details></div>` : ''}
-        ${_rp.parentMissing.length ? `<div style="margin-top:6px;color:var(--amber);">${_rp.parentMissing.length} existing PID${_rp.parentMissing.length!==1?'s need':' needs'} a parent that is not in the database yet. Run Import all first (it creates the parents), then upload this file again to re-link them.</div>` : ''}
-        ${_rp.needsHuman.length ? `<div style="margin-top:6px;color:var(--amber);">${_rp.needsHuman.length} existing PID${_rp.needsHuman.length!==1?'s were':' was'} left alone because something does not line up: ${_rp.needsHuman.slice(0,5).map(x=>_escHtml(x.pid)+' ('+_escHtml(x.why)+')').join('; ')}${_rp.needsHuman.length>5?'; …':''}.</div>` : ''}
-      </div>`; } }
-  { const _recs = relinkRecords();
-    if (_recs.length) html += `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Re-link records retained: ${_recs.map(r=>`<button class="btn btn-ghost btn-sm" data-r="${_escHtml(r.id)}" onclick="exportRelinkRecovery(this.dataset.r)" style="margin:2px 4px 2px 0;${r.id==='pending'?'border-color:var(--amber);color:var(--amber);':''}">Download: ${_escHtml(r.label)}</button>`).join('')}</div>`; }
-  const _gkCand = d.gkCandidates||[];
-  if (_gkCand.length>0) html+=`<div style="background:rgba(255,179,64,0.10);border:1px solid rgba(255,179,64,0.45);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;"><b>⛔ ${_gkCand.length} unlabelled row${_gkCand.length!==1?'s':''} of PIDs need${_gkCand.length===1?'s':''} you to say what they are.</b> Nothing is written until each is confirmed. A row of PIDs with no name between the Blank row and the "Actor Name" header could be goalkeeper parent PIDs, or hero PIDs whose names are missing. Look at the sheet row, then choose:${_gkCand.map(x=>`<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,179,64,0.25);">${_escHtml(x.sheet)} · ${_escHtml(x.kitType)} · row ${x.row}: <span class="mono">${x.pids.join(', ')}</span><br><button class="btn btn-ghost btn-sm" data-k="${_escHtml(x.key)}" onclick="resolveGkCandidate(this.dataset.k,'gk')" style="margin:4px 6px 0 0;">These are goalkeeper parent PIDs</button><button class="btn btn-ghost btn-sm" data-k="${_escHtml(x.key)}" onclick="resolveGkCandidate(this.dataset.k,'nameless')" style="margin-top:4px;">These are hero PIDs missing names (skip them)</button></div>`).join('')}</div>`;
+      notesCheck.push(pvBox('check', `<b>Existing products and their base products</b> (the import itself never changes PIDs that already exist)
+        ${_rp.relink.length ? `<div style="margin-top:6px;">${_rp.relink.length} existing PID${_rp.relink.length!==1?'s are':' is'} linked to a different base product than this sheet says. <button class="btn btn-ghost btn-sm" id="relink-btn" onclick="applyRelink()" ${_blocked?'disabled title="Resolve the items marked Must fix first"':''} style="margin-left:6px;">Move ${_rp.relink.length} to the correct base product</button> <span id="relink-status" style="font-size:11px;color:var(--text3);"></span>
+        <details style="margin-top:4px;"><summary style="cursor:pointer;font-size:11px;color:var(--text3);">Show the first ${Math.min(_rp.relink.length,40)}</summary><table class="data-table" style="font-size:11px;"><tbody>${_rp.relink.slice(0,40).map(x=>`<tr><td class="mono">${e(x.pid)}</td><td>${e(x.player)}</td><td class="mono">${e(x.fromParentPid||'none')} → ${e(x.toParentPid)}</td><td>${x.setGarment?e(x.fromGarment||'none')+' → '+e(x.toGarment):'garment unchanged'}</td></tr>`).join('')}</tbody></table></details></div>` : ''}
+        ${_rp.parentMissing.length ? `<div style="margin-top:6px;">${_rp.parentMissing.length} existing PID${_rp.parentMissing.length!==1?'s need':' needs'} a base product that is not in the database yet. Add the new products first (it creates the base products), then upload this file again to move them.</div>` : ''}
+        ${_rp.needsHuman.length ? `<div style="margin-top:6px;">${_rp.needsHuman.length} existing PID${_rp.needsHuman.length!==1?'s were':' was'} left alone because something does not line up: ${_rp.needsHuman.slice(0,5).map(x=>e(x.pid)+' ('+e(x.why)+')').join('; ')}${_rp.needsHuman.length>5?'; …':''}.</div>` : ''}`)); } }
+  // ── for information ──
+  if (existingPlayers.length>0) notesInfo.push(pvNote('info', `${existingPlayers.length} player${existingPlayers.length>1?'s':''} already in the database from another club (${existingPlayers.map(p=>p.name).join(', ')}): the PIDs will still be added.`));
+  if (dupHeroes>0) notesInfo.push(pvNote('info', `${dupHeroes} hero PID${dupHeroes!==1?'s':''} already exist${dupHeroes===1?'s':''} and will be skipped.`));
+  if ((d.rerouted||[]).length>0) { const _by={}; d.rerouted.forEach(r=>{ const k=(FONT_LABELS[r.from]||r.from)+' → '+(FONT_LABELS[r.to]||r.to); (_by[k]=_by[k]||new Set()).add(r.name); }); notesInfo.push(pvBox('info', `Moved by MDM roster evidence (the sheet name gave no font): ${Object.keys(_by).map(k=>'<b>'+e(k)+'</b>: '+[..._by[k]].map(e).join(', ')).join(' · ')}. These players are on a women's roster for this club and season and on no men's roster. If one is wrong, fix the MDM roster or rename the sheet and upload again.`)); }
+  { const _recs = relinkRecords(); if (_recs.length) notesInfo.push(pvBox('info', `Records kept from earlier moves of products to another base product: ${_recs.map(r=>`<button class="btn btn-ghost btn-sm" data-r="${e(r.id)}" onclick="exportRelinkRecovery(this.dataset.r)" style="margin:2px 4px 2px 0;${r.id==='pending'?'border-color:var(--amber);color:var(--amber);':''}">Download: ${e(r.label)}</button>`).join('')}`)); }
   const _gkInf = d.gkInferred||[];
-  if (_gkInf.length>0) html+=`<div style="background:rgba(99,179,237,0.08);border:1px solid rgba(99,179,237,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:#63b3ed;margin-bottom:10px;">ℹ ${_gkInf.length} unlabelled row${_gkInf.length!==1?'s were':' was'} treated as goalkeeper parent PIDs because you confirmed ${_gkInf.length!==1?'them':'it'}: ${_gkInf.map(x=>_escHtml(x.sheet)+' '+_escHtml(x.kitType)+' row '+x.row).join('; ')}. Goalkeepers in those sections link to these parents, not the outfield ones.</div>`;
+  if (_gkInf.length>0) notesInfo.push(pvNote('info', `${_gkInf.length} unlabelled row${_gkInf.length!==1?'s were':' was'} treated as goalkeeper parent PIDs because you confirmed ${_gkInf.length!==1?'them':'it'}: ${_gkInf.map(x=>x.sheet+' '+x.kitType+' row '+x.row).join('; ')}. Goalkeepers in those sections link to these parents, not the outfield ones.`));
   const _noPid = d.noPidPlayers||[];
-  if (_noPid.length>0) html+=`<div style="background:rgba(99,179,237,0.08);border:1px solid rgba(99,179,237,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:#63b3ed;margin-bottom:10px;">ℹ ${_noPid.length} name${_noPid.length!==1?'s':''} in the sheet ${_noPid.length!==1?'have':'has'} no PIDs, so no player will be created for ${_noPid.length!==1?'them':'it'}: ${_noPid.slice(0,8).map(_escHtml).join(', ')}${_noPid.length>8?', …':''}.</div>`;
-  const _skipped = d.skipped||[];
-  if (_skipped.length>0) { const _n=_skipped.reduce((t,x)=>t+x.pids.length,0); html+=`<div style="background:rgba(255,82,82,0.10);border:1px solid rgba(255,82,82,0.35);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:#ff6b6b;margin-bottom:10px;">⚠ ${_n} PID${_n!==1?'s':''} in ${_skipped.length} row${_skipped.length!==1?'s':''} will NOT be imported because the row has no player name: ${_skipped.slice(0,8).map(x=>_escHtml(x.sheet)+' row '+x.row+' ('+x.pids.join(', ')+')').join('; ')}${_skipped.length>8?'; …and '+(_skipped.length-8)+' more':''}. Add the names to the sheet and upload again, or carry on knowing these are left out.</div>`; }
-  const _routes = d.sheetRouting||[];
-  const _defaulted = _routes.filter(r=>r.defaulted);
-  if (_defaulted.length>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${_defaulted.length} sheet${_defaulted.length!==1?'s':''} had no font keyword in the name and defaulted to League: ${_defaulted.map(r=>'<b>'+_escHtml(r.sheet)+'</b>').join(', ')}. If a sheet is really Cup, Specials or Women\'s, rename it (e.g. add "Cup" or "WSL") and upload again.</div>`;
-  if (_routes.length>0) html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Font by sheet: ${_routes.map(r=>_escHtml(r.sheet)+' → <b>'+(FONT_LABELS[r.font]||r.font)+'</b> <span style="opacity:.7;">('+_escHtml(r.rule)+')</span>').join(' · ')}</div>`;
-  if (d.sectionsFound.length>0) html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Sections: ${d.sectionsFound.join(' · ')}</div>`;
-
-  const _fileSum = buildFileSummary(d, _plan, heldPlayers); html += renderFileSummary(_fileSum);
+  if (_noPid.length>0) notesInfo.push(pvNote('info', `${_noPid.length} name${_noPid.length!==1?'s':''} in the sheet ${_noPid.length!==1?'have':'has'} no PIDs, so no player will be created for ${_noPid.length!==1?'them':'it'}: ${_noPid.slice(0,8).join(', ')}${_noPid.length>8?', …':''}.`));
+  // Summary = PRODUCTS, each counted in exactly one group: new / existing and unchanged / existing and moving / not imported or not touched (needing attention).
+  // Things that overlap (a new product with no base product, a held player) are warnings above, never a second count.
+  const _rpl = window._relinkPlan || {relink: [], parentMissing: [], needsHuman: []};
+  const _relinkN = _rpl.relink.length, _blockedExisting = _rpl.parentMissing.length + _rpl.needsHuman.length;
+  const _unchanged = Math.max(0, dupHeroes - _relinkN - _blockedExisting);
+  const _attention = _skippedPids + _gkCand.reduce((t,x)=>t+x.pids.length,0) + _blockedExisting;
+  const _total = newHeroes.length + newPlayers.length + newParents.length;
+  const _confirmBtn = document.getElementById('import-confirm-btn');
+  if (_confirmBtn) { _confirmBtn.disabled = heldPlayers.length>0 || _total===0; _confirmBtn.textContent = !_total ? 'Nothing to add' : (newHeroes.length ? pvApplyLabel('Add', newHeroes.length, 'product') : 'Add players and base products'); _confirmBtn.title = heldPlayers.length ? 'Resolve the items marked Must fix first' : (_total===0 ? 'Everything in this file is already in the database' : ''); }
   const PREVIEW_CAP = 100;
   const previewPlayers = newPlayers.slice(0, PREVIEW_CAP);
   const hiddenCount = newPlayers.length - previewPlayers.length;
@@ -6293,12 +6410,21 @@ function showImportPreview(club, season, filename) {
   const _pidCountMap = new Map();
   newHeroes.forEach(h=>{ const k=importNameKey(h.playerName, h.clubId); _pidCountMap.set(k,(_pidCountMap.get(k)||0)+1); });
   const _rolledSet = new Set(rolledForward.map(p=>p.name+'|'+p.clubId));
-  html+=`<div style="max-height:480px;overflow-y:auto;margin-top:8px;"><table class="data-table" style="font-size:11px;" id="import-preview-table"><thead><tr><th>Player</th><th>Font</th><th>PIDs</th><th>Status</th></tr></thead><tbody id="import-preview-tbody">${previewPlayers.map((p,pi)=>{const cnt=_pidCountMap.get(importNameKey(p.name, p.clubId))||0;const gkStyle=p.goalkeeper?'background:rgba(99,179,237,0.15);color:#63b3ed;border:1px solid rgba(99,179,237,0.3);':'background:transparent;color:var(--text3);border:1px solid var(--border);';const gkBtn=`<button data-k="${_escHtml(importNameKey(p.name, p.clubId))}" onclick="window._previewToggleGK(this.dataset.k)" style="font-size:10px;padding:2px 6px;border-radius:4px;cursor:pointer;margin-left:6px;${gkStyle}">GK</button>`;const isRolled=_rolledSet.has(p.name+'|'+p.clubId);const statusBadge=isRolled?'<span class="badge" style="background:rgba(99,179,237,0.12);color:#63b3ed;border:1px solid rgba(99,179,237,0.2);">Rolled</span>':'<span class="badge badge-active">New</span>';return`<tr><td style="color:var(--text);">${p.name}${gkBtn}</td><td>${(p.fontTypes||[p.fontType]).map(f=>FONT_LABELS[f]||f).join(', ')}</td><td class="mono">${cnt}</td><td>${statusBadge}</td></tr>`;}).join('')}</tbody></table>${hiddenCount>0?`<div style="padding:8px 0;font-size:12px;color:var(--text3);">Showing first ${PREVIEW_CAP} of ${newPlayers.length} rows — <a href="#" onclick="event.preventDefault();showAllImportPreview()" style="color:var(--accent);">Show all ${newPlayers.length}</a></div>`:''}</div>`;
+  tableHtml=`<div style="max-height:340px;overflow-y:auto;margin-top:8px;"><table class="data-table" style="font-size:11px;" id="import-preview-table"><thead><tr><th>Player</th><th>Font</th><th>PIDs</th><th>Status</th></tr></thead><tbody id="import-preview-tbody">${previewPlayers.map((p,pi)=>{const cnt=_pidCountMap.get(importNameKey(p.name, p.clubId))||0;const gkStyle=p.goalkeeper?'background:rgba(99,179,237,0.15);color:#63b3ed;border:1px solid rgba(99,179,237,0.3);':'background:transparent;color:var(--text3);border:1px solid var(--border);';const gkBtn=`<button data-k="${_escHtml(importNameKey(p.name, p.clubId))}" onclick="window._previewToggleGK(this.dataset.k)" style="font-size:10px;padding:2px 6px;border-radius:4px;cursor:pointer;margin-left:6px;${gkStyle}">GK</button>`;const isRolled=_rolledSet.has(p.name+'|'+p.clubId);const statusBadge=isRolled?'<span class="badge" style="background:rgba(99,179,237,0.12);color:#63b3ed;border:1px solid rgba(99,179,237,0.2);">Rolled</span>':'<span class="badge badge-active">New</span>';return`<tr><td style="color:var(--text);">${_escHtml(p.name)}${gkBtn}</td><td>${(p.fontTypes||[p.fontType]).map(f=>FONT_LABELS[f]||f).join(', ')}</td><td class="mono">${cnt}</td><td>${statusBadge}</td></tr>`;}).join('')}</tbody></table>${hiddenCount>0?`<div style="padding:8px 0;font-size:12px;color:var(--text3);">Showing first ${PREVIEW_CAP} of ${newPlayers.length} rows — <a href="#" onclick="event.preventDefault();showAllImportPreview()" style="color:var(--accent);">Show all ${newPlayers.length}</a></div>`:''}</div>`;
   window._importPreviewAllPlayers = newPlayers;
   window._importPreviewPidCountMap = _pidCountMap;
   window._importPreviewRolledSet = _rolledSet;
   window._importPreviewShowAll = false;
-  document.getElementById('import-preview-content').innerHTML=html;
+  const _fileSum = buildFileSummary(d, _plan, heldPlayers);
+  const _tiles = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${pvTile('Players rolled forward', pvNum(rolledForward.length))}${pvTile('Brand new players', pvNum(brandNew.length), 'var(--green)')}${pvTile('New hero PIDs', pvNum(newHeroes.length), 'var(--green)')}${pvTile('New parent PIDs', pvNum(newParents.length), 'var(--amber)')}</div>`;
+  const _fileInfo = `<div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Sheets: ${d.sheets.map(e).join(', ')}</div>`
+    + (_routes.length>0 ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Font by sheet: ${_routes.map(r=>e(r.sheet)+' → <b>'+(FONT_LABELS[r.font]||r.font)+'</b> <span style="opacity:.7;">('+e(r.rule)+')</span>').join(' · ')}</div>` : '')
+    + (d.sectionsFound.length>0 ? `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Sections: ${d.sectionsFound.map(e).join(' · ')}</div>` : '');
+  document.getElementById('import-preview-content').innerHTML = pvTop({context: pvContext(d.clubId, d.seasonId, filename),
+    summary: pvSummary([{n: newHeroes.length, text: pvPlural(newHeroes.length, 'new product', 'new products')}, {n: _unchanged, text: 'unchanged'}, {n: _relinkN, text: 'to move to the correct base product'}, {n: _attention, text: 'needing attention'}]),
+    sub: `New players: ${pvNum(brandNew.length)}${rolledForward.length ? ` (plus ${pvNum(rolledForward.length)} rolled forward from an earlier season)` : ''}. New base products: ${pvNum(newParents.length)}.${heldPlayers.length ? ` Players needing review: ${pvNum(heldPlayers.length)}.` : ''}${_noPar.length ? ` New products with no base product (added unlinked): ${pvNum(_noPar.length)}.` : ''}`,
+    notes: notesFix.join('') + notesCheck.join('') + notesInfo.join('')}) + tableHtml;
+  { const lists = document.getElementById('import-preview-lists'); if (lists) lists.innerHTML = _tiles + _fileInfo + renderFileSummary(_fileSum); pvApplyTech(); }
 }
 
 function showAllImportPreview() {
@@ -6414,7 +6540,7 @@ async function confirmImport() {
     if (bar) bar.style.background = 'var(--green)';
     if (wrap) wrap.style.borderColor = 'rgba(72,199,142,0.4)';
     const confirmBtn = document.getElementById('import-confirm-btn');
-    const cancelBtn = confirmBtn?.closest('.card-header')?.querySelector('.btn-ghost');
+    const cancelBtn = (confirmBtn?.closest('.pv-actions') || confirmBtn?.closest('.card-header'))?.querySelector('.btn-ghost');
     if (confirmBtn) { confirmBtn.textContent = '✓ Done'; confirmBtn.disabled = true; confirmBtn.style.background = 'var(--green)'; }
     if (cancelBtn) cancelBtn.style.display = 'none';
     // Auto-hide preview after 2.5 seconds
@@ -6423,7 +6549,7 @@ async function confirmImport() {
       if (preview) preview.classList.add('hidden');
       if (bar) bar.style.background = 'var(--accent)';
       if (wrap) wrap.style.borderColor = '';
-      if (confirmBtn) { confirmBtn.textContent = 'Import all'; confirmBtn.disabled = false; confirmBtn.style.background = ''; }
+      if (confirmBtn) { confirmBtn.textContent = 'Add products'; confirmBtn.disabled = false; confirmBtn.style.background = ''; }
       if (cancelBtn) cancelBtn.style.display = '';
     }, 2500);
     // Incremental cache update — append newly created records directly without full AT refetch
@@ -6466,7 +6592,7 @@ async function confirmImport() {
     if (_missingNums.length > 0) showSquadNumberModal(_missingNums);
   } catch(e) {
     toast('Import error: '+e.message,'error');
-    btn.textContent='Import all';
+    btn.textContent='Add products';
     btn.disabled=false;
   } finally {
     _storageImportRunning = false;
@@ -6519,6 +6645,20 @@ async function _storedLinksRead(clubId, seasonId) {
   const rosterMembers = (await _atGetAllPaced(TABLES.mdmRosterMembers)).map(r => ({id: r.id, ...r.fields}));
   return planStoredRosterLinks({heroes, rosterMembers, clubId, seasonId});
 }
+function storedLinksViewHtml(plan, context) {
+  const n = plan.links.length, attention = plan.missingIds + plan.noMatch + plan.otherClub + plan.ambiguous + plan.seasonConflict;   // every product is in exactly one of these groups
+  const notes = (plan.ambiguous ? pvNote('check', `${plan.ambiguous} PID${plan.ambiguous !== 1 ? 's' : ''} will NOT be linked: one ActorID is on two different roster entries of the same roster. Fix it in MDM.`) : '')
+    + (plan.seasonConflict ? pvNote('check', `${plan.seasonConflict} PID${plan.seasonConflict !== 1 ? 's' : ''} will NOT be linked: their RosterID is used by two seasons of this club, so the roster entry cannot be told apart.`) : '')
+    + (plan.otherClub ? pvNote('check', `${plan.otherClub} PID${plan.otherClub !== 1 ? 's' : ''} will NOT be linked: the matching roster entry belongs to another club.`) : '')
+    + (plan.noMatch ? pvNote('info', `No roster entry for ${plan.noMatch} PID${plan.noMatch !== 1 ? 's' : ''} (their player is not on that roster), e.g. ${(plan.noMatchSample || []).join('; ')}${plan.noMatch > (plan.noMatchSample || []).length ? '; …' : ''}`) : '')
+    + (plan.missingIds ? pvNote('info', `${plan.missingIds} PID${plan.missingIds !== 1 ? 's have' : ' has'} no ActorID or RosterID yet, so ${plan.missingIds !== 1 ? 'they cannot' : 'it cannot'} be linked. Use Backfill to fill those first.`) : '')
+    + pvNote('info', `Season check: this club's ${plan.clubPids} PIDs across ${plan.clubSeasons} season${plan.clubSeasons !== 1 ? 's' : ''} were read. If a season is missing from your Airtable, a RosterID shared with it cannot be seen.`);
+  const tiles = `<div style="display:flex;gap:8px;flex-wrap:wrap;">${pvTile('PIDs in this club and season', pvNum(plan.total))}${pvTile('To link', pvNum(n), 'var(--green)')}${pvTile('Already linked', pvNum(plan.alreadyLinked))}${pvTile('No ActorID or RosterID', pvNum(plan.missingIds), plan.missingIds ? 'var(--amber)' : '')}${pvTile('No roster entry found', pvNum(plan.noMatch), plan.noMatch ? 'var(--amber)' : '')}${pvTile('Not linked (ambiguous)', pvNum(plan.ambiguous), plan.ambiguous ? 'var(--amber)' : '')}${plan.otherClub ? pvTile("Roster entry is another club's", pvNum(plan.otherClub), 'var(--amber)') : ''}${plan.seasonConflict ? pvTile('RosterID used by two seasons', pvNum(plan.seasonConflict), 'var(--amber)') : ''}</div>`;
+  return pvShell({context, summary: pvSummary([{n, text: pvPlural(n, 'product to link', 'products to link')}, {n: plan.alreadyLinked, text: 'already linked'}, {n: attention, text: 'needing attention'}]), notes,
+    ok: n ? '' : '<div class="pv-ok">Nothing to link.</div>',
+    actions: `<button class="btn btn-primary btn-sm" id="stored-links-apply-btn" ${n ? '' : 'disabled title="Nothing can safely be linked"'} onclick="storedLinksApply()">${pvApplyLabel('Link', n, 'product')}</button><button class="btn btn-ghost btn-sm" onclick="storedLinksPreview()">Preview again</button><button class="btn btn-ghost btn-sm" onclick="resetImportTab('mdmroster')">Cancel</button>`,
+    details: tiles});
+}
 async function storedLinksPreview() {
   if (_storedLinksRunning) { toast('A link run is in progress. Wait for it to finish.', 'error'); return; }
   const clubId = document.getElementById('mdm-roster-club').value, seasonId = document.getElementById('mdm-roster-season').value;
@@ -6528,12 +6668,7 @@ async function storedLinksPreview() {
   try {
     const plan = await _storedLinksRead(clubId, seasonId);
     plan.clubId = clubId; plan.seasonId = seasonId; _storedLinksPlan = plan;
-    const tile = (l, n, c) => `<div style="flex:1;min-width:120px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;"><div style="font-size:11px;color:var(--text2);">${l}</div><div style="font-size:20px;font-weight:600;color:${c || 'var(--text)'};">${n}</div></div>`;
-    out.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${tile('PIDs in this club and season', plan.total)}${tile('To link', plan.links.length, 'var(--green)')}${tile('Already linked', plan.alreadyLinked)}${tile('No ActorID or RosterID', plan.missingIds, plan.missingIds ? 'var(--amber)' : '')}${tile('No roster entry found', plan.noMatch, plan.noMatch ? 'var(--amber)' : '')}${tile('Not linked (ambiguous)', plan.ambiguous, plan.ambiguous ? 'var(--amber)' : '')}${plan.otherClub ? tile('Roster entry is another club\'s', plan.otherClub, 'var(--amber)') : ''}${plan.seasonConflict ? tile('RosterID used by two seasons', plan.seasonConflict, 'var(--amber)') : ''}</div>`
-      + `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Season check: this club's ${plan.clubPids} PIDs across ${plan.clubSeasons} season${plan.clubSeasons !== 1 ? 's' : ''} were read. If a season is missing from your Airtable, a RosterID shared with it cannot be seen.</div>`
-      + (plan.ambiguous ? `<div style="font-size:12px;color:var(--amber);margin-bottom:8px;">⚠ ${plan.ambiguous} PID${plan.ambiguous !== 1 ? 's' : ''} will NOT be linked: one ActorID is on two different roster entries of the same roster. Fix it in MDM.</div>` : '')
-      + (plan.noMatch ? `<div style="font-size:12px;color:var(--text2);margin-bottom:8px;">No roster entry for ${plan.noMatch} PID${plan.noMatch !== 1 ? 's' : ''} (their player is not on that roster), e.g. ${plan.noMatchSample.map(_escHtml).join('; ')}${plan.noMatch > plan.noMatchSample.length ? '; …' : ''}</div>` : '')
-      + (plan.links.length ? `<button class="btn btn-primary btn-sm" id="stored-links-apply-btn" onclick="storedLinksApply()">Link ${plan.links.length} PID${plan.links.length !== 1 ? 's' : ''}</button> <button class="btn btn-ghost btn-sm" onclick="resetImportTab('mdmroster')">Cancel</button>` : '<div style="font-size:12px;color:var(--text2);">Nothing to link.</div>');
+    out.innerHTML = storedLinksViewHtml(plan, pvContext(clubId, seasonId));
   } catch (e) { out.innerHTML = `<div style="font-size:12px;color:var(--red);">Could not read Airtable: ${_escHtml(e.message || e)}</div>`; }
 }
 async function storedLinksApply() {
@@ -6625,6 +6760,42 @@ function initRosterFixSelects() {
   (CACHE.clubs || []).forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.Name || c.id; sel.appendChild(o); });
 }
 function onRosterFixClubChange() { filterSeasonDropdown('rfix-season', document.getElementById('rfix-club').value, {blankLabel: 'Select season...', source: 'rosterMappings'}); rosterFixClear(); }
+function rosterFixSelection(plan, keys) {   // pure: what the ticked groups would change
+  const set = new Set(keys || []), chosen = (plan.groups || []).filter(g => set.has(g.key));
+  return {groups: chosen.length, products: chosen.reduce((t, g) => t + g.items.length, 0), links: chosen.reduce((t, g) => t + g.linked, 0)};
+}
+function rosterFixSummaryText(plan, keys) {
+  const sel = rosterFixSelection(plan, keys);
+  if (!plan.fixable) return 'Nothing to correct';
+  return `${pvNum(plan.fixable)} ${pvPlural(plan.fixable, 'product has', 'products have')} a different mapped roster: ${pvNum(sel.products)} selected, ${pvNum(plan.fixable - sel.products)} left unselected.`;
+}
+function rosterFixClearText(plan, keys) { const n = rosterFixSelection(plan, keys).links; return n ? `Correcting the ticked groups clears ${pvNum(n)} roster-entry link${n !== 1 ? 's' : ''}. Link them again afterwards (Import > MDM roster > link from stored rosters).` : ''; }
+function rosterFixViewHtml(plan, context, clubId, seasonId) {
+  const e = _escHtml, ticked = plan.groups.filter(g => g.kind === 'stray').map(g => g.key);
+  const rname = id => { const r = (CACHE.rosterMappings || []).find(m => _mdmStr(m.RosterID) === id && m.ClubID === clubId && m.SeasonID === seasonId); const nm = r && (r.RosterName || r.Kit); return nm ? `${e(nm)}<span class="pv-tech"> (${e(id)})</span>` : `roster ${e(id)}`; };
+  const mapped = plan.groups.filter(g => g.kind === 'mapped'), mappedN = mapped.reduce((t, g) => t + g.items.length, 0);
+  const left = plan.noMapping + plan.blank + plan.notActive;
+  const notes = (mappedN ? pvNote('check', `${mappedN} product${mappedN !== 1 ? 's are' : ' is'} on another mapped roster: this may be deliberate (Youth, Minikit). ${mappedN !== 1 ? 'They start' : 'It starts'} unticked: tick ${mappedN !== 1 ? 'them' : 'it'} only if you mean to move ${mappedN !== 1 ? 'them' : 'it'}.`) : '')
+    + `<div class="pv-note pv-check" id="rfix-clear" style="display:none"></div>`
+    + (plan.ambiguousMapping ? pvNote('check', `${plan.ambiguousMapping} product${plan.ambiguousMapping !== 1 ? 's' : ''} will not be changed: two roster mappings disagree for their font and kit. Fix the mappings first.`) : '')
+    + (plan.groupMissing ? pvNote('check', `${plan.groupMissing} product${plan.groupMissing !== 1 ? 's have' : ' has'} no roster for ${plan.groupMissing !== 1 ? 'their garment groups' : 'its garment group'} (or an unknown garment), so ${plan.groupMissing !== 1 ? 'they are' : 'it is'} not changed.`) : '')
+    + (plan.ok ? pvNote('info', `${pvNum(plan.ok)} product${plan.ok !== 1 ? 's' : ''} already match${plan.ok === 1 ? 'es' : ''} the mapped roster and stay unchanged.`) : '')
+    + (left ? pvNote('info', `Left alone: ${[plan.noMapping ? pvNum(plan.noMapping) + ' with no roster mapping' : '', plan.blank ? pvNum(plan.blank) + ' with no RosterID yet (use Backfill)' : '', plan.notActive ? pvNum(plan.notActive) + ' not active' : ''].filter(Boolean).join(', ')}.`) : '');
+  const table = plan.groups.length ? `<table class="data-table" style="font-size:12px;margin:8px 0;"><thead><tr><th></th><th>Products</th><th>Now</th><th>Mapped roster</th><th>Font / kit</th><th>Links cleared</th><th></th></tr></thead><tbody>${plan.groups.map(g => `<tr><td><input type="checkbox" class="rfix-cb" value="${e(g.key)}" ${g.kind === 'stray' ? 'checked' : ''} onchange="rosterFixRefresh()"></td><td>${pvNum(g.items.length)}</td><td>${rname(g.from)}</td><td>${rname(g.to)}</td><td>${g.fonts.map(e).join(', ')} / ${g.kits.map(e).join(', ')}</td><td>${g.linked}</td><td style="color:${g.kind === 'stray' ? 'var(--text3)' : 'var(--amber)'};">${g.kind === 'stray' ? 'not a mapped roster' : '⚠ another mapped roster'}</td></tr>`).join('')}</tbody></table>` : '';
+  const tiles = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${pvTile('Products in this club and season', pvNum(plan.total))}${pvTile('Already right', pvNum(plan.ok))}${pvTile('Wrong roster', pvNum(plan.fixable), plan.fixable ? 'var(--amber)' : '')}${pvTile('Links cleared if all fixed', pvNum(plan.linkedCleared))}${pvTile('No mapping', pvNum(plan.noMapping))}${pvTile('Mapping unclear', pvNum(plan.ambiguousMapping))}${pvTile('No roster for its garment group', pvNum(plan.groupMissing))}${pvTile('No roster yet', pvNum(plan.blank))}${pvTile('Not active', pvNum(plan.notActive))}</div>`;
+  const lists = plan.groups.map(g => `<details style="margin:6px 0;"><summary style="cursor:pointer;font-size:12px;color:var(--text2);">${rname(g.from)} → ${rname(g.to)} (${pvNum(g.items.length)})</summary><div style="max-height:240px;overflow-y:auto;"><table class="data-table" style="font-size:11px;"><tbody>${g.items.slice(0, 300).map(it => `<tr><td class="mono">${e(it.pid || '')}</td><td>${e(it.font)} / ${e(it.kit)} / ${e(it.garment)}</td><td>${it.rmid ? 'link cleared' : ''}</td></tr>`).join('')}</tbody></table>${g.items.length > 300 ? `<div style="font-size:11px;color:var(--text3);">and ${g.items.length - 300} more</div>` : ''}</div></details>`).join('');
+  return pvShell({context, summary: `<span id="rfix-sum">${e(rosterFixSummaryText(plan, ticked))}</span>`, notes: notes + table,
+    ok: plan.groups.length ? '' : '<div class="pv-ok">✓ Every active product with a mapping already has the mapped roster.</div>',
+    actions: plan.groups.length ? `<button class="btn btn-primary btn-sm" id="rfix-apply-btn" onclick="rosterFixApply()">Correct roster links</button><button class="btn btn-ghost btn-sm" onclick="rosterFixPreview()">Preview again</button><button class="btn btn-ghost btn-sm" onclick="rosterFixClear()">Cancel</button>` : `<button class="btn btn-ghost btn-sm" onclick="rosterFixPreview()">Preview again</button>`,
+    details: tiles + lists});
+}
+function rosterFixRefresh() {   // the summary, the links-cleared line and the button follow the ticks
+  const plan = _rosterFixPlan; if (!plan) return;
+  const keys = [...document.querySelectorAll('.rfix-cb:checked')].map(x => x.value), sel = rosterFixSelection(plan, keys);
+  const sum = document.getElementById('rfix-sum'); if (sum) sum.textContent = rosterFixSummaryText(plan, keys);
+  const cl = document.getElementById('rfix-clear'); if (cl) { const t = rosterFixClearText(plan, keys); cl.style.display = t ? '' : 'none'; cl.innerHTML = t ? `<span class="pv-lbl">${PV_LEVELS.check.icon} ${PV_LEVELS.check.label}:</span>${_escHtml(t)}` : ''; }
+  const b = document.getElementById('rfix-apply-btn'); if (b && !_rosterFixRunning) { b.textContent = pvApplyLabel('Correct', sel.products, 'roster link'); b.disabled = sel.products === 0; if (sel.products === 0) b.title = 'Tick at least one group'; else b.removeAttribute('title'); }
+}
 async function rosterFixPreview() {
   if (_rosterFixRunning) { toast('A correction is running. Wait for it to finish.', 'error'); return; }
   const clubId = document.getElementById('rfix-club').value, seasonId = document.getElementById('rfix-season').value, out = document.getElementById('rfix-out');
@@ -6635,12 +6806,8 @@ async function rosterFixPreview() {
     const plan = await _rosterFixRead(clubId, seasonId);
     if (seq !== _rosterFixSeq || document.getElementById('rfix-club').value !== clubId || document.getElementById('rfix-season').value !== seasonId) return;   // cancelled, replaced by a newer Preview, or the club/season was changed meanwhile
     plan.clubId = clubId; plan.seasonId = seasonId; _rosterFixPlan = plan;
-    const tile = (l, n, c) => `<div style="flex:1;min-width:110px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;"><div style="font-size:11px;color:var(--text2);">${l}</div><div style="font-size:18px;font-weight:600;${c ? 'color:' + c + ';' : ''}">${n}</div></div>`;
-    const name = id => { const r = (CACHE.rosterMappings || []).find(m => _mdmStr(m.RosterID) === id && m.ClubID === clubId && m.SeasonID === seasonId); return r ? ` (${_escHtml(r.RosterName || r.Kit || '')})` : ''; };
-    out.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${tile('Hero PIDs in this club and season', plan.total)}${tile('Already right', plan.ok)}${tile('Wrong RosterID', plan.fixable, plan.fixable ? 'var(--amber)' : '')}${tile('Links cleared if fixed', plan.linkedCleared)}${tile('No mapping', plan.noMapping)}${tile('Mapping unclear', plan.ambiguousMapping)}${tile('No roster for its garment group', plan.groupMissing)}${tile('Blank (use backfill)', plan.blank)}${tile('Not active (left alone)', plan.notActive)}</div>`
-      + (plan.groups.length ? `<table class="data-table" style="font-size:11px;margin-bottom:10px;"><thead><tr><th></th><th>Now</th><th>Mapped</th><th>Font / kit</th><th>PIDs</th><th>Links cleared</th><th></th></tr></thead><tbody>${plan.groups.map(g => `<tr><td><input type="checkbox" class="rfix-cb" value="${_escHtml(g.key)}" ${g.kind === 'stray' ? 'checked' : ''}></td><td class="mono">${_escHtml(g.from)}</td><td class="mono">${_escHtml(g.to)}${name(g.to)}</td><td>${g.fonts.map(_escHtml).join(', ')} / ${g.kits.map(_escHtml).join(', ')}</td><td>${g.items.length}</td><td>${g.linked}</td><td style="color:${g.kind === 'stray' ? 'var(--text3)' : 'var(--amber)'};">${g.kind === 'stray' ? 'not a mapped roster' : '⚠ another mapped roster: may be deliberate (Youth, Minikit)'}</td></tr>`).join('')}</tbody></table>`
-        + `<button class="btn btn-primary btn-sm" id="rfix-apply-btn" onclick="rosterFixApply()">Correct the ticked groups</button> <button class="btn btn-ghost btn-sm" onclick="rosterFixClear()">Cancel</button>`
-        : `<div style="font-size:12px;color:var(--green);">✓ Every active hero PID with a mapping already has the mapped RosterID.</div>`);
+    out.innerHTML = rosterFixViewHtml(plan, pvContext(clubId, seasonId), clubId, seasonId);
+    rosterFixRefresh();
   } catch (e) { if (seq === _rosterFixSeq) out.innerHTML = `<div style="font-size:12px;color:var(--red);">Could not read Airtable: ${_escHtml(e.message || e)}</div>`; }
 }
 async function rosterFixApply() {
@@ -6696,7 +6863,7 @@ function clearImport(force) {
   document.getElementById('import-preview').classList.add('hidden');
   document.getElementById('file-input-storage').value='';
   const btn=document.getElementById('import-confirm-btn');
-  if(btn){btn.textContent='Import all';btn.disabled=false;}
+  if(btn){btn.textContent='Add products';btn.disabled=false;}
 }
 
 // ─── CREATION CSV PARSER ──────────────────────────────────────────────────────
@@ -6909,6 +7076,26 @@ function parseCreationRows(rows,seasonId,fontType,fileNames) {
   showCreationPreview(fileNames);
 }
 
+function creationMissingMappingCount(d) { return (d.heroes || []).filter(h => resolveMdmLinks('', h.clubId, h.seasonId, h.fontType, h.kitType, h.garmentType).missingMapping).length; }
+function creationPreviewTopHtml(d) {   // pure string: club and season, summary, warnings (always visible)
+  const e = _escHtml, dups = d.duplicatePids || [], atDups = dups.filter(x => x.reason === 'already in Airtable'), fileDups = dups.filter(x => x.reason !== 'already in Airtable');
+  const missing = creationMissingMappingCount(d), prov = d.provisional.length, add = d.heroes.length;
+  const clubs = [...new Set((d.heroes || []).concat(d.provisional || []).map(h => h.clubId).filter(Boolean))].map(id => ((typeof CACHE !== 'undefined' && (CACHE.clubs || []).find(c => c.id === id)) || {}).Name).filter(Boolean);
+  const seasonLabel = ((typeof CACHE !== 'undefined' && (CACHE.seasons || []).find(se => se.id === d.seasonId)) || {}).Label || '';
+  const notes = (prov ? `<div class="pv-note pv-check"><span class="pv-lbl">${PV_LEVELS.check.icon} ${PV_LEVELS.check.label}:</span>${pvNum(prov)} product${prov !== 1 ? 's have' : ' has'} no player name, so ${prov !== 1 ? 'they are' : 'it is'} stored as provisional. <button class="btn btn-ghost btn-sm" style="margin-left:8px;" onclick="exportProvisionalList()">⎘ Export for Homeplate</button></div>` : '')
+    + (missing ? pvNote('check', `${pvNum(missing)} hero PID${missing !== 1 ? 's have' : ' has'} no roster mapping, so RosterID will be blank (flagged later in Data Health).`) : '')
+    + (fileDups.length ? pvNote('check', `${pvNum(fileDups.length)} PID${fileDups.length !== 1 ? 's appear' : ' appears'} more than once in the file: only the first is used (listed under Show details).`) : '')
+    + (atDups.length ? pvNote('info', `${pvNum(atDups.length)} product${atDups.length !== 1 ? 's' : ''} already exist${atDups.length === 1 ? 's' : ''} in Airtable and will be skipped.`) : '')
+    + (d.stats.matched > 0 ? pvNote('info', `${pvNum(d.stats.matched)} PID${d.stats.matched !== 1 ? 's' : ''} matched to existing parent PIDs.`) : '');
+  return pvTop({context: [clubs.slice(0, 4).map(e).join(', ') + (clubs.length > 4 ? ` and ${clubs.length - 4} more` : ''), e(seasonLabel)].filter(Boolean).join(' · '),
+    summary: pvSummary([{n: add, text: pvPlural(add, 'personalised product to add', 'personalised products to add')}, {n: prov, text: pvPlural(prov, 'provisional product to add (no player name)', 'provisional products to add (no player name)')}, {n: atDups.length, text: 'already present'}, {n: fileDups.length, text: 'repeated in the file'}]),
+    sub: `Base products to add: ${pvNum(d.parents.length)}.${prov ? ` Provisional products (no player name yet): ${pvNum(prov)}.` : ''}`, notes});
+}
+function creationPreviewListsHtml(d) {   // behind Show details
+  const dups = d.duplicatePids || [];
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${pvTile('Hero PIDs', pvNum(d.heroes.length), 'var(--green)')}${pvTile('Provisional', pvNum(d.provisional.length), d.provisional.length ? 'var(--amber)' : '')}${pvTile('Duplicates skipped', pvNum(d.stats.duplicate))}${pvTile('New parent PIDs', pvNum(d.parents.length))}</div>`
+    + (dups.length ? `<table style="width:100%;font-size:11px;border-collapse:collapse;"><thead><tr><th style="text-align:left;color:var(--text3);padding:4px 8px 4px 0;">PID</th><th style="text-align:left;color:var(--text3);padding:4px 8px 4px 0;">Name</th><th style="text-align:left;color:var(--text3);padding:4px 0;">Reason</th></tr></thead><tbody>${dups.map(x => `<tr><td class="mono" style="padding:3px 8px 3px 0;color:var(--text);">${_escHtml(x.pid)}</td><td style="padding:3px 8px 3px 0;color:var(--text2);font-size:10px;">${_escHtml(x.name)}</td><td style="padding:3px 0;color:${x.reason === 'already in Airtable' ? 'var(--amber)' : 'var(--text3)'};font-size:10px;">${_escHtml(x.reason)}</td></tr>`).join('')}</tbody></table>` : '<div style="font-size:12px;color:var(--text3);">No duplicates.</div>');
+}
 function showCreationPreview(fileNames) {
   const d=creationImportData;
   if (d.heroes.length===0 && d.provisional.length===0 && d.stats.duplicate===0) {
@@ -6917,17 +7104,10 @@ function showCreationPreview(fileNames) {
   }
   document.getElementById('creation-preview-title').textContent=`Preview — ${fileNames.length} file${fileNames.length!==1?'s':''}`;
   document.getElementById('creation-preview').classList.remove('hidden');
-  let html=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;"><div class="stat-pill"><span class="stat-label">Hero PIDs</span><span class="stat-value" style="color:var(--green);">${d.heroes.length}</span></div><div class="stat-pill"><span class="stat-label">Provisional</span><span class="stat-value" style="color:var(--amber);">${d.provisional.length}</span></div><div class="stat-pill"><span class="stat-label">Duplicates</span><span class="stat-value" style="color:var(--text3);">${d.stats.duplicate}</span></div><div class="stat-pill"><span class="stat-label">New Parents</span><span class="stat-value" style="color:var(--accent);">${d.parents.length}</span></div></div>`;
-  if (d.stats.matched>0) html+=`<div style="background:var(--green-bg);border:1px solid rgba(61,214,140,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--green);margin-bottom:10px;">✓ ${d.stats.matched} PIDs matched to existing parent PIDs</div>`;
-  if (d.provisional.length>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${d.provisional.length} PIDs have no player name — stored as provisional.<button class="btn btn-ghost btn-sm" style="margin-left:8px;" onclick="exportProvisionalList()">⎘ Export for Homeplate</button></div>`;
-  const creationMissingMapping = (d.heroes||[]).filter(h => resolveMdmLinks('', h.clubId, h.seasonId, h.fontType, h.kitType, h.garmentType).missingMapping).length;
-  if (creationMissingMapping>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${creationMissingMapping} hero PID${creationMissingMapping!==1?'s':''} have no roster mapping — RosterID will be blank (flagged later in Data Health)</div>`;
-  if (d.duplicatePids&&d.duplicatePids.length>0) {
-    const atDups=d.duplicatePids.filter(x=>x.reason==='already in Airtable');
-    const fileDups=d.duplicatePids.filter(x=>x.reason==='within-file duplicate');
-    html+=`<details style="background:var(--bg3);border:1px solid rgba(255,92,92,0.2);border-radius:var(--radius-sm);margin-bottom:10px;"><summary style="padding:10px 14px;font-size:12px;color:var(--red);cursor:pointer;list-style:none;">⚠ ${d.duplicatePids.length} duplicate${d.duplicatePids.length!==1?'s':''} skipped — click to inspect${atDups.length>0?' ('+atDups.length+' already in AT)':''}</summary><div style="padding:0 14px 12px;"><table style="width:100%;font-size:11px;border-collapse:collapse;"><thead><tr><th style="text-align:left;color:var(--text3);padding:4px 8px 4px 0;">PID</th><th style="text-align:left;color:var(--text3);padding:4px 8px 4px 0;">Name</th><th style="text-align:left;color:var(--text3);padding:4px 0;">Reason</th></tr></thead><tbody>${d.duplicatePids.map(x=>`<tr><td class="mono" style="padding:3px 8px 3px 0;color:var(--text);">${x.pid}</td><td style="padding:3px 8px 3px 0;color:var(--text2);font-size:10px;">${x.name}</td><td style="padding:3px 0;color:${x.reason==='already in Airtable'?'var(--red)':'var(--text3)'};font-size:10px;">${x.reason}</td></tr>`).join('')}</tbody></table></div></details>`;
-  }
-  document.getElementById('creation-preview-content').innerHTML=html;
+  document.getElementById('creation-preview-content').innerHTML=creationPreviewTopHtml(d);
+  { const lists = document.getElementById('creation-preview-lists'); if (lists) lists.innerHTML = creationPreviewListsHtml(d); pvApplyTech(); }
+  const n = d.heroes.length + d.provisional.length, btn = document.getElementById('creation-confirm-btn');
+  if (btn) { btn.textContent = n ? pvApplyLabel('Add', n, 'product') : 'Nothing to add'; btn.disabled = n === 0; btn.title = n ? '' : 'Nothing in this file can be added'; }
 }
 
 function exportProvisionalList() {
@@ -7044,7 +7224,7 @@ async function confirmCreationImport() {
     clearCreationImport();
     toast(`Imported: ${_heroCount} hero PIDs · ${_provCount} provisional`);
     if (_csvPlayerList.length > 0) showSquadNumberModal(_csvPlayerList, true);
-  } catch(e) { toast('Import error: '+e.message,'error'); btn.textContent='Import all';btn.disabled=false; }
+  } catch(e) { toast('Import error: '+e.message,'error'); btn.textContent='Add products';btn.disabled=false; }
 }
 
 function clearCreationImport(){creationImportData=null;document.getElementById('creation-preview').classList.add('hidden');document.getElementById('file-input-creation').value='';}
@@ -7262,19 +7442,32 @@ function planParentGarments({hpRows, parents, heroes, seasons}) {
   return plan;
 }
 
-function hpParentsHtml(plan) {
+function hpParentsTopHtml(plan) {   // club and season, summary, warnings (always visible)
+  const e = _escHtml, c = plan.counts, sc = plan.scope || {};
+  const ctx = (pvContext(sc.clubId, sc.seasonId) || '') + (sc.seasonId ? '' : ' · All seasons');
+  const attention = plan.review.length;
+  const notes = pvNotes('fix', plan.errors) + pvNotes('check', plan.warnings)
+    + (plan.review.length ? pvNote('check', `${plan.review.length} product name${plan.review.length !== 1 ? 's' : ''} could not be read, so ${plan.review.length !== 1 ? 'they are' : 'it is'} not used (listed under Show details).`) : '')
+    + (plan.gkKitNotes.length ? pvNote('info', `${plan.gkKitNotes.length} goalkeeper name${plan.gkKitNotes.length !== 1 ? 's mention' : ' mentions'} a different kit than the sheet: the sheet's kit is kept.`) : '')
+    + pvNotes('info', plan.info);
+  return pvTop({context: ctx || e('Homeplate Parents'),
+    summary: pvSummary([{n: c.parents, text: pvPlural(c.parents, 'base product to update', 'base products to update')}, {n: c.alreadyRight, text: 'unchanged'}, {n: attention, text: 'needing attention'}]),
+    sub: c.heroes ? `Personalised products to update from them: ${pvNum(c.heroes)}.` : '', notes,
+    ok: plan.total === 0 && !plan.errors.length ? '<div class="pv-ok">✓ Nothing to change: every confirmed base product already has the garment Homeplate\'s name gives, and so do its personalised products.</div>' : ''});
+}
+function hpParentsListsHtml(plan) {   // the supporting detail (behind Show details)
   const e = _escHtml, c = plan.counts, tile = (l, v, col) => `<div style="background:var(--bg3);border-radius:6px;padding:8px 14px;text-align:center;"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;">${l}</div><div style="font-size:22px;font-weight:700;color:${col || 'var(--text)'};">${v}</div></div>`;
   const box = (items, bg, bd, col, icon) => items.length ? `<div style="background:${bg};border:1px solid ${bd};border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:${col};margin-bottom:8px;">${items.map(x => `<div style="margin:2px 0;">${icon} ${e(x)}</div>`).join('')}</div>` : '';
   const det = (t, rows, n) => n ? `<details style="margin:6px 0;"><summary style="cursor:pointer;font-size:12px;color:var(--text2);">${t}</summary><div style="max-height:260px;overflow-y:auto;"><table class="data-table" style="font-size:11px;"><tbody>${rows}</tbody></table></div></details>` : '';
   const byParent = {}; plan.heroUpdates.forEach(h => { byParent[h.parentPid] = (byParent[h.parentPid] || 0) + 1; });
   return `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">${tile('Products in file', c.rows)}${tile('Garment confirmed', c.verified, 'var(--green)')}${tile('Already right', c.alreadyRight)}${tile('Parents to change', c.parents, c.parents ? 'var(--amber)' : '')}${tile('Hero PIDs to re-derive', c.heroes, c.heroes ? 'var(--amber)' : '')}${tile('Needs review', c.review, c.review ? 'var(--amber)' : '')}${c.gk ? tile('Goalkeeper products', c.gk) : ''}</div>`
-    + box(plan.errors, 'rgba(255,82,82,0.10)', 'rgba(255,82,82,0.35)', '#ff6b6b', '⛔') + box(plan.warnings, 'var(--amber-bg)', 'rgba(255,179,64,0.25)', 'var(--amber)', '⚠') + box(plan.info, 'rgba(99,179,237,0.08)', 'rgba(99,179,237,0.2)', '#63b3ed', 'ℹ')
-    + (plan.total === 0 && !plan.errors.length ? `<div style="font-size:12px;color:var(--green);margin:6px 0;">✓ Nothing to change: every confirmed parent already has the garment Homeplate's name gives, and so do its hero PIDs.</div>` : '')
     + det(`Parent garments that change (${plan.parentUpdates.length})`, plan.parentUpdates.map(u => `<tr><td class="mono">${e(u.pid)}</td><td>${e(u.kit)}</td><td>${e(u.from || '∅')} → <b>${e(u.to)}</b></td><td style="color:var(--text2);">${e(u.name)}</td></tr>`).join(''), plan.parentUpdates.length)
     + det(`Hero PIDs re-derived (${plan.heroUpdates.length}) by parent`, Object.entries(byParent).map(([p, n]) => `<tr><td class="mono">${e(p)}</td><td>${n} hero PID${n !== 1 ? 's' : ''}</td></tr>`).join(''), plan.heroUpdates.length)
     + det(`Goalkeeper names that mention a different kit than the sheet (${plan.gkKitNotes.length}): the sheet's kit is kept`, plan.gkKitNotes.map(x => `<tr><td class="mono">${e(x.pid)}</td><td>name: ${e(x.nameKit)} · sheet: <b>${e(x.sheetKit)}</b></td><td style="color:var(--text2);">${e(x.name)}</td></tr>`).join(''), plan.gkKitNotes.length)
     + det(`Needs review (${plan.review.length}): not used`, plan.review.map(r => `<tr><td class="mono">${e(r.pid)}</td><td style="color:var(--text2);">${e(r.name)}</td><td style="color:var(--amber);">${e(r.why)}</td></tr>`).join(''), plan.review.length);
 }
+
+function hpParentsHtml(plan) { return hpParentsTopHtml(plan) + hpParentsListsHtml(plan); }   // both parts in one string
 
 // ── guarded writes: the same discipline as Re-link ──
 const HP_FIX_HEADER = ['Kind','PID','Record','Old GarmentType','Old GarmentRaw','New GarmentType','New GarmentRaw','Result','Detail','After GarmentType','After GarmentRaw'];
@@ -7422,8 +7615,9 @@ function renderHpParentsPlan() {
       return;
     } }
   d.plan = hpBuildPlan();
-  document.getElementById('hpp-preview').classList.remove('hidden'); document.getElementById('hpp-preview-content').innerHTML = hpParentsHtml(d.plan);
-  const btn = document.getElementById('hpp-apply-btn'); if (btn) { btn.disabled = _hpRunning || d.plan.errors.length > 0 || d.plan.total === 0; btn.textContent = d.plan.total ? `Apply ${d.plan.total} change${d.plan.total !== 1 ? 's' : ''}` : 'Nothing to apply'; }
+  document.getElementById('hpp-preview').classList.remove('hidden'); document.getElementById('hpp-preview-content').innerHTML = hpParentsTopHtml(d.plan);
+  { const lists = document.getElementById('hpp-preview-lists'); if (lists) lists.innerHTML = hpParentsListsHtml(d.plan); pvApplyTech(); }
+  const btn = document.getElementById('hpp-apply-btn'); if (btn) { btn.disabled = _hpRunning || d.plan.errors.length > 0 || d.plan.total === 0; btn.textContent = d.plan.total ? `Apply ${pvNum(d.plan.total)} change${d.plan.total !== 1 ? 's' : ''}` : 'Nothing to apply'; }
 }
 function hpRecordsHtml() {
   const recs = hpFixRecords();
@@ -7888,15 +8082,26 @@ function planMdmImport({rows, clubId, seasonId, clubName, existing, players, her
   return plan;
 }
 
-function mdmPlanHtml(plan, ctx) {   // pure string: the whole preview above the editable table
-  const e = _escHtml, c = plan.counts, tile = (label, val, color) => `<div style="background:var(--bg3);border-radius:6px;padding:8px 14px;text-align:center;"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;">${label}</div><div style="font-size:22px;font-weight:700;color:${color || 'var(--text)'};">${val}</div></div>`;
-  const box = (items, bg, bd, col, icon) => items.length ? `<div style="background:${bg};border:1px solid ${bd};border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:${col};margin-bottom:8px;">${items.map(x => `<div style="margin:2px 0;">${icon} ${e(x)}</div>`).join('')}</div>` : '';
+function mdmPlanTopHtml(plan, ctx) {   // pure string: club and season, summary, warnings (always visible)
+  const e = _escHtml, c = plan.counts, players = plan.playerUpdates;
+  const by = k => players.filter(u => u.change === k), arch = by('archive'), react = by('reactivate'), fill = by('actor');
+  const names = list => list.slice(0, 8).map(u => e(u.player.Name)).join(', ') + (list.length > 8 ? ', …' : '');
+  const subParts = [arch.length ? `${pvNum(arch.length)} to archive` : '', react.length ? `${pvNum(react.length)} to reactivate` : '', fill.length ? `${pvNum(fill.length)} to get an MDM player ID` : ''].filter(Boolean);
+  const sub = (subParts.length ? `Players: ${subParts.join(', ')}.` : '') + (plan.heroUpdates.length ? ` Personalised products: ${pvNum(plan.heroUpdates.length)} to update.` : '')
+    + ((plan.errors.length || plan.warnings.length) ? ` ${plan.errors.length ? pvNum(plan.errors.length) + ' to fix' : ''}${plan.errors.length && plan.warnings.length ? ' and ' : ''}${plan.warnings.length ? pvNum(plan.warnings.length) + ' to check' : ''} (below).` : '');   // messages are counted here, never as roster entries
+  const notes = pvNotes('fix', plan.errors) + pvNotes('check', plan.warnings)
+    + (arch.length ? `<div class="pv-note pv-check"><span class="pv-lbl">${PV_LEVELS.check.icon} ${PV_LEVELS.check.label}:</span>${arch.length} player${arch.length !== 1 ? 's' : ''} will be archived (inactive on every row of this file): ${names(arch)}. Check ${arch.length !== 1 ? 'they have' : 'this player has'} really left.</div>` : '')
+    + (react.length ? `<div class="pv-note pv-info"><span class="pv-lbl">${PV_LEVELS.info.icon} ${PV_LEVELS.info.label}:</span>${react.length} player${react.length !== 1 ? 's' : ''} will be reactivated: ${names(react)}.</div>` : '')
+    + pvNotes('info', plan.info);
+  return pvTop({context: `${e(ctx.clubName)} · ${e(ctx.seasonName)} · ${plan.rosters.length} roster${plan.rosters.length !== 1 ? 's' : ''}`,
+    summary: pvSummary([{n: c.create, text: pvPlural(c.create, 'roster entry to add', 'roster entries to add')}, {n: c.update, text: 'to update'}, {n: c.unchanged, text: 'unchanged'}]),
+    sub, notes, ok: plan.total === 0 && !plan.errors.length ? '<div class="pv-ok">✓ Nothing to do: Airtable already matches this file.</div>' : ''});
+}
+function mdmPlanListsHtml(plan) {   // the supporting detail (behind Show details)
+  const e = _escHtml, c = plan.counts, tile = (label, val, color) => pvTile(label, pvNum(val), color);
   const det = (title, rowsHtml, n) => n ? `<details style="margin:6px 0;"><summary style="cursor:pointer;font-size:12px;color:var(--text2);">${title}</summary><div style="max-height:240px;overflow-y:auto;"><table class="data-table" style="font-size:11px;"><tbody>${rowsHtml}</tbody></table></div></details>` : '';
   const players = plan.playerUpdates;
-  return `<div style="font-size:12px;color:var(--text2);margin-bottom:8px;">${e(ctx.clubName)} · ${e(ctx.seasonName)} · ${plan.rosters.length} roster${plan.rosters.length !== 1 ? 's' : ''}: ${plan.rosters.map(r => e(r.id) + ' (' + r.count + ')').join(', ')}</div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">${tile('Rows in file', c.rows)}${tile('New roster rows', c.create, 'var(--green)')}${tile('Rows that change', c.update, 'var(--amber)')}${tile('Already identical', c.unchanged)}${tile('Players to archive', c.archive, c.archive ? 'var(--red,#ff6b6b)' : '')}${tile('Players to reactivate', c.reactivate)}${tile('ActorIDs to fill', c.actorFill)}${tile('Hero PIDs to link', c.heroLinks, 'var(--green)')}${c.heroActorFill ? tile('Hero ActorIDs to fill', c.heroActorFill, 'var(--green)') : ''}${c.heroNotLinked ? tile('Hero PIDs NOT linked', c.heroNotLinked, 'var(--amber)') : ''}</div>`
-    + box(plan.errors, 'rgba(255,82,82,0.10)', 'rgba(255,82,82,0.35)', '#ff6b6b', '⛔') + box(plan.warnings, 'var(--amber-bg)', 'rgba(255,179,64,0.25)', 'var(--amber)', '⚠') + box(plan.info, 'rgba(99,179,237,0.08)', 'rgba(99,179,237,0.2)', '#63b3ed', 'ℹ')
-    + (plan.total === 0 && !plan.errors.length ? `<div style="font-size:12px;color:var(--green);margin:6px 0;">✓ Nothing to do: Airtable already matches this file.</div>` : '')
+  return `<div style="font-size:12px;color:var(--text2);margin-bottom:8px;">Rosters in this file: ${plan.rosters.map(r => 'roster ' + e(r.id) + ' (' + r.count + ')').join(', ')}</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">${tile('Rows in file', c.rows)}${tile('New roster rows', c.create, 'var(--green)')}${tile('Rows that change', c.update, 'var(--amber)')}${tile('Already identical', c.unchanged)}${tile('Players to archive', c.archive, c.archive ? 'var(--red)' : '')}</div>`
     + det(`Rows that change (${plan.toUpdate.length}): what changes`, plan.toUpdate.slice(0, 80).map(u => `<tr><td style="color:var(--text);">${e(u.name)}</td><td class="mono">${e(u.key)}</td><td>${u.changes.map(ch => `${e(ch.field)}: <span style="opacity:.7;">${e(ch.from || '∅')}</span> → <b>${e(ch.to || '∅')}</b>`).join('; ')}</td></tr>`).join(''), plan.toUpdate.length)
     + det(`Players that change (${players.length})`, players.slice(0, 120).map(u => `<tr><td style="color:var(--text);">${e(u.player.Name)}</td><td>${u.change === 'archive' ? '<span style="color:var(--red,#ff6b6b);">archive</span>' : u.change === 'reactivate' ? 'reactivate' : 'fill ActorID'}${u.from && u.change !== 'actor' ? ' (' + e(u.from) + ' → ' + e(u.desired) + ')' : ''}</td><td>${u.actorId ? 'ActorID ← ' + e(u.actorId) : ''}</td><td>matched by ${e(u.matchedBy)}</td></tr>`).join(''), players.length)
     + det(`Hero PIDs to update (${plan.heroUpdates.length})`, Object.entries(plan.heroUpdates.reduce((m, u) => { const k = u.hero.RosterID || '?'; (m[k] = m[k] || {n: 0, l: 0, f: 0}); m[k].n++; if (u.rmid) m[k].l++; if (u.actorId) m[k].f++; return m; }, {})).map(([k, x]) => `<tr><td>roster ${e(k)}</td><td>${x.n} hero PID${x.n !== 1 ? 's' : ''}</td><td>${x.l} to link${x.f ? ', ' + x.f + ' ActorID' + (x.f !== 1 ? 's' : '') + ' to fill' : ''}</td></tr>`).join(''), plan.heroUpdates.length)
@@ -7904,6 +8109,8 @@ function mdmPlanHtml(plan, ctx) {   // pure string: the whole preview above the 
     + det(`Garbled names (${plan.garbled.length})`, plan.garbled.map(g => `<tr><td>line ${g.line}</td><td>${e(g.field)}</td><td style="color:var(--amber);">${e(g.value)}</td><td>${e(g.why)}</td></tr>`).join(''), plan.garbled.length)
     + det(`Names repaired (${plan.repaired.length})`, plan.repaired.slice(0, 60).map(r => `<tr><td>line ${r.line}</td><td>${e(r.field)}</td><td>${e(r.from)} → <b>${e(r.to)}</b></td></tr>`).join(''), plan.repaired.length);
 }
+
+function mdmPlanHtml(plan, ctx) { return mdmPlanTopHtml(plan, ctx) + mdmPlanListsHtml(plan); }   // both parts in one string (the page draws them in different places)
 
 // ─── execution: exactly the plan, per-batch error handling, one overall progress bar ───
 async function runMdmImportPlan(plan, ui) {
@@ -7964,9 +8171,10 @@ function renderMdmRosterPlan() {   // preview = the plan, rebuilt whenever a cel
   const d = mdmRosterData; if (!d) return;
   d.plan = buildMdmPlanFromCache(d);
   document.getElementById('mdm-roster-preview').classList.remove('hidden');
-  document.getElementById('mdm-roster-preview-stats').innerHTML = mdmPlanHtml(d.plan, d);
+  document.getElementById('mdm-roster-preview-stats').innerHTML = mdmPlanTopHtml(d.plan, d);
+  { const lists = document.getElementById('mdm-roster-preview-lists'); if (lists) lists.innerHTML = mdmPlanListsHtml(d.plan); pvApplyTech(); }
   const btn = document.getElementById('mdm-import-btn');
-  if (btn) { btn.disabled = _mdmImportRunning || d.plan.errors.length > 0 || d.plan.total === 0; btn.title = d.plan.errors.length ? 'Fix the errors in red first' : (d.plan.total === 0 ? 'Nothing to import' : ''); btn.textContent = d.plan.total ? `Import ${d.plan.total} change${d.plan.total !== 1 ? 's' : ''}` : 'Nothing to import'; }
+  if (btn) { btn.disabled = _mdmImportRunning || d.plan.errors.length > 0 || d.plan.total === 0; btn.title = d.plan.errors.length ? 'Fix the errors in red first' : (d.plan.total === 0 ? 'Nothing to import' : ''); btn.textContent = d.plan.total ? `Apply ${pvNum(d.plan.total)} change${d.plan.total !== 1 ? 's' : ''}` : 'Nothing to apply'; }
 }
 
 function parseMdmRosterUpload(file) {
@@ -9985,6 +10193,23 @@ function initBackfillSelects() {
   }
 }
 
+function backfillViewHtml(v) {   // pure: v = {clubName, seasonName, updates, skipped:{noActor,noMapping,alreadyComplete,other}, missingKeyGroups, checked}
+  const e = _escHtml, u = v.updates, sk = v.skipped, attention = sk.noActor + sk.noMapping + sk.other;
+  const fillActor = u.filter(x => x.fields.ActorID).length, fillRoster = u.filter(x => x.fields.RosterID).length, noMap = u.filter(x => x.missingMapping).length;
+  const notes = (noMap ? `<div class="pv-note pv-check"><span class="pv-lbl">${PV_LEVELS.check.icon} ${PV_LEVELS.check.label}:</span>${pvNum(noMap)} product${noMap !== 1 ? 's' : ''} still ${noMap !== 1 ? 'have' : 'has'} no active roster mapping, so the MDM roster ID stays blank. Missing mappings:<br>${Object.entries(v.missingKeyGroups || {}).map(([k, n]) => `<span class="mono" style="font-size:11px;">${e(k)}</span> (${n} product${n !== 1 ? 's' : ''})`).join('<br>')}</div>` : '')
+    + (sk.noActor ? pvNote('check', `${pvNum(sk.noActor)} product${sk.noActor !== 1 ? 's' : ''} will not be changed: ${sk.noActor !== 1 ? 'their players have' : 'its player has'} no MDMActorID.`) : '')
+    + (sk.noMapping ? pvNote('check', `${pvNum(sk.noMapping)} product${sk.noMapping !== 1 ? 's' : ''} will not be changed: no active roster mapping (or an unclear one) for ${sk.noMapping !== 1 ? 'their' : 'its'} font, kit and garment.`) : '')
+    + (sk.other ? pvNote('check', `${pvNum(sk.other)} other product${sk.other !== 1 ? 's' : ''} will not be changed.`) : '')
+    + pvNote('info', 'Every season in this scope is loaded, so nothing was left out.');
+  const rows = u.slice(0, 200).map(x => { const c = (CACHE.clubs || []).find(cc => cc.id === x.hero.ClubID);
+    return `<tr><td class="mono">${e(String(x.hero.PID || ''))}</td><td>${e(x.player ? x.player.Name || '—' : '—')}</td><td>${e(c ? c.Name : '—')}</td><td style="font-size:10px;color:var(--text3);">${e(x.hero.FontType || '')} · ${e(x.hero.KitType || '')}</td><td class="mono" style="font-size:10px;">${x.fields.ActorID ? `<span style="color:var(--green);">+${e(x.fields.ActorID)}</span>` : '<span style="color:var(--text3);">—</span>'}</td><td class="mono" style="font-size:10px;">${x.fields.RosterID ? `<span style="color:var(--green);">+${e(x.fields.RosterID)}</span>` : x.missingMapping ? '<span style="color:var(--amber);">no mapping</span>' : '<span style="color:var(--text3);">—</span>'}</td></tr>`; }).join('');
+  const table = u.length ? `<div style="max-height:320px;overflow-y:auto;"><table class="data-table" style="font-size:11px;"><thead><tr><th>PID</th><th>Player</th><th>Club</th><th>Font · Kit</th><th>MDM player ID to fill<span class="pv-tech"> (ActorID)</span></th><th>MDM roster ID to fill<span class="pv-tech"> (RosterID)</span></th></tr></thead><tbody>${rows}${u.length > 200 ? `<tr><td colspan="6" style="color:var(--text3);font-size:11px;padding:8px;">… and ${u.length - 200} more — <a href="#" onclick="event.preventDefault();showAllBackfillPreviewRows(this)" style="color:var(--accent);">Show all ${u.length}</a></td></tr>` : ''}</tbody></table></div>` : '';
+  const counts = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${pvTile('Products checked', pvNum(v.checked))}${pvTile('To fill', pvNum(u.length), 'var(--green)')}${pvTile('Already complete', pvNum(sk.alreadyComplete))}${pvTile('No MDM player ID', pvNum(sk.noActor), sk.noActor ? 'var(--amber)' : '')}${pvTile('No roster mapping', pvNum(sk.noMapping), sk.noMapping ? 'var(--amber)' : '')}${pvTile('Other', pvNum(sk.other))}</div>`;
+  return pvShell({context: `${e(v.clubName)} · ${e(v.seasonName)}`,
+    summary: pvSummary([{n: u.length, text: pvPlural(u.length, 'product to fill', 'products to fill')}, {n: sk.alreadyComplete, text: 'unchanged'}, {n: attention, text: 'needing attention'}]),
+    sub: u.length ? `Fills the MDM player ID on ${pvNum(fillActor)} and the MDM roster ID on ${pvNum(fillRoster)}.` : '', notes,
+    ok: u.length ? '' : '<div class="pv-ok">Nothing to fill: every product here is either complete or cannot be filled yet.</div>', details: counts + table});
+}
 async function runMdmBackfill(dryRun) {
   { const _sf = (document.getElementById('backfill-season') || {}).value || ''; if (!(await ensureScopeLoaded('The ActorID/RosterID backfill', _sf))) return; }
   initBackfillSelects();
@@ -10024,7 +10249,7 @@ async function runMdmBackfill(dryRun) {
     previewEl.style.display = 'none';
     applyBtn.style.display = 'none';
     applyBtn.disabled = false;
-    applyBtn.textContent = '✓ Apply Backfill';
+    applyBtn.textContent = '✓ Fill missing links';
     cancelBtn.style.display = 'none';
     window._backfillPending = null; // always clear — whether success or partial failure
     if (failed > 0) {
@@ -10083,62 +10308,27 @@ async function runMdmBackfill(dryRun) {
 
   const totalSkipped = skippedNoActor + skippedNoMapping + skippedAlreadyComplete + skippedOther;
 
+  const _clubName = clubFilter ? ((CACHE.clubs || []).find(c => c.id === clubFilter) || {}).Name || 'Club' : 'All clubs', _seasonName = seasonFilter ? ((CACHE.seasons || []).find(se => se.id === seasonFilter) || {}).Label || 'Season' : 'All seasons';
+  const _skipped = {noActor: skippedNoActor, noMapping: skippedNoMapping, alreadyComplete: skippedAlreadyComplete, other: skippedOther};
+  const missingKeyGroups = {};
+  updates.filter(u => u.missingMapping).forEach(u => {
+    const club = CACHE.clubs.find(c => c.id === u.hero.ClubID), season = CACHE.seasons.find(s => s.id === u.hero.SeasonID);
+    const label = `${club?.Name || u.hero.ClubID} | ${season?.Label || u.hero.SeasonID} | ${u.hero.FontType || '?'} | ${u.hero.KitType || '?'}`;
+    missingKeyGroups[label] = (missingKeyGroups[label] || 0) + 1;
+  });
+  previewEl.innerHTML = backfillViewHtml({clubName: _clubName, seasonName: _seasonName, updates, skipped: _skipped, missingKeyGroups, checked: candidates.length});
+  pvApplyTech();
   if (updates.length === 0) {
-    const reasons = [];
-    if (skippedAlreadyComplete > 0) reasons.push(`${skippedAlreadyComplete} already complete`);
-    if (skippedNoActor > 0) reasons.push(`${skippedNoActor} have no MDMActorID on player`);
-    if (skippedNoMapping > 0) reasons.push(`${skippedNoMapping} have no active roster mapping`);
-    if (skippedOther > 0) reasons.push(`${skippedOther} other`);
-    statusEl.textContent = `ℹ ${candidates.length} hero PID${candidates.length!==1?'s':''} checked. ${reasons.length ? 'Skipped: '+reasons.join(', ')+'.' : 'Nothing to update.'}`;
+    previewEl.style.display = '';
+    statusEl.textContent = `ℹ ${candidates.length} hero PID${candidates.length!==1?'s':''} checked. Nothing to fill.`;
     return;
   }
-
-  // Show preview table
-  const missingMappingCount = updates.filter(u=>u.missingMapping).length;
-  // Group missing mappings by lookup key
-  const missingKeyGroups = {};
-  updates.filter(u=>u.missingMapping).forEach(u=>{
-    const k = `${u.hero.ClubID}|${u.hero.SeasonID}|${String(u.hero.FontType||'').trim().toLowerCase()}|${String(u.hero.KitType||'').trim().toLowerCase()}`;
-    const club = CACHE.clubs.find(c=>c.id===u.hero.ClubID);
-    const season = CACHE.seasons.find(s=>s.id===u.hero.SeasonID);
-    const label = `${club?.Name||u.hero.ClubID} | ${season?.Label||u.hero.SeasonID} | ${u.hero.FontType||'?'} | ${u.hero.KitType||'?'}`;
-    missingKeyGroups[label] = (missingKeyGroups[label]||0) + 1;
-  });
-  const skipParts = [];
-  if (skippedAlreadyComplete > 0) skipParts.push(`${skippedAlreadyComplete} already complete`);
-  if (skippedNoActor > 0) skipParts.push(`${skippedNoActor} no MDMActorID`);
-  if (skippedNoMapping > 0) skipParts.push(`${skippedNoMapping} no roster mapping`);
-  if (skippedOther > 0) skipParts.push(`${skippedOther} other`);
-  let html = `<div style="font-size:12px;color:var(--text2);margin-bottom:10px;">
-    <b>${updates.length}</b> hero PID${updates.length!==1?'s':''} will be updated
-    ${totalSkipped>0?`· <span style="color:var(--text3);">skipped ${totalSkipped}: ${skipParts.join(', ')}</span>`:''}
-    ${missingMappingCount>0?`· <span style="color:var(--amber);">⚠ ${missingMappingCount} still have no active roster mapping — RosterID will remain blank</span>`:''}
-  </div>
-  ${missingMappingCount>0?`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">
-    <b>Missing mapping keys:</b><br>
-    ${Object.entries(missingKeyGroups).map(([k,n])=>`<span class="mono" style="font-size:10px;">${escHtml(k)}</span> <span style="color:var(--text3);">(${n} PID${n!==1?'s':''})</span>`).join('<br>')}
-  </div>`:''}`;
-  html += `<div style="max-height:320px;overflow-y:auto;"><table class="data-table" style="font-size:11px;">
-    <thead><tr><th>PID</th><th>Player</th><th>Club</th><th>Font · Kit</th><th>ActorID → fill</th><th>RosterID → fill</th></tr></thead>
-    <tbody>${updates.slice(0,200).map(u => {
-      const club = CACHE.clubs.find(c=>c.id===u.hero.ClubID);
-      return `<tr>
-        <td class="mono">${escHtml(String(u.hero.PID||''))}</td>
-        <td>${escHtml(u.player?.Name||'—')}</td>
-        <td>${escHtml(club?.Name||'—')}</td>
-        <td style="font-size:10px;color:var(--text3);">${escHtml(u.hero.FontType||'')} · ${escHtml(u.hero.KitType||'')}</td>
-        <td class="mono" style="font-size:10px;">${u.fields.ActorID?`<span style="color:var(--green);">+${escHtml(u.fields.ActorID)}</span>`:'<span style="color:var(--text3);">—</span>'}</td>
-        <td class="mono" style="font-size:10px;">${u.fields.RosterID?`<span style="color:var(--green);">+${escHtml(u.fields.RosterID)}</span>`:u.missingMapping?`<span style="color:var(--amber);" title="${escHtml(u.hero.ClubID+'|'+u.hero.SeasonID+'|'+(u.hero.FontType||'')+'|'+(u.hero.KitType||''))}">no mapping</span>`:'<span style="color:var(--text3);">—</span>'}</td>
-      </tr>`;
-    }).join('')}${updates.length>200?`<tr><td colspan="6" style="color:var(--text3);font-size:11px;padding:8px;">… and ${updates.length-200} more — <a href="#" onclick="event.preventDefault();showAllBackfillPreviewRows(this)" style="color:var(--accent);">Show all ${updates.length}</a></td></tr>`:''}</tbody>
-  </table></div>`;
-  previewEl.innerHTML = html;
   previewEl.style.display = '';
   applyBtn.disabled = false;
-  applyBtn.textContent = '✓ Apply Backfill';
+  applyBtn.textContent = pvApplyLabel('✓ Fill', updates.length, 'product');
   applyBtn.style.display = '';
   cancelBtn.style.display = '';
-  statusEl.textContent = `Dry run complete — ${updates.length} update${updates.length!==1?'s':''} proposed. Review above then click Apply.`;
+  statusEl.textContent = `Preview ready: ${pvNum(updates.length)} product${updates.length!==1?'s':''} would be filled. Check the summary and warnings, then press Fill.`;
   // Store reviewed snapshot
   window._backfillPending = updates;
 }
@@ -10171,7 +10361,7 @@ function clearBackfillPreview() {
   document.getElementById('backfill-preview').style.display = 'none';
   document.getElementById('backfill-apply-btn').style.display = 'none';
   document.getElementById('backfill-apply-btn').disabled = false;
-  document.getElementById('backfill-apply-btn').textContent = '✓ Apply Backfill';
+  document.getElementById('backfill-apply-btn').textContent = '✓ Fill missing links';
   document.getElementById('backfill-cancel-btn').style.display = 'none';
   document.getElementById('backfill-status').style.display = 'none';
   window._backfillPending = null;
@@ -10754,7 +10944,7 @@ function exportExclusionsFromFilters() {
   toast(`Exported ${rows.length} exclusion${rows.length!==1?'s':''}`);
 }
 
-try { loadActivity(); applyTheme(getTheme()); } catch (e) { /* the app starts without them */ }
+try { loadActivity(); applyTheme(getTheme()); pvApplyTech(); } catch (e) { /* the app starts without them */ }
 init();
 </script>
 
