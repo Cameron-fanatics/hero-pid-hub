@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v238-wip.8 -->
+<!-- HEROPID-BUILD-v238-wip.12 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -461,6 +461,15 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
             <button class="btn btn-primary btn-sm" id="mdm-import-btn" onclick="importMdmRoster()">Import all</button>
             <button class="btn btn-ghost btn-sm" onclick="document.getElementById('mdm-roster-preview').classList.add('hidden')">Cancel</button>
           </div>
+        </div>
+      </div>
+
+      <div class="card" id="stored-links-card" style="margin-bottom:20px;">
+        <div class="card-header"><span class="card-title">No file needed: link PIDs from the roster entries already in Airtable</span></div>
+        <div style="padding:16px;">
+          <p style="color:var(--text2);font-size:13px;margin-bottom:12px;">Uses the club and season picked above. Fills a BLANK RosterMemberID on PIDs that already have an ActorID and a RosterID, from the roster entries stored in Airtable. Nothing else is changed.</p>
+          <button class="btn btn-primary btn-sm" id="stored-links-preview-btn" onclick="storedLinksPreview()">Preview</button>
+          <div id="stored-links-out" style="margin-top:12px;"></div>
         </div>
       </div>
     </div>
@@ -1358,20 +1367,60 @@ function dedupGroupNameStatus(players) {          // worst relation between any 
 }
 
 // Batch PATCH = 10 records/request, sequential, paced. Failures are RETURNED (never swallowed).
-async function atUpdateBatchSafe(table, items, onProgress) {
-  const ok = [], failed = [];
+async function atUpdateBatchSafe(table, items, onProgress, guard) {
+  // guard (optional): async (chunk) => ({keep, skip}), run right before each PATCH on that chunk only. Items in skip are NOT written; a guard that throws fails the chunk without writing it.
+  const ok = [], failed = [], skipped = [];
   for (let i = 0; i < items.length; i += 10) {
-    const chunk = items.slice(i, i + 10);
-    try {
-      await atFetch(table, {method: 'PATCH', body: JSON.stringify({records: chunk.map(it => ({id: it.id, fields: it.fields}))})});
-      chunk.forEach(c => ok.push(c.id));
-    } catch (e) {
-      chunk.forEach(c => failed.push({id: c.id, error: (e && e.message) ? e.message : String(e)}));
+    let chunk = items.slice(i, i + 10);
+    if (guard) {
+      try { const g = await guard(chunk); skipped.push(...g.skip.map(c => c.id)); chunk = g.keep; await _sleep(AT_PACE_MS); }
+      catch (e) { chunk.forEach(c => failed.push({id: c.id, error: 'check before write failed: ' + ((e && e.message) ? e.message : String(e))})); chunk = []; }
+    }
+    if (chunk.length) {
+      try {
+        await atFetch(table, {method: 'PATCH', body: JSON.stringify({records: chunk.map(it => ({id: it.id, fields: it.fields}))})});
+        chunk.forEach(c => ok.push(c.id));
+      } catch (e) {
+        chunk.forEach(c => failed.push({id: c.id, error: (e && e.message) ? e.message : String(e)}));
+      }
     }
     if (onProgress) onProgress(Math.min(i + 10, items.length), items.length);
     if (i + 10 < items.length) await _sleep(AT_PACE_MS);
   }
-  return {ok, failed};
+  return {ok, failed, skipped};
+}
+// Read a whole table page by page: each page is retried ON ITS OWN (the scan resumes from the failed page, it never restarts) and pages are paced.
+async function _atGetAllPaced(table, filterFormula = '') {
+  const records = []; let offset = null;
+  do {
+    const params = new URLSearchParams();
+    if (filterFormula) params.set('filterByFormula', filterFormula);
+    if (offset) params.set('offset', offset);
+    params.set('pageSize', '100');
+    const data = await _atRetry(() => atFetch(`${table}?${params}`));
+    records.push(...(data.records || []));
+    offset = data.offset;
+    if (offset) await _sleep(AT_PACE_MS);
+  } while (offset);
+  return records;
+}
+async function _atFetchByIdsRetry(table, ids) {                    // fetch by id, 40 at a time, each chunk retried on its own
+  const out = new Map();
+  for (let i = 0; i < ids.length; i += 40) {
+    const part = await _atRetry(() => atFetchByIds(table, ids.slice(i, i + 40)));
+    part.forEach((v, k) => out.set(k, v));
+    if (i + 40 < ids.length) await _sleep(AT_PACE_MS);
+  }
+  return out;
+}
+// Retry a read when Airtable throttles (429) or the network blips; any other error is thrown at once.
+async function _atRetry(fn, tries = 4) {
+  let last;
+  for (let n = 0; n < tries; n++) {
+    try { return await fn(); }
+    catch (e) { last = e; if (!/429|rate limit|too many|try again|timed? ?out|network|failed to fetch/i.test(String((e && e.message) || e))) throw e; await _sleep(1500 * Math.pow(2, n)); }
+  }
+  throw last;
 }
 
 // Fetch specific records fresh from Airtable by id (formula batches of 40, not the whole table).
@@ -6043,7 +6092,108 @@ async function confirmImport() {
 function resetImportTab(tab) {
   if (tab === 'storage') { if (_storageImportRunning || !document.getElementById('import-preview')) return; clearImport(); }
   else if (tab === 'hpparents') { if (_hpRunning) return; hpParentsData = null; const pv = document.getElementById('hpp-preview'); if (pv) pv.classList.add('hidden'); const st = document.getElementById('hpp-status'); if (st) st.textContent = ''; const fi = document.getElementById('file-input-hpparents'); if (fi) fi.value = ''; }
-  else if (tab === 'mdmroster') { if (_mdmImportRunning) return; mdmRosterData = null; const pv = document.getElementById('mdm-roster-preview'); if (pv) pv.classList.add('hidden'); const st = document.getElementById('mdm-roster-status'); if (st) st.style.display = 'none'; const fi = document.getElementById('mdm-roster-file'); if (fi) fi.value = ''; }
+  else if (tab === 'mdmroster') { if (_mdmImportRunning || _storedLinksRunning) return; _storedLinksPlan = null; const so = document.getElementById('stored-links-out'); if (so) so.innerHTML = ''; mdmRosterData = null; const pv = document.getElementById('mdm-roster-preview'); if (pv) pv.classList.add('hidden'); const st = document.getElementById('mdm-roster-status'); if (st) st.style.display = 'none'; const fi = document.getElementById('mdm-roster-file'); if (fi) fi.value = ''; }
+}
+// ═══ Link PIDs from the roster entries ALREADY stored in Airtable (no CSV) ═══
+let _storedLinksRunning = false, _storedLinksPlan = null;
+function planStoredRosterLinks({heroes, rosterMembers, clubId, seasonId}) {
+  const plan = {links: [], total: 0, alreadyLinked: 0, missingIds: 0, noMatch: 0, otherClub: 0, ambiguous: 0, seasonConflict: 0, noMatchSample: []};
+  // a roster entry carries no season, so season ownership comes from the PIDs: a RosterID that this club's PIDs use in MORE THAN ONE season is never linked from
+  const rosterSeasons = new Map();
+  const clubSeasonSet = new Set(); plan.clubPids = 0;
+  (heroes || []).forEach(h => { if (h.ClubID === clubId) { plan.clubPids++; if (h.SeasonID) clubSeasonSet.add(h.SeasonID); } });
+  plan.clubSeasons = clubSeasonSet.size;
+  (heroes || []).forEach(h => { if (h.ClubID === clubId && isRealMdmId(h.RosterID) && h.SeasonID) { const k = _mdmStr(h.RosterID); if (!rosterSeasons.has(k)) rosterSeasons.set(k, new Set()); rosterSeasons.get(k).add(h.SeasonID); } });
+  const entries = new Map();   // ActorID|RosterID -> Map(RosterMemberID -> club that owns the entry)
+  (rosterMembers || []).forEach(r => {
+    const id = _mdmStr(r.RosterMemberID);
+    if (!id || id === '0' || id === '-999' || !isRealMdmId(r.ActorID) || !isRealMdmId(r.RosterID)) return;
+    const k = `${_mdmStr(r.ActorID)}|${_mdmStr(r.RosterID)}`;
+    if (!entries.has(k)) entries.set(k, new Map());
+    entries.get(k).set(id, _mdmStr(r.ClubID));
+  });
+  (heroes || []).forEach(h => {
+    if (h.ClubID !== clubId || h.SeasonID !== seasonId) return;
+    plan.total++;
+    if (isRealMdmId(h.RosterMemberID)) { plan.alreadyLinked++; return; }          // only ever fills a BLANK link
+    if (!isRealMdmId(h.ActorID) || !isRealMdmId(h.RosterID)) { plan.missingIds++; return; }
+    if (rosterSeasons.get(_mdmStr(h.RosterID)).size > 1) { plan.seasonConflict++; return; }
+    const k = `${_mdmStr(h.ActorID)}|${_mdmStr(h.RosterID)}`;
+    const ent = entries.get(k);
+    if (ent && ent.size > 1) { plan.ambiguous++; return; }                  // one ActorID on two different roster entries of the same roster (any club): never guess
+    const rm = ent ? [...ent.keys()][0] : '';
+    if (rm && ent.get(rm) !== clubId) { plan.otherClub++; return; }          // the entry belongs to another club: never used
+    if (!rm) { plan.noMatch++; if (plan.noMatchSample.length < 12) plan.noMatchSample.push(`${h.PID} (ActorID ${_mdmStr(h.ActorID)}, roster ${_mdmStr(h.RosterID)})`); return; }
+    plan.links.push({hero: h, rmid: rm});
+  });
+  plan.signature = _mdmHash(plan.links.map(l => `${l.hero.id}|${l.hero.PID}|${_mdmStr(l.hero.ActorID)}|${_mdmStr(l.hero.RosterID)}|${l.rmid}`).sort().join('\n'));
+  return plan;
+}
+async function _storedLinksRead(clubId, seasonId) {
+  const heroes = (await _atGetAllPaced(TABLES.heroes, `{ClubID}='${clubId}'`)).map(r => ({id: r.id, ...r.fields}));       // every season of this club (the plan scopes to one; the rest proves RosterID ownership)
+  const rosterMembers = (await _atGetAllPaced(TABLES.mdmRosterMembers)).map(r => ({id: r.id, ...r.fields}));
+  return planStoredRosterLinks({heroes, rosterMembers, clubId, seasonId});
+}
+async function storedLinksPreview() {
+  if (_storedLinksRunning) { toast('A link run is in progress. Wait for it to finish.', 'error'); return; }
+  const clubId = document.getElementById('mdm-roster-club').value, seasonId = document.getElementById('mdm-roster-season').value;
+  const out = document.getElementById('stored-links-out');
+  if (!clubId || !seasonId) { toast('Pick a club and a season above first.', 'error'); return; }
+  out.innerHTML = '<div style="font-size:12px;color:var(--text2);">Reading Airtable…</div>';
+  try {
+    const plan = await _storedLinksRead(clubId, seasonId);
+    plan.clubId = clubId; plan.seasonId = seasonId; _storedLinksPlan = plan;
+    const tile = (l, n, c) => `<div style="flex:1;min-width:120px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;"><div style="font-size:11px;color:var(--text2);">${l}</div><div style="font-size:20px;font-weight:600;color:${c || 'var(--text)'};">${n}</div></div>`;
+    out.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${tile('PIDs in this club and season', plan.total)}${tile('To link', plan.links.length, 'var(--green)')}${tile('Already linked', plan.alreadyLinked)}${tile('No ActorID or RosterID', plan.missingIds, plan.missingIds ? 'var(--amber)' : '')}${tile('No roster entry found', plan.noMatch, plan.noMatch ? 'var(--amber)' : '')}${tile('Not linked (ambiguous)', plan.ambiguous, plan.ambiguous ? 'var(--amber)' : '')}${plan.otherClub ? tile('Roster entry is another club\'s', plan.otherClub, 'var(--amber)') : ''}${plan.seasonConflict ? tile('RosterID used by two seasons', plan.seasonConflict, 'var(--amber)') : ''}</div>`
+      + `<div style="font-size:11px;color:var(--text3);margin-bottom:8px;">Season check: this club's ${plan.clubPids} PIDs across ${plan.clubSeasons} season${plan.clubSeasons !== 1 ? 's' : ''} were read. If a season is missing from your Airtable, a RosterID shared with it cannot be seen.</div>`
+      + (plan.ambiguous ? `<div style="font-size:12px;color:var(--amber);margin-bottom:8px;">⚠ ${plan.ambiguous} PID${plan.ambiguous !== 1 ? 's' : ''} will NOT be linked: one ActorID is on two different roster entries of the same roster. Fix it in MDM.</div>` : '')
+      + (plan.noMatch ? `<div style="font-size:12px;color:var(--text2);margin-bottom:8px;">No roster entry for ${plan.noMatch} PID${plan.noMatch !== 1 ? 's' : ''} (their player is not on that roster), e.g. ${plan.noMatchSample.map(_escHtml).join('; ')}${plan.noMatch > plan.noMatchSample.length ? '; …' : ''}</div>` : '')
+      + (plan.links.length ? `<button class="btn btn-primary btn-sm" id="stored-links-apply-btn" onclick="storedLinksApply()">Link ${plan.links.length} PID${plan.links.length !== 1 ? 's' : ''}</button> <button class="btn btn-ghost btn-sm" onclick="resetImportTab('mdmroster')">Cancel</button>` : '<div style="font-size:12px;color:var(--text2);">Nothing to link.</div>');
+  } catch (e) { out.innerHTML = `<div style="font-size:12px;color:var(--red);">Could not read Airtable: ${_escHtml(e.message || e)}</div>`; }
+}
+async function storedLinksApply() {
+  if (_storedLinksRunning || !_storedLinksPlan) return;
+  const prev = _storedLinksPlan, out = document.getElementById('stored-links-out'), btn = document.getElementById('stored-links-apply-btn');
+  _storedLinksRunning = true; if (btn) { btn.disabled = true; btn.textContent = 'Linking…'; }
+  try {
+    const fresh = await _storedLinksRead(prev.clubId, prev.seasonId);                 // always fresh: this drives a write
+    if (fresh.signature !== prev.signature) { out.innerHTML = '<div style="font-size:12px;color:var(--red);">Airtable changed since the preview, so nothing was written. Press Preview again.</div>'; _storedLinksPlan = null; return; }
+    const items = fresh.links.map(l => ({id: l.hero.id, fields: {RosterMemberID: l.rmid}, expect: {ActorID: _mdmStr(l.hero.ActorID), RosterID: _mdmStr(l.hero.RosterID), ClubID: l.hero.ClubID, SeasonID: l.hero.SeasonID}}));
+    const want = new Map(fresh.links.map(l => [l.hero.id, l.rmid]));
+    // right before each PATCH, re-read just those PIDs: one that has been linked since the check above is left alone, never overwritten
+    const guard = async chunk => {
+      const cur = await _atRetry(() => atFetchByIds(TABLES.heroes, chunk.map(c => c.id)));
+      const keep = [], skip = [];
+      // still blank AND still the same person, roster, club and season as planned: anything else is left alone
+      chunk.forEach(c => { const r = cur.get(c.id), e = c.expect; const same = r && !isRealMdmId(r.RosterMemberID) && _mdmStr(r.ActorID) === e.ActorID && _mdmStr(r.RosterID) === e.RosterID && r.ClubID === e.ClubID && r.SeasonID === e.SeasonID; (same ? keep : skip).push(c); });
+      return {keep, skip};
+    };
+    let res = await atUpdateBatchSafe(TABLES.heroes, items, (done, total) => { out.innerHTML = `<div style="font-size:12px;color:var(--text2);">Linking… ${done} of ${total}</div>`; }, guard);
+    if (res.failed.length) {                                                          // one more try for anything that failed (throttling)
+      const retryIds = new Set(res.failed.map(f => f.id));
+      const r2 = await atUpdateBatchSafe(TABLES.heroes, items.filter(it => retryIds.has(it.id)), null, guard);
+      res = {ok: res.ok.concat(r2.ok), failed: r2.failed, skipped: res.skipped.concat(r2.skipped)};
+    }
+    // read back EVERY PID this run touched (written, left alone, or failed) and judge by what Airtable holds: a write whose response was lost may still have been committed
+    const checkIds = [...new Set([...res.ok, ...res.skipped, ...res.failed.map(f => f.id)])];
+    let back = new Map(), readErr = '';
+    if (checkIds.length) { try { back = await _atFetchByIdsRetry(TABLES.heroes, checkIds); } catch (e) { readErr = (e && e.message) || String(e); } }   // a failed read-back is reported, never fatal, never assumed good
+    const confirmedSet = new Set(checkIds.filter(id => { const r = back.get(id); return !!r && _mdmStr(r.RosterMemberID) === want.get(id); }));
+    const okSet = new Set(res.ok);
+    const recovered = [...confirmedSet].filter(id => !okSet.has(id)).length;                 // linked, but our write or its retry never got a clean answer
+    const unconfirmed = res.ok.filter(id => !confirmedSet.has(id)).length;
+    const leftAlone = res.skipped.filter(id => !confirmedSet.has(id)).length;
+    const failedLeft = res.failed.filter(f => !confirmedSet.has(f.id));
+    (CACHE.heroes || []).forEach(h => { if (confirmedSet.has(h.id)) h.RosterMemberID = want.get(h.id); });   // the cache only ever holds what Airtable confirmed
+    const bad = unconfirmed || failedLeft.length || readErr;
+    out.innerHTML = `<div style="font-size:13px;color:${bad ? 'var(--amber)' : 'var(--green)'};">${confirmedSet.size} PID${confirmedSet.size !== 1 ? 's' : ''} linked and confirmed by read-back`
+      + `${recovered ? ` (${recovered} found linked after a lost response)` : ''}${unconfirmed ? `, ${unconfirmed} accepted by Airtable but NOT confirmed on read-back` : ''}${leftAlone ? `, ${leftAlone} left alone (changed since the check)` : ''}, ${failedLeft.length} failed.</div>`
+      + (failedLeft.length ? `<div style="font-size:12px;color:var(--text2);margin-top:6px;">First failure: ${_escHtml(failedLeft[0].error)}</div>` : '')
+      + (readErr ? `<div style="font-size:12px;color:var(--amber);margin-top:6px;">The read-back could not be done (${_escHtml(readErr)}), so nothing is confirmed. Press Preview again to see where things stand.</div>` : '')
+      + (unconfirmed ? `<div style="font-size:12px;color:var(--amber);margin-top:6px;">Press Preview again to see what is still unlinked.</div>` : '');
+    _storedLinksPlan = null;
+  } catch (e) { out.innerHTML = `<div style="font-size:12px;color:var(--red);">Stopped: ${_escHtml(e.message || e)}</div>`; }
+  finally { _storedLinksRunning = false; }
 }
 function clearImport(force) {
   if (_storageImportRunning && !force) { toast('An import is running: it cannot be cancelled or cleared until it finishes.', 'error'); return; }
