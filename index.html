@@ -1,13 +1,21 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v239-wip.11 -->
+<!-- HEROPID-BUILD-v239-wip.15 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Hero PID Hub</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<script>try{if(localStorage.getItem("hph_theme")==="light")document.documentElement.setAttribute("data-theme","light");}catch(e){}</script>
 <style>
 :root{--bg:#0a0a0f;--bg2:#111118;--bg3:#18181f;--bg4:#1e1e28;--border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);--accent:#4f7cff;--accent2:#7b5ea7;--accent-glow:rgba(79,124,255,0.15);--text:#e8e8f0;--text2:#9090a8;--text3:#5a5a70;--green:#3dd68c;--green-bg:rgba(61,214,140,0.1);--red:#ff5c5c;--red-bg:rgba(255,92,92,0.1);--amber:#ffb340;--amber-bg:rgba(255,179,64,0.1);--radius:10px;--radius-sm:6px}
+[data-theme="light"]{--bg:#f4f5f9;--bg2:#ffffff;--bg3:#eceef5;--bg4:#e1e4ee;--border:rgba(0,0,0,0.09);--border2:rgba(0,0,0,0.17);--accent:#3558d6;--accent2:#6b4fa0;--accent-glow:rgba(53,88,214,0.12);--text:#1a1b26;--text2:#464a60;--text3:#767a90;--green:#12804f;--green-bg:rgba(18,128,79,0.10);--red:#c93232;--red-bg:rgba(201,50,50,0.09);--amber:#a9620a;--amber-bg:rgba(169,98,10,0.11)}
+[data-theme="light"] .nav-item:hover{background:rgba(0,0,0,0.04)}
+[data-theme="light"] .btn-primary:hover{background:#4a6fe6}
+[data-theme="light"] .modal-overlay{background:rgba(20,22,40,0.45)}
+[data-theme="light"] [style*="color:#63b3ed"]{color:#1f5fa8!important}
+[data-theme="light"] [style*="color:#fc8181"],[data-theme="light"] [style*="color:#ff6b6b"]{color:#b42a2a!important}
+[data-theme="light"] [style*="color:#a07fd4"],[data-theme="light"] .badge-season{color:#5b3d94!important}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-height:100vh;font-size:13px;line-height:1.6}
 .app{display:flex;min-height:100vh}
@@ -17,14 +25,18 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 .logo-mark span{color:var(--accent)}
 .logo-version{font-size:10px;color:var(--text3);margin-top:2px;font-family:monospace}
 .logo-sub{font-size:10px;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase;margin-top:3px}
-.sidebar-nav{padding:12px 0;flex:1}
+.sidebar-nav{padding:8px 0;flex:1;min-height:0;overflow-y:auto}   /* v239: the nav scrolls instead of pushing the stats off the screen */
 .nav-section{padding:8px 16px 4px;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3)}
 .nav-item{display:flex;align-items:center;gap:10px;padding:9px 20px;cursor:pointer;color:var(--text2);transition:all 0.15s;font-size:12px;border-left:2px solid transparent;margin:1px 0}
 .nav-item:hover{color:var(--text);background:rgba(255,255,255,0.03)}
 .nav-item.active{color:var(--accent);border-left-color:var(--accent);background:var(--accent-glow)}
 .nav-item .icon{font-size:14px;width:16px;text-align:center}
-.sidebar-stats{padding:16px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
-.stat-pill{display:flex;justify-content:space-between;align-items:center;background:var(--bg3);border-radius:var(--radius-sm);padding:8px 12px}
+.sidebar-stats{padding:10px 16px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:6px}
+.stat-pill{display:flex;justify-content:space-between;align-items:center;background:var(--bg3);border-radius:var(--radius-sm);padding:6px 12px}
+@media (max-height:900px){.sidebar-logo{padding:14px 20px 10px}.nav-item{padding:6px 20px}.nav-section{padding:6px 16px 2px}.stat-value{font-size:14px}}
+@media (max-height:720px){.logo-sub,.logo-version{display:none}.nav-item{padding:4px 20px}.sidebar-logo{padding:10px 20px 8px}}
+.activity-row{display:flex;gap:10px;padding:5px 12px;border-bottom:1px solid var(--border);font-size:12px}
+.activity-row .t{color:var(--text3);white-space:nowrap}.activity-row.error .m{color:var(--red)}.activity-badge{background:var(--red);color:#fff;border-radius:9px;font-size:10px;padding:0 6px;margin-left:auto}
 .stat-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em}
 .stat-value{font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--text)}
 .main{margin-left:220px;flex:1;display:flex;flex-direction:column;min-height:100vh}
@@ -168,10 +180,12 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <div class="nav-item" onclick="showPage('datahealth')" id="nav-datahealth"><span class="icon">◎</span> Data Health</div>
     <div class="nav-item" onclick="showPage('analytics')" id="nav-analytics"><span class="icon">▦</span> Analytics</div>
     <div class="nav-section" style="margin-top:8px;">Settings</div>
+    <div class="nav-item" onclick="showPage('activity')" id="nav-activity"><span class="icon">☰</span> Activity <span class="activity-badge hidden" id="activity-badge">0</span></div>
     <div class="nav-item" onclick="showPage('settings')" id="nav-settings"><span class="icon">⚙</span> Settings</div>
   </nav>
   <div class="sidebar-refresh" style="padding:10px 16px 0;">
     <button class="btn btn-ghost btn-sm js-refresh-data" style="width:100%;" onclick="refreshData()">↻ Refresh data</button>
+    <button class="btn btn-ghost btn-sm" id="theme-toggle" style="width:100%;margin-top:6px;" onclick="toggleTheme()">☀ Light</button>
     <div id="sync-stamp" style="font-size:10px;color:var(--text3);margin-top:4px;text-align:center;">Not synced yet</div>
   </div>
   <div class="sidebar-stats">
@@ -182,6 +196,17 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 </aside>
 
 <main class="main">
+
+<!-- ACTIVITY PAGE -->
+<div id="page-activity" class="hidden">
+  <div class="topbar"><div class="page-title">Activity</div>
+    <label style="font-size:12px;color:var(--text2);display:flex;gap:6px;align-items:center;"><input type="checkbox" id="activity-errors-only" onchange="renderActivity()"> Errors only</label>
+    <button class="btn btn-ghost btn-sm" onclick="copyActivity()">Copy</button>
+    <button class="btn btn-ghost btn-sm" onclick="downloadActivity()">Download</button>
+    <button class="btn btn-ghost btn-sm" onclick="clearActivity()">Clear</button>
+  </div>
+  <div class="content"><div class="card" id="activity-list" style="max-height:75vh;overflow-y:auto;"></div></div>
+</div>
 
 <!-- SETTINGS PAGE (shown first if no API key) -->
 <div id="page-settings" class="hidden">
@@ -980,6 +1005,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
             <th>Season</th>
             <th>Font Type</th>
             <th>Kit Type</th>
+            <th>Garment group</th>
             <th>Roster Name</th>
             <th>Roster ID</th>
             <th style="text-align:center;">Active</th>
@@ -1295,6 +1321,7 @@ let CACHE_MAPS = {
   playerById: new Map(),      // AT record id -> player
   clubById: new Map(),        // AT record id -> club
   seasonById: new Map(),      // AT record id -> season
+  rosterMappingsByKey: new Map(),   // v239: `${ClubID}|${SeasonID}|font|kit` -> ALL active mappings with a real RosterID (several when a garment-group split is configured)
   rosterMappingByKey: new Map(), // `${ClubID}|${SeasonID}|${normFontType}|${normKitType}` -> rosterMapping
   kitColourByKey: new Map(),     // `${clubName}|${seasonLabel}|${kitType}` -> {BadgeColour, BadgeTextColour}
 };
@@ -1308,6 +1335,7 @@ function buildCacheMaps() {
   CACHE_MAPS.playerById = new Map((CACHE.players||[]).map(p => [p.id, p]));
   CACHE_MAPS.clubById = new Map((CACHE.clubs||[]).map(c => [c.id, c]));
   CACHE_MAPS.seasonById = new Map((CACHE.seasons||[]).map(s => [s.id, s]));
+  CACHE_MAPS.rosterMappingsByKey = indexRosterMappings(CACHE.rosterMappings);
   CACHE_MAPS.rosterMappingByKey = new Map(
     (CACHE.rosterMappings||[])
       .filter(r => r.Active)
@@ -1331,15 +1359,68 @@ function buildCacheMaps() {
 
 // Resolve ActorID / RosterID for a hero PID at import time
 // actorId = player's MDMActorID; clubId/seasonId/fontType/kitType from the hero row
-function resolveMdmLinks(actorId, clubId, seasonId, fontType, kitType) {
+// ─── v239: ROSTER BY GARMENT GROUP ───────────────────────────────────────────
+// One shared rule for importers, Backfill, Homeplate resolver, manual add and the RosterID correction tool.
+// A mapping row may carry a GarmentGroup: Standard (blank means the same), Youth or Minikit. Garment types map to a group like this:
+//   Youth   = kids_ss, kids_ls, pro_kids, pro_kids_ls, youth_kit      Minikit = little_kids, infants      Standard = the adult garments listed in STANDARD_GARMENTS
+//   A garment that is in NONE of the lists is unknown ('?'): on a split it is held (unlinked), never assumed to be adult.
+// Rules, for one club + season + font + kit:
+//  1. No mapping row has a group (every row blank): the OLD behaviour. One roster = used; several different rosters = ambiguous (unlinked).
+//  2. At least one row has a group (a split is configured): the PID needs the row for ITS group. Missing or ambiguous = unlinked.
+//     A Youth or Minikit PID NEVER falls back to the Standard (adult) roster, and a PID whose garment is unknown is never guessed.
+//  3. Minikit rows are optional (older seasons only): nothing requires them. The 7-character Minikit name limit is not handled here:
+//     a longer name is simply not on that roster in MDM, so its PID stays unlinked; nothing is ever shortened.
+const YOUTH_GARMENTS = new Set(['kids_ss', 'kids_ls', 'pro_kids', 'pro_kids_ls', 'youth_kit']), MINIKIT_GARMENTS = new Set(['little_kids', 'infants']),
+  STANDARD_GARMENTS = new Set(['mens_ss', 'mens_ls', 'mens_outsize', 'mens_unsponsored', 'pro_shirt', 'pro_shirt_ls', 'pro_unsponsored', 'retro_ss', 'womens', 'womens_cropped', 'womens_ls', 'womens_pro', 'womens_pro_ls', 'womens_unsponsored']);
+function garmentGroupOf(garmentType) {   // 'Youth' | 'Minikit' | 'Standard' | '' (blank) | '?' (a garment type nobody has classified)
+  const t = String(garmentType == null ? '' : garmentType).trim().toLowerCase();
+  return !t ? '' : YOUTH_GARMENTS.has(t) ? 'Youth' : MINIKIT_GARMENTS.has(t) ? 'Minikit' : STANDARD_GARMENTS.has(t) ? 'Standard' : '?';
+}
+function mappingGroupOf(v) {   // '' = no group given; blank and "Standard" are the same group; anything unrecognised is kept apart (and matches nothing)
+  const t = String(v == null ? '' : v).trim().toLowerCase();
+  return t === '' ? '' : t === 'standard' ? 'standard' : t === 'youth' ? 'youth' : t === 'minikit' ? 'minikit' : '?' + t;
+}
+function indexRosterMappings(rosterMappings) {   // key -> every ACTIVE mapping. Rows whose RosterID is unusable are KEPT: a Youth row still being filled in must keep the split in force
+  const by = new Map();
+  (rosterMappings || []).forEach(r => {
+    if (!r.Active) return;
+    const k = `${r.ClubID}|${r.SeasonID}|${String(r.FontType || '').trim().toLowerCase()}|${String(r.KitType || '').trim().toLowerCase()}`;
+    if (!by.has(k)) by.set(k, []);
+    by.get(k).push(r);
+  });
+  return by;
+}
+function selectRosterMapping(cands, garmentType) {   // pure: {status, rosterId, group, split}; status 'ok' is the only one that yields a roster
+  const list = cands || [];
+  if (!list.length) return {status: 'none', rosterId: '', group: '', split: false};
+  const ids = rows => [...new Set(rows.filter(r => isRealMdmId(r.RosterID)).map(r => String(r.RosterID).trim()))];   // only a real RosterID can be handed on
+  const split = list.some(r => mappingGroupOf(r.GarmentGroup) !== '');   // a configured group counts even if its RosterID is not usable yet
+  if (!split) { const u = ids(list); return u.length === 0 ? {status: 'none', rosterId: '', group: '', split} : u.length === 1 ? {status: 'ok', rosterId: u[0], group: '', split} : {status: 'ambiguous', rosterId: '', group: '', split}; }
+  const group = garmentGroupOf(garmentType);
+  if (!group) return {status: 'noGarment', rosterId: '', group, split};
+  if (group === '?') return {status: 'unknownGarment', rosterId: '', group, split};
+  const want = group.toLowerCase(), rows = list.filter(r => { const g = mappingGroupOf(r.GarmentGroup); return want === 'standard' ? (g === '' || g === 'standard') : g === want; });
+  const u = ids(rows);
+  if (!u.length) return {status: 'groupMissing', rosterId: '', group, split};
+  return u.length === 1 ? {status: 'ok', rosterId: u[0], group, split} : {status: 'groupAmbiguous', rosterId: '', group, split};
+}
+function finalImportGarment(h, dbParents, newParents) {   // the garment a sheet-imported hero ends up with: its parent's (existing, or the one this import creates), else the sheet's
+  const db = (dbParents || []).find(p => String(p.PID) === String(h.parentPid));
+  if (db && db.GarmentType) return db.GarmentType;
+  const np = (newParents || []).find(p => String(p.pid) === String(h.parentPid));
+  return (np && np.garmentType) || h.garmentType || '';
+}
+function resolveMdmLinks(actorId, clubId, seasonId, fontType, kitType, garmentType) {
   const rmKey = `${clubId}|${seasonId}|${String(fontType||'').trim().toLowerCase()}|${String(kitType||'').trim().toLowerCase()}`;
-  const rm = CACHE_MAPS.rosterMappingByKey.get(rmKey);
-  // A roster mapping whose RosterID is blank/0/-999 is as good as no mapping: never hand a placeholder on
-  const rosterId = (rm && isRealMdmId(rm.RosterID)) ? String(rm.RosterID).trim() : '';
+  let cands = CACHE_MAPS.rosterMappingsByKey && CACHE_MAPS.rosterMappingsByKey.get(rmKey);
+  if (!cands) { const one = CACHE_MAPS.rosterMappingByKey.get(rmKey); cands = one && isRealMdmId(one.RosterID) ? [one] : []; }
+  const sel = selectRosterMapping(cands, garmentType);
+  // A mapping whose RosterID is blank/0/-999 never counts (indexRosterMappings leaves it out): never hand a placeholder on
   return {
     actorId: isRealMdmId(actorId) ? String(actorId).trim() : '',
-    rosterId,
-    missingMapping: !rm || !rosterId,
+    rosterId: sel.status === 'ok' ? sel.rosterId : '',
+    missingMapping: sel.status !== 'ok',
+    mappingStatus: sel.status,
   };
 }
 
@@ -3045,7 +3126,7 @@ function validateMdmRosterMemberDuplicates() {
 function validateRosterMappingDuplicates() {
   const counts = new Map();
   (CACHE.rosterMappings||[]).filter(r=>r.Active).forEach(r => {
-    const k = `${r.ClubID}|${r.SeasonID}|${String(r.FontType||'').trim().toLowerCase()}|${String(r.KitType||'').trim().toLowerCase()}`;
+    const g = mappingGroupOf(r.GarmentGroup), k = `${r.ClubID}|${r.SeasonID}|${String(r.FontType||'').trim().toLowerCase()}|${String(r.KitType||'').trim().toLowerCase()}|${g === 'standard' ? '' : g}`;   // v239: Youth/Minikit rows beside a Standard row are a split, not duplicates
     if (!counts.has(k)) counts.set(k, []);
     counts.get(k).push(r);
   });
@@ -3439,6 +3520,54 @@ async function saveLoadSettings() {
   await loadCache(true, true);
 }
 
+// ─── v239: LIGHT / DARK THEME ────────────────────────────────────────────────
+const THEME_KEY = 'hph_theme';
+function normaliseTheme(v) { return v === 'light' ? 'light' : 'dark'; }   // anything else, including nothing saved, is the original dark look
+function getTheme() { try { return normaliseTheme(localStorage.getItem(THEME_KEY)); } catch (e) { return 'dark'; } }
+function applyTheme(t) {
+  const n = normaliseTheme(t);
+  try {
+    const root = document.documentElement;
+    if (n === 'light') root.setAttribute('data-theme', 'light'); else root.removeAttribute('data-theme');
+    const b = document.getElementById('theme-toggle'); if (b) b.textContent = n === 'light' ? '☾ Dark' : '☀ Light';
+  } catch (e) { /* no page yet */ }
+  return n;
+}
+function setTheme(t) { const n = applyTheme(t); try { localStorage.setItem(THEME_KEY, n); } catch (e) { /* not saved, still applied */ } return n; }
+function appliedTheme() { try { return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'; } catch (e) { return getTheme(); } }   // what is on screen right now
+function toggleTheme() { return setTheme(appliedTheme() === 'light' ? 'dark' : 'light'); }   // flips what is shown even when the choice cannot be saved
+
+// ─── v239: ACTIVITY LOG ──────────────────────────────────────────────────────
+// Everything the app tells you in a toast (and the result lines of the long write tools) is kept here, so a message that vanished after 3 seconds can still be read.
+const ACTIVITY_KEY = 'hph_activity', ACTIVITY_MAX = 300;
+let ACTIVITY = [], ACTIVITY_UNSEEN = 0;
+function activityText(msg) { return String(msg == null ? '' : msg).replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim(); }
+function logActivity(msg, type, now) {
+  const text = activityText(msg); if (!text) return null;
+  const e = {t: now || Date.now(), type: type === 'error' ? 'error' : 'ok', text};
+  ACTIVITY.push(e); if (ACTIVITY.length > ACTIVITY_MAX) ACTIVITY.splice(0, ACTIVITY.length - ACTIVITY_MAX);
+  if (activityPageOpen()) renderActivity(); else if (e.type === 'error') ACTIVITY_UNSEEN++;   // looking at the log: show the entry now, nothing is "unseen"
+  try { localStorage.setItem(ACTIVITY_KEY, JSON.stringify(ACTIVITY)); } catch (er) { /* kept in memory only */ }
+  updateActivityBadge(); return e;
+}
+function loadActivity() {
+  try { const a = JSON.parse(localStorage.getItem(ACTIVITY_KEY)); if (Array.isArray(a)) ACTIVITY = a.filter(e => e && typeof e.text === 'string' && typeof e.t === 'number').map(e => ({t: e.t, type: e.type === 'error' ? 'error' : 'ok', text: e.text})).slice(-ACTIVITY_MAX); } catch (e) { ACTIVITY = []; }
+}
+function activityLines(list) { return (list || []).map(e => `${new Date(e.t).toISOString().replace('T', ' ').slice(0, 19)}  ${e.type === 'error' ? 'ERROR' : 'ok   '}  ${e.text}`).join('\n'); }
+function activityPageOpen() { try { const pg = document.getElementById('page-activity'); return !!pg && !pg.classList.contains('hidden'); } catch (e) { return false; } }
+function updateActivityBadge() { try { const b = document.getElementById('activity-badge'); if (!b) return; b.textContent = String(ACTIVITY_UNSEEN); b.classList.toggle('hidden', ACTIVITY_UNSEEN === 0); } catch (e) { /* the badge is cosmetic */ } }
+function renderActivity() {
+  const box = document.getElementById('activity-list'); if (!box) return;
+  const only = !!(document.getElementById('activity-errors-only') || {}).checked, list = ACTIVITY.filter(e => !only || e.type === 'error').slice().reverse();
+  box.innerHTML = list.length ? list.map(e => `<div class="activity-row ${e.type}"><span class="t">${_escHtml(new Date(e.t).toLocaleTimeString())}</span><span class="m">${_escHtml(e.text)}</span></div>`).join('') : '<div style="padding:24px;text-align:center;color:var(--text3);">Nothing here yet.</div>';
+}
+function copyActivity() {
+  const txt = activityLines(ACTIVITY), fail = () => toast('Could not copy (the browser refused): use Download instead', 'error');
+  try { navigator.clipboard.writeText(txt).then(() => toast('Activity copied'), fail); } catch (e) { fail(); }   // a refused permission REJECTS the promise: it is not an exception
+}
+function downloadActivity() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([activityLines(ACTIVITY)], {type: 'text/plain'})); a.download = `hero-pid-hub-activity-${new Date().toISOString().slice(0, 10)}.txt`; a.click(); URL.revokeObjectURL(a.href); }
+function clearActivity() { ACTIVITY = []; ACTIVITY_UNSEEN = 0; try { localStorage.removeItem(ACTIVITY_KEY); } catch (e) { /* ignore */ } updateActivityBadge(); renderActivity(); }
+
 const CACHE_TTL=5*60*1000;
 const CACHE_KEYS={heroes:'hph_heroes',parents:'hph_parents',players:'hph_players'};
 function getCachedTable(k){try{const r=localStorage.getItem(k);if(!r)return null;const{data,ts}=JSON.parse(r);if(Date.now()-ts>CACHE_TTL){localStorage.removeItem(k);return null;}return data;}catch(e){return null;}}
@@ -3483,7 +3612,7 @@ async function loadCache(force, dataOnly=false){
 
 // ─── PAGES ────────────────────────────────────────────────────────────────────
 function showPage(page) {
-  ['search','manage','import','clubs','seasons','settings','cleanup','bulkexport','fonts','rostermappings','datahealth','analytics'].forEach(p => {
+  ['search','manage','import','clubs','seasons','settings','cleanup','bulkexport','fonts','rostermappings','datahealth','analytics','activity'].forEach(p => {
     document.getElementById('page-'+p)?.classList.add('hidden');
     document.getElementById('nav-'+p)?.classList.remove('active');
   });
@@ -3500,6 +3629,7 @@ function showPage(page) {
   if (page==='cleanup') { initBackfillSelects(); if (typeof initRosterFixSelects === 'function') initRosterFixSelects(); if (typeof dedupRenderJournalWarning === 'function') dedupRenderJournalWarning(); }
   if (page==='datahealth') calcDataHealth();
   if (page==='analytics') initAnalyticsPage();
+  if (page==='activity') { ACTIVITY_UNSEEN = 0; updateActivityBadge(); renderActivity(); }
   if (page==='search') {
     const sf = document.getElementById('filter-status');
     if (sf && sf.value === '') sf.value = 'active';
@@ -3712,7 +3842,7 @@ async function saveHero() {
     const fontType = document.getElementById('hero-font').value;
     const kitType = document.getElementById('hero-kit').value.trim();
     const player = CACHE.players.find(p=>p.id===playerId);
-    const {actorId, rosterId} = resolveMdmLinks(player?.MDMActorID||'', clubId, seasonId, fontType, kitType);
+    const {actorId, rosterId} = resolveMdmLinks(player?.MDMActorID||'', clubId, seasonId, fontType, kitType, document.getElementById('hero-garment').value);
     const rec = await atCreate(TABLES.heroes, {PID:pid,PlayerID:playerId,ClubID:clubId,SeasonID:seasonId,FontType:fontType,GarmentType:document.getElementById('hero-garment').value,KitType:kitType,Status:document.getElementById('hero-status').value,ActorID:actorId,RosterID:rosterId});
     CACHE.heroes.push({id:rec.id,...rec.fields});
     buildCacheMaps();
@@ -6103,7 +6233,7 @@ function showImportPreview(club, season, filename) {
   newHeroes.forEach(h => { const _par = CACHE_MAPS.parentByPID.get(String(h.parentPid)); if (_par && _par.GarmentType && _par.GarmentType !== h.garmentType) { const k = `parent ${h.parentPid}: sheet says ${h.garmentType}, database says ${_par.GarmentType}`; _gMis[k] = (_gMis[k]||0)+1; } });
   if (Object.keys(_gMis).length>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ Some PIDs take their garment from the EXISTING parent in the database, which differs from the sheet's label (the database wins):<br>${Object.entries(_gMis).map(([k,n])=>_escHtml(k)+' ('+n+' PID'+(n!==1?'s':'')+')').join('<br>')}</div>`;
   const _confirmBtn = document.getElementById('import-confirm-btn'); if (_confirmBtn) _confirmBtn.disabled = heldPlayers.length>0;
-  const missingMappingCount = newHeroes.filter(h => resolveMdmLinks('', h.clubId, h.seasonId, h.fontType, h.kitType).missingMapping).length;
+  const missingMappingCount = newHeroes.filter(h => resolveMdmLinks('', h.clubId, h.seasonId, h.fontType, h.kitType, finalImportGarment(h, CACHE.parents, d.parents)).missingMapping).length;
   if (missingMappingCount>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${missingMappingCount} hero PID${missingMappingCount!==1?'s':''} have no roster mapping — RosterID will be blank (flagged later in Data Health)</div>`;
   html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Sheets: ${d.sheets.join(', ')}</div>`;
   if ((d.rerouted||[]).length>0) { const _by={}; d.rerouted.forEach(r=>{ const k=(FONT_LABELS[r.from]||r.from)+' → '+(FONT_LABELS[r.to]||r.to); (_by[k]=_by[k]||new Set()).add(r.name); }); html+=`<div style="background:rgba(99,179,237,0.08);border:1px solid rgba(99,179,237,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:#63b3ed;margin-bottom:10px;">ℹ Moved by MDM roster evidence (the sheet name gave no font): ${Object.keys(_by).map(k=>'<b>'+_escHtml(k)+'</b>: '+[..._by[k]].map(_escHtml).join(', ')).join(' · ')}. These players are on a women's roster for this club and season and on no men's roster. If one is wrong, fix the MDM roster or rename the sheet and upload again.</div>`; }
@@ -6246,8 +6376,8 @@ async function confirmImport() {
         const playerId=playerMap[importNameKey(h.playerName, h.clubId)];
         const parent=CACHE.parents.find(p=>String(p.PID)===String(h.parentPid));
         const player=CACHE.players.find(p=>p.id===playerId);
-        const {actorId,rosterId}=resolveMdmLinks(player?.MDMActorID||'',h.clubId,h.seasonId,h.fontType,h.kitType);
         const _parentGarmentDb = parent && parent.GarmentType ? parent.GarmentType : '';   // v237.1: the parent that is actually linked decides the garment
+        const {actorId,rosterId}=resolveMdmLinks(player?.MDMActorID||'',h.clubId,h.seasonId,h.fontType,h.kitType,_parentGarmentDb||h.garmentType);   // v239: the roster follows the garment that is WRITTEN, not the sheet's
         return {PID:h.pid,PlayerID:playerId||'',ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:_parentGarmentDb||h.garmentType,GarmentRaw:_parentGarmentDb||h.garmentRaw,KitType:h.kitType,Status:h.status,ParentPIDID:parent?parent.id:'',ActorID:actorId,RosterID:rosterId};
       });
       // Write in batches of 10 with progress
@@ -6428,8 +6558,9 @@ async function storedLinksApply() {
       + (failedLeft.length ? `<div style="font-size:12px;color:var(--text2);margin-top:6px;">First failure: ${_escHtml(failedLeft[0].error)}</div>` : '')
       + (readErr ? `<div style="font-size:12px;color:var(--amber);margin-top:6px;">The read-back could not be done (${_escHtml(readErr)}), so nothing is confirmed. Press Preview again to see where things stand.</div>` : '')
       + (unconfirmed ? `<div style="font-size:12px;color:var(--amber);margin-top:6px;">Press Preview again to see what is still unlinked.</div>` : '');
+    logActivity(`Link from stored rosters (${confirmedSet.size} linked and confirmed${unconfirmed ? `, ${unconfirmed} not confirmed` : ''}${failedLeft.length ? `, ${failedLeft.length} failed` : ''})`, bad ? 'error' : 'ok');
     _storedLinksPlan = null;
-  } catch (e) { out.innerHTML = `<div style="font-size:12px;color:var(--red);">Stopped: ${_escHtml(e.message || e)}</div>`; }
+  } catch (e) { out.innerHTML = `<div style="font-size:12px;color:var(--red);">Stopped: ${_escHtml(e.message || e)}</div>`; logActivity('Link from stored rosters stopped: ' + (e.message || e), 'error'); }
   finally { _storedLinksRunning = false; }
 }
 // ─── v239: CORRECT WRONG ROSTERIDs FROM THE MAPPINGS ─────────────────────────
@@ -6437,30 +6568,25 @@ async function storedLinksApply() {
 // A group is (current RosterID -> mapped RosterID). "stray" = the current RosterID is not a mapped roster of this club and season (safe to correct);
 // "mapped" = it IS another mapped roster (could be deliberate, e.g. Youth or Minikit moved by hand): shown, never ticked by default.
 function planRosterIdFix({heroes, rosterMappings, clubId, seasonId}) {
-  const plan = {total: 0, ok: 0, noMapping: 0, ambiguousMapping: 0, blank: 0, notActive: 0, groups: [], fixable: 0, linkedCleared: 0, signature: ''};
+  const plan = {total: 0, ok: 0, noMapping: 0, ambiguousMapping: 0, groupMissing: 0, blank: 0, notActive: 0, groups: [], fixable: 0, linkedCleared: 0, signature: ''};
   const lc = v => String(v == null ? '' : v).trim().toLowerCase();
-  const maps = new Map(), mapped = new Set(), amb = new Set();
-  (rosterMappings || []).forEach(m => {
-    if (!m.Active || m.ClubID !== clubId || m.SeasonID !== seasonId || !isRealMdmId(m.RosterID)) return;
-    const k = lc(m.FontType) + '|' + lc(m.KitType), rid = _mdmStr(m.RosterID);
-    mapped.add(rid);
-    if (maps.has(k) && maps.get(k) !== rid) amb.add(k); else maps.set(k, rid);
-  });
+  const byKey = indexRosterMappings((rosterMappings || []).filter(m => m.ClubID === clubId && m.SeasonID === seasonId)), mapped = new Set();   // the SAME selection rule the importers use
+  byKey.forEach(list => list.forEach(m => { if (isRealMdmId(m.RosterID)) mapped.add(_mdmStr(m.RosterID)); }));
   const groups = new Map(), sig = [];
   (heroes || []).forEach(h => {
     if (h.ClubID !== clubId || h.SeasonID !== seasonId) return;
     plan.total++;
     if (h.Status !== 'active') { plan.notActive++; return; }
     if (!isRealMdmId(h.RosterID)) { plan.blank++; return; }          // a blank RosterID is the backfill's job
-    const k = lc(h.FontType) + '|' + lc(h.KitType);
-    if (amb.has(k)) { plan.ambiguousMapping++; return; }
-    const to = maps.get(k);
-    if (!to) { plan.noMapping++; return; }
-    const from = _mdmStr(h.RosterID);
+    const sel = selectRosterMapping(byKey.get(`${clubId}|${seasonId}|${lc(h.FontType)}|${lc(h.KitType)}`), h.GarmentType);
+    if (sel.status === 'none') { plan.noMapping++; return; }
+    if (sel.status === 'ambiguous' || sel.status === 'groupAmbiguous') { plan.ambiguousMapping++; return; }
+    if (sel.status !== 'ok') { plan.groupMissing++; return; }      // a split is configured but this PID's garment group has no roster (or its garment is unknown): never guessed
+    const to = sel.rosterId, from = _mdmStr(h.RosterID);
     if (from === to) { plan.ok++; return; }
     const key = from + '>' + to, rmid = isRealMdmId(h.RosterMemberID) ? _mdmStr(h.RosterMemberID) : '';
     if (!groups.has(key)) groups.set(key, {key, from, to, kind: mapped.has(from) ? 'mapped' : 'stray', fonts: new Set(), kits: new Set(), items: []});
-    const g = groups.get(key); g.fonts.add(String(h.FontType || '')); g.kits.add(String(h.KitType || '')); g.items.push({id: h.id, pid: h.PID, rmid, font: lc(h.FontType), kit: lc(h.KitType)});
+    const g = groups.get(key); g.fonts.add(String(h.FontType || '')); g.kits.add(String(h.KitType || '')); g.items.push({id: h.id, pid: h.PID, rmid, font: lc(h.FontType), kit: lc(h.KitType), garment: lc(h.GarmentType)});
     sig.push(`${h.id}|${from}|${to}|${rmid}`);
   });
   plan.groups = [...groups.values()].map(g => ({...g, fonts: [...g.fonts].sort(), kits: [...g.kits].sort(), linked: g.items.filter(i => i.rmid).length}))
@@ -6493,7 +6619,7 @@ async function rosterFixPreview() {
     plan.clubId = clubId; plan.seasonId = seasonId; _rosterFixPlan = plan;
     const tile = (l, n, c) => `<div style="flex:1;min-width:110px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;"><div style="font-size:11px;color:var(--text2);">${l}</div><div style="font-size:18px;font-weight:600;${c ? 'color:' + c + ';' : ''}">${n}</div></div>`;
     const name = id => { const r = (CACHE.rosterMappings || []).find(m => _mdmStr(m.RosterID) === id && m.ClubID === clubId && m.SeasonID === seasonId); return r ? ` (${_escHtml(r.RosterName || r.Kit || '')})` : ''; };
-    out.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${tile('Hero PIDs in this club and season', plan.total)}${tile('Already right', plan.ok)}${tile('Wrong RosterID', plan.fixable, plan.fixable ? 'var(--amber)' : '')}${tile('Links cleared if fixed', plan.linkedCleared)}${tile('No mapping', plan.noMapping)}${tile('Mapping unclear', plan.ambiguousMapping)}${tile('Blank (use backfill)', plan.blank)}${tile('Not active (left alone)', plan.notActive)}</div>`
+    out.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${tile('Hero PIDs in this club and season', plan.total)}${tile('Already right', plan.ok)}${tile('Wrong RosterID', plan.fixable, plan.fixable ? 'var(--amber)' : '')}${tile('Links cleared if fixed', plan.linkedCleared)}${tile('No mapping', plan.noMapping)}${tile('Mapping unclear', plan.ambiguousMapping)}${tile('No roster for its garment group', plan.groupMissing)}${tile('Blank (use backfill)', plan.blank)}${tile('Not active (left alone)', plan.notActive)}</div>`
       + (plan.groups.length ? `<table class="data-table" style="font-size:11px;margin-bottom:10px;"><thead><tr><th></th><th>Now</th><th>Mapped</th><th>Font / kit</th><th>PIDs</th><th>Links cleared</th><th></th></tr></thead><tbody>${plan.groups.map(g => `<tr><td><input type="checkbox" class="rfix-cb" value="${_escHtml(g.key)}" ${g.kind === 'stray' ? 'checked' : ''}></td><td class="mono">${_escHtml(g.from)}</td><td class="mono">${_escHtml(g.to)}${name(g.to)}</td><td>${g.fonts.map(_escHtml).join(', ')} / ${g.kits.map(_escHtml).join(', ')}</td><td>${g.items.length}</td><td>${g.linked}</td><td style="color:${g.kind === 'stray' ? 'var(--text3)' : 'var(--amber)'};">${g.kind === 'stray' ? 'not a mapped roster' : '⚠ another mapped roster: may be deliberate (Youth, Minikit)'}</td></tr>`).join('')}</tbody></table>`
         + `<button class="btn btn-primary btn-sm" id="rfix-apply-btn" onclick="rosterFixApply()">Correct the ticked groups</button> <button class="btn btn-ghost btn-sm" onclick="rosterFixClear()">Cancel</button>`
         : `<div style="font-size:12px;color:var(--green);">✓ Every active hero PID with a mapping already has the mapped RosterID.</div>`);
@@ -6516,13 +6642,13 @@ async function rosterFixApply() {
     if (fresh.signature !== prev.signature) { out.innerHTML = '<div style="font-size:12px;color:var(--red);">Airtable changed since the preview, so nothing was written. Press Preview again.</div>'; _rosterFixPlan = null; return; }
     const groups = fresh.groups.filter(g => keys.has(g.key));
     const items = [], want = new Map();
-    groups.forEach(g => g.items.forEach(it => { items.push({id: it.id, fields: it.rmid ? {RosterID: g.to, RosterMemberID: ''} : {RosterID: g.to}, expect: {from: g.from, rmid: it.rmid, font: it.font, kit: it.kit}}); want.set(it.id, {to: g.to, rmid: it.rmid}); }));
+    groups.forEach(g => g.items.forEach(it => { items.push({id: it.id, fields: it.rmid ? {RosterID: g.to, RosterMemberID: ''} : {RosterID: g.to}, expect: {from: g.from, rmid: it.rmid, font: it.font, kit: it.kit, garment: it.garment}}); want.set(it.id, {to: g.to, rmid: it.rmid}); }));
     const guard = async chunk => {                                                        // right before each PATCH: still exactly what was planned?
       const cur = await _atRetry(() => atFetchByIds(TABLES.heroes, chunk.map(c => c.id)));
       const keep = [], skip = [], lc = v => String(v == null ? '' : v).trim().toLowerCase();
       chunk.forEach(c => { const r = cur.get(c.id), e = c.expect; const rm = r && isRealMdmId(r.RosterMemberID) ? _mdmStr(r.RosterMemberID) : '';
         // the mapped roster was chosen for THIS font and kit: a PID whose font or kit changed since the plan must not get that roster
-        if (r && r.Status === 'active' && _mdmStr(r.RosterID) === e.from && rm === e.rmid && lc(r.FontType) === e.font && lc(r.KitType) === e.kit && r.ClubID === prev.clubId && r.SeasonID === prev.seasonId) keep.push(c); else skip.push(c); });
+        if (r && r.Status === 'active' && _mdmStr(r.RosterID) === e.from && rm === e.rmid && lc(r.FontType) === e.font && lc(r.KitType) === e.kit && lc(r.GarmentType) === e.garment && r.ClubID === prev.clubId && r.SeasonID === prev.seasonId) keep.push(c); else skip.push(c); });
       return {keep, skip};
     };
     let res = await atUpdateBatchSafe(TABLES.heroes, items, (done, total) => { out.innerHTML = `<div style="font-size:12px;color:var(--text2);">Correcting… ${done} of ${total}</div>`; }, guard);
@@ -6541,8 +6667,9 @@ async function rosterFixApply() {
       + (failedLeft.length ? `<div style="font-size:12px;color:var(--text2);margin-top:6px;">First failure: ${_escHtml(failedLeft[0].error)}</div>` : '')
       + (readErr ? `<div style="font-size:12px;color:var(--amber);margin-top:6px;">The read-back could not be done (${_escHtml(readErr)}), so nothing is confirmed. Press Preview again to see where things stand.</div>` : '')
       + (bad || leftAlone ? `<div style="font-size:12px;color:var(--amber);margin-top:6px;">Press Preview again to see what is still wrong.</div>` : '');
+    logActivity(`RosterID correction (${confirmedSet.size} corrected and confirmed${unconfirmed ? `, ${unconfirmed} not confirmed` : ''}${leftAlone ? `, ${leftAlone} left alone` : ''}${failedLeft.length ? `, ${failedLeft.length} failed` : ''})`, bad || leftAlone ? 'error' : 'ok');
     _rosterFixPlan = null;
-  } catch (e) { out.innerHTML = `<div style="font-size:12px;color:var(--red);">Stopped: ${_escHtml(e.message || e)}</div>`; }
+  } catch (e) { out.innerHTML = `<div style="font-size:12px;color:var(--red);">Stopped: ${_escHtml(e.message || e)}</div>`; logActivity('RosterID correction stopped: ' + (e.message || e), 'error'); }
   finally { _rosterFixRunning = false; }
 }
 function clearImport(force) {
@@ -6775,7 +6902,7 @@ function showCreationPreview(fileNames) {
   let html=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;"><div class="stat-pill"><span class="stat-label">Hero PIDs</span><span class="stat-value" style="color:var(--green);">${d.heroes.length}</span></div><div class="stat-pill"><span class="stat-label">Provisional</span><span class="stat-value" style="color:var(--amber);">${d.provisional.length}</span></div><div class="stat-pill"><span class="stat-label">Duplicates</span><span class="stat-value" style="color:var(--text3);">${d.stats.duplicate}</span></div><div class="stat-pill"><span class="stat-label">New Parents</span><span class="stat-value" style="color:var(--accent);">${d.parents.length}</span></div></div>`;
   if (d.stats.matched>0) html+=`<div style="background:var(--green-bg);border:1px solid rgba(61,214,140,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--green);margin-bottom:10px;">✓ ${d.stats.matched} PIDs matched to existing parent PIDs</div>`;
   if (d.provisional.length>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${d.provisional.length} PIDs have no player name — stored as provisional.<button class="btn btn-ghost btn-sm" style="margin-left:8px;" onclick="exportProvisionalList()">⎘ Export for Homeplate</button></div>`;
-  const creationMissingMapping = (d.heroes||[]).filter(h => resolveMdmLinks('', h.clubId, h.seasonId, h.fontType, h.kitType).missingMapping).length;
+  const creationMissingMapping = (d.heroes||[]).filter(h => resolveMdmLinks('', h.clubId, h.seasonId, h.fontType, h.kitType, h.garmentType).missingMapping).length;
   if (creationMissingMapping>0) html+=`<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);margin-bottom:10px;">⚠ ${creationMissingMapping} hero PID${creationMissingMapping!==1?'s':''} have no roster mapping — RosterID will be blank (flagged later in Data Health)</div>`;
   if (d.duplicatePids&&d.duplicatePids.length>0) {
     const atDups=d.duplicatePids.filter(x=>x.reason==='already in Airtable');
@@ -6856,7 +6983,7 @@ async function confirmCreationImport() {
       recs.forEach((r,i)=>{ CACHE.players.push({id:r.id,...r.fields}); playerMap[newPlayerKeys[i]]=r.id; });
     }
     if (d.heroes.length>0) {
-      const heroFields=d.heroes.map(h=>{const pId=parentIdMap[String(h.basePid)]||'';const playerId=playerMap[h.playerName.toLowerCase()+'|'+h.clubId]||'';const player=CACHE.players.find(p=>p.id===playerId);const{actorId,rosterId}=resolveMdmLinks(player?.MDMActorID||'',h.clubId,h.seasonId,h.fontType,h.kitType);return {PID:h.pid,PlayerID:playerId,ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.garmentRaw,KitType:h.kitType,Status:'active',ActorID:actorId,RosterID:rosterId,...(pId?{ParentPIDID:pId}:{}),...(h.jerseyColour?{JerseyColour:h.jerseyColour}:{})};}).filter(h=>h.PlayerID);
+      const heroFields=d.heroes.map(h=>{const pId=parentIdMap[String(h.basePid)]||'';const playerId=playerMap[h.playerName.toLowerCase()+'|'+h.clubId]||'';const player=CACHE.players.find(p=>p.id===playerId);const{actorId,rosterId}=resolveMdmLinks(player?.MDMActorID||'',h.clubId,h.seasonId,h.fontType,h.kitType,h.garmentType);return {PID:h.pid,PlayerID:playerId,ClubID:h.clubId,SeasonID:h.seasonId,FontType:h.fontType,GarmentType:h.garmentType,GarmentRaw:h.garmentRaw,KitType:h.kitType,Status:'active',ActorID:actorId,RosterID:rosterId,...(pId?{ParentPIDID:pId}:{}),...(h.jerseyColour?{JerseyColour:h.jerseyColour}:{})};}).filter(h=>h.PlayerID);
       const recs=await atCreateBatch(TABLES.heroes,heroFields);
       _createdHeroes.push(...recs);
       recs.forEach(r=>CACHE.heroes.push({id:r.id,...r.fields}));
@@ -7415,8 +7542,8 @@ async function confirmHomeplateResolve() {
       CACHE.players.push({id:rec.id,...rec.fields}); player={id:rec.id,...rec.fields};
     }
     const linkActorId = isRealMdmId(player.MDMActorID) ? String(player.MDMActorID).trim() : ''; // never copy a -999/0 placeholder onto a hero
-    await atUpdate(TABLES.heroes,r.heroId,{PlayerID:player.id,Status:'active',ActorID:linkActorId,...(()=>{const{rosterId}=resolveMdmLinks(linkActorId,r.clubId,r.seasonId,hero.FontType||'',hero.KitType||'');return rosterId?{RosterID:rosterId}:{};})()});
-    const {rosterId} = resolveMdmLinks(linkActorId,r.clubId,r.seasonId,hero.FontType||'',hero.KitType||'');
+    await atUpdate(TABLES.heroes,r.heroId,{PlayerID:player.id,Status:'active',ActorID:linkActorId,...(()=>{const{rosterId}=resolveMdmLinks(linkActorId,r.clubId,r.seasonId,hero.FontType||'',hero.KitType||'',hero.GarmentType||'');return rosterId?{RosterID:rosterId}:{};})()});
+    const {rosterId} = resolveMdmLinks(linkActorId,r.clubId,r.seasonId,hero.FontType||'',hero.KitType||'',hero.GarmentType||'');
     hero.PlayerID=player.id; hero.Status='active'; if(linkActorId) hero.ActorID=linkActorId; if(rosterId) hero.RosterID=rosterId;
     resolved++;
   }
@@ -7522,7 +7649,7 @@ async function executeWipe(){
     toast(scopeClub ? (scopeClub.Name+' data cleared') : (target==='full'?'Full wipe complete':'Cleared'));
   }catch(e){toast('Error: '+e.message,'error');}
 }
-function toast(msg,type='success'){const container=document.getElementById('toast-container');if(!container){console.warn('[toast]',msg);return;}const t=document.createElement('div');t.className=`toast ${type}`;t.innerHTML=`<span class="toast-dot"></span>${msg}`;container.appendChild(t);setTimeout(()=>t.remove(),3000);}
+function toast(msg,type='success'){try{logActivity(msg,type);}catch(e){/* the log must never stop a message */}const container=document.getElementById('toast-container');if(!container){console.warn('[toast]',msg);return;}const t=document.createElement('div');t.className=`toast ${type}`;t.innerHTML=`<span class="toast-dot"></span>${msg}`;container.appendChild(t);setTimeout(()=>t.remove(),3000);}
 
 function fixEncoding(str) {
   if (!str) return str;
@@ -9922,7 +10049,7 @@ async function runMdmBackfill(dryRun) {
     const playerActor = isRealMdmId(player?.MDMActorID) ? String(player.MDMActorID).trim() : '';
     const heroActor   = isRealMdmId(hero.ActorID) ? String(hero.ActorID).trim() : '';
     const actorId = playerActor || heroActor;
-    const {rosterId, missingMapping} = resolveMdmLinks(actorId, hero.ClubID, hero.SeasonID, hero.FontType||'', hero.KitType||'');
+    const {rosterId, missingMapping} = resolveMdmLinks(actorId, hero.ClubID, hero.SeasonID, hero.FontType||'', hero.KitType||'', hero.GarmentType||'');
     const fields = {};
     if (!isRealMdmId(hero.ActorID) && isRealMdmId(actorId)) fields.ActorID = String(actorId).trim();
     if (!isRealMdmId(hero.RosterID) && isRealMdmId(rosterId)) fields.RosterID = String(rosterId).trim();
@@ -10092,7 +10219,7 @@ function initRosterMappingsPage() {
   const dupeBanner = document.getElementById('rm-dupe-banner');
   if (dupes.length > 0) {
     dupeBanner.style.display = '';
-    dupeBanner.innerHTML = `⚠ ${dupes.length} duplicate active mapping${dupes.length!==1?'s':''} detected — same Club/Season/FontType/KitType has multiple active rows. Fix in Airtable before importing.<br><span style="font-size:11px;color:var(--text3);">${dupes.map(d=>`<span class="mono">${d.key}</span> (${d.count} rows)`).join(' · ')}</span>`;
+    dupeBanner.innerHTML = `⚠ ${dupes.length} duplicate active mapping${dupes.length!==1?'s':''} detected — same Club/Season/FontType/KitType/GarmentGroup has multiple active rows. Fix in Airtable before importing.<br><span style="font-size:11px;color:var(--text3);">${dupes.map(d=>`<span class="mono">${d.key}</span> (${d.count} rows)`).join(' · ')}</span>`;
   } else {
     dupeBanner.style.display = 'none';
   }
@@ -10142,6 +10269,7 @@ function renderRosterMappings() {
         <td>${season?.Label||r.SeasonID||'—'}</td>
         <td><span class="badge" style="background:rgba(99,179,237,0.12);color:#63b3ed;border:1px solid rgba(99,179,237,0.2);font-size:10px;">${r.FontType||'—'}</span></td>
         <td>${r.KitType||'—'}</td>
+        <td style="color:var(--text2);">${r.GarmentGroup||'—'}</td>
         <td style="color:var(--text2);">${r.RosterName||'—'}</td>
         <td class="mono" style="color:var(--text3);font-size:11px;">${r.RosterID||'—'}</td>
         <td style="text-align:center;">
@@ -10608,6 +10736,7 @@ function exportExclusionsFromFilters() {
   toast(`Exported ${rows.length} exclusion${rows.length!==1?'s':''}`);
 }
 
+try { loadActivity(); applyTheme(getTheme()); } catch (e) { /* the app starts without them */ }
 init();
 </script>
 
