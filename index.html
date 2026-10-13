@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v238-wip.12 -->
+<!-- HEROPID-BUILD-v239-wip.8 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -151,7 +151,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
   <div class="sidebar-logo">
     <div class="logo-mark">Hero<span>PID</span></div>
     <div class="logo-sub">Hub · Fanatics</div>
-    <div class="logo-version" id="app-version" title="Build stamp: HEROPID-BUILD-v238-wip">v238 (work in progress)</div>
+    <div class="logo-version" id="app-version" title="Build stamp: HEROPID-BUILD-v239-wip">v239 (work in progress)</div>
   </div>
   <nav class="sidebar-nav">
     <div class="nav-section">Main</div>
@@ -176,7 +176,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
   </div>
   <div class="sidebar-stats">
     <div class="stat-pill"><span class="stat-label">Hero PIDs</span><span class="stat-value" id="stat-hero">—</span></div>
-    <div class="stat-pill"><span class="stat-label">MDM Linked</span><span class="stat-value" id="stat-mdm-linked">—</span></div>
+    <div class="stat-pill"><span class="stat-label" id="stat-mdm-label">MDM Linked</span><span class="stat-value" id="stat-mdm-linked">—</span></div>
     <div class="stat-pill" style="cursor:pointer;" onclick="showPage('datahealth')"><span class="stat-label">Data Health</span><span class="stat-value" id="stat-health">—</span></div>
   </div>
 </aside>
@@ -187,6 +187,10 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 <div id="page-settings" class="hidden">
   <div class="topbar"><div class="page-title">Settings</div></div>
   <div class="content">
+    <div class="api-setup" style="margin-bottom:16px;">
+      <div class="api-setup-title">Seasons to load</div>
+      <div id="load-seasons-box"></div>
+    </div>
     <div class="api-setup">
       <div class="api-setup-title">Airtable Connection</div>
       <div id="connection-status-banner" style="display:none;border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:20px;font-size:12px;display:flex;align-items:center;gap:10px;"></div>
@@ -306,7 +310,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       </div>
       <div class="card"><table class="data-table"><thead><tr><th id="parents-th-chk" style="width:32px;padding:8px 4px;"></th><th>PID</th><th>Club</th><th>Season</th><th>Kit</th><th>Garment</th><th></th></tr></thead><tbody id="parents-tbody"><tr><td colspan="6" class="loading"><div class="loading-spinner"></div><br>Loading...</td></tr></tbody></table></div>
     </div>
-    <div id="tabcontent-hero-pids" class="hidden"><div id="heroes-selection-bar"></div><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div id="heroes-perpage"></div><div id="heroes-pager" style="margin-left:auto;"></div></div>
+    <div id="tabcontent-hero-pids" class="hidden"><div id="heroes-partial-note"></div><div id="heroes-selection-bar"></div><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div id="heroes-perpage"></div><div id="heroes-pager" style="margin-left:auto;"></div></div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
         <span style="font-family:'Syne',sans-serif;font-size:14px;font-weight:600;">Hero PIDs</span>
         <button class="btn btn-primary btn-sm" onclick="openModal('modal-add-hero')">+ Add Hero PID</button>
@@ -1263,7 +1267,13 @@ let CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMember
 let ANALYTICS_CACHE = null;
 function invalidateDerivedReports() { ANALYTICS_CACHE = null; if (typeof invalidateIntegrityExport === 'function') invalidateIntegrityExport(); }
 // O(1) lookup maps — rebuilt whenever CACHE arrays change
+// v239: LOAD BY SEASON. all = every season's heroes are loaded. loaded = season ids whose heroes are in CACHE.heroes. light = [PID, SeasonID, PlayerID]
+// rows for the heroes of seasons NOT loaded (so duplicate checks still see earlier seasons). pidIndexReady = the light list is complete.
+let LOAD_STATE = {all: true, loaded: new Set(), light: [], pidIndexReady: true, sig: ''};
 let CACHE_MAPS = {
+  lightByPid: new Map(),      // v239: String(PID) -> {season, player, club} for heroes of seasons that are not loaded
+  lightSeasonsByClub: new Map(),   // v239: ClubID -> Set of season ids that have heroes in seasons that are not loaded
+  lightCountByPlayer: new Map(),   // v239: PlayerID -> hero count in seasons that are not loaded
   heroByPID: new Map(),       // String(PID) -> hero
   heroById: new Map(),        // AT record id -> hero
   parentByPID: new Map(),     // String(PID) -> parent
@@ -1278,6 +1288,7 @@ function buildCacheMaps() {
   invalidateDerivedReports();
   CACHE_MAPS.heroByPID = new Map((CACHE.heroes||[]).map(h => [String(h.PID), h]));
   CACHE_MAPS.heroById = new Map((CACHE.heroes||[]).map(h => [h.id, h]));
+  { const li = buildLightIndex(LOAD_STATE && !LOAD_STATE.all ? LOAD_STATE.light : [], LOAD_STATE ? LOAD_STATE.loaded : new Set(), CACHE_MAPS.heroByPID); CACHE_MAPS.lightByPid = li.byPid; CACHE_MAPS.lightCountByPlayer = li.countByPlayer; CACHE_MAPS.lightSeasonsByClub = li.seasonsByClub; }
   CACHE_MAPS.parentByPID = new Map((CACHE.parents||[]).map(p => [String(p.PID), p]));
   CACHE_MAPS.parentById = new Map((CACHE.parents||[]).map(p => [p.id, p]));
   CACHE_MAPS.playerById = new Map((CACHE.players||[]).map(p => [p.id, p]));
@@ -1390,11 +1401,12 @@ async function atUpdateBatchSafe(table, items, onProgress, guard) {
   return {ok, failed, skipped};
 }
 // Read a whole table page by page: each page is retried ON ITS OWN (the scan resumes from the failed page, it never restarts) and pages are paced.
-async function _atGetAllPaced(table, filterFormula = '') {
+async function _atGetAllPaced(table, filterFormula = '', fields = null) {
   const records = []; let offset = null;
   do {
     const params = new URLSearchParams();
     if (filterFormula) params.set('filterByFormula', filterFormula);
+    (fields || []).forEach(f => params.append('fields[]', f));
     if (offset) params.set('offset', offset);
     params.set('pageSize', '100');
     const data = await _atRetry(() => atFetch(`${table}?${params}`));
@@ -2198,6 +2210,7 @@ function _integGroup(items) {            // aggregate PID-level items per player
 }
 
 async function runIntegrityCheck() {
+  if (!(await ensureAllSeasonsLoaded('The integrity check'))) return;
   const sel = document.getElementById('integrity-club');
   const statusEl = document.getElementById('integrity-status'), outEl = document.getElementById('integrity-output');
   const applyBtn = document.getElementById('integrity-apply-btn'), runBtn = document.getElementById('integrity-run-btn');
@@ -2277,6 +2290,7 @@ async function runIntegrityCheck() {
 }
 
 async function applyIntegrityRepair() {
+  if (!allSeasonsLoaded()) { toast('The repair needs every season loaded. Run the check again (it offers to load them).', 'error'); return; }
   const sel = document.getElementById('integrity-club');
   const statusEl = document.getElementById('integrity-status'), outEl = document.getElementById('integrity-output');
   const applyBtn = document.getElementById('integrity-apply-btn'), runBtn = document.getElementById('integrity-run-btn');
@@ -2622,6 +2636,7 @@ function dedupExecSyncButtons() {
 }
 
 async function buildDedupExecPlan() {
+  if (!allSeasonsLoaded()) { toast('Duplicate cleanup needs every season loaded. Tick all seasons in Settings first (Save and reload).', 'error'); return; }
   const statusEl = _dedupEl('dedup-exec-status'), outEl = _dedupEl('dedup-exec-output'), planBtn = _dedupEl('dedup-exec-plan-btn');
   const sel = _dedupEl('dedup-exec-club'), clubId = sel.value;
   _dedupPlan = null; _dedupEl('dedup-exec-backup').checked = false;      // the backup acknowledgement belongs to ONE plan
@@ -2680,6 +2695,7 @@ function downloadDedupLogCsv() {
 function stopDedupRun() { _dedupStop = true; _dedupEl('dedup-exec-status').textContent = 'Stopping after the current pair…'; }
 
 async function runDedupMerge() {
+  if (!allSeasonsLoaded()) { toast('Duplicate cleanup needs every season loaded. Tick all seasons in Settings first (Save and reload).', 'error'); return; }
   const statusEl = _dedupEl('dedup-exec-status'), outEl = _dedupEl('dedup-exec-output');
   const sel = _dedupEl('dedup-exec-club'), cnt = _dedupEl('dedup-exec-count');
   const planBtn = _dedupEl('dedup-exec-plan-btn'), runBtn = _dedupEl('dedup-exec-run-btn'), stopBtn = _dedupEl('dedup-exec-stop-btn');
@@ -2856,6 +2872,7 @@ async function runDedupMerge() {
 
 // ─── PLAYER DEDUP PREVIEW (Step 9.0) ─────────────────────────────────────────
 function runDedupPreview() {
+  if (!allSeasonsLoaded()) { toast('Duplicate cleanup needs every season loaded. Tick all seasons in Settings first (Save and reload).', 'error'); return; }
   const outputEl = document.getElementById('dedup-preview-output');
   outputEl.style.display = '';
 
@@ -3100,6 +3117,7 @@ async function atDelete(table, id) {
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 function refreshSettingsStatus() {
+  if (typeof renderLoadSettings === 'function') renderLoadSettings();
   const banner = document.getElementById('connection-status-banner');
   const tokenInput = document.getElementById('at-token');
   const baseInput = document.getElementById('at-base');
@@ -3122,6 +3140,7 @@ function refreshSettingsStatus() {
 }
 
 function refreshData(){
+  try { localStorage.removeItem(LIGHT_KEY); } catch (e) { /* storage unavailable */ }   // v239: Refresh also re-lists the earlier seasons' PIDs, so changes made elsewhere are seen
   const btns = Array.from(document.querySelectorAll('.js-refresh-data'));
   const origs = btns.map(b => b.textContent);
   const setBusy = on => btns.forEach((b,i) => { b.textContent = on ? '↻ Syncing...' : origs[i]; b.disabled = on; });
@@ -3275,6 +3294,137 @@ async function ensureFields() {
   }
 }
 
+
+// ─── v239: LOAD BY SEASON ────────────────────────────────────────────────────
+const LOAD_SEL_KEY = 'hph_load_seasons', LIGHT_KEY = 'hph_pidlight', LIGHT_TTL = 24*60*60*1000, DEFAULT_LOAD_LABEL = '2026-27';
+// Pure. selection: 'all' | [season ids] | null (default). Never returns an empty load: an unusable selection falls back to the default,
+// and a missing default season falls back to everything.
+function resolveLoadSeasons(selection, seasons) {
+  const list = seasons || [], known = new Set(list.map(s => s.id));
+  const done = ids => ({all: ids.length > 0 && list.length > 0 && list.every(s => ids.includes(s.id)), ids});
+  if (selection === 'all') return done(list.map(s => s.id));
+  if (Array.isArray(selection)) { const ids = [...new Set(selection)].filter(i => known.has(i)); if (ids.length) return done(ids); }
+  const def = list.filter(s => String(s.Label || '').trim() === DEFAULT_LOAD_LABEL).map(s => s.id);
+  return def.length ? done(def) : done(list.map(s => s.id));
+}
+function seasonHeroFormula(ids) {   // '' = no filter (all seasons)
+  const q = (ids || []).map(i => `{SeasonID}='${String(i).replace(/['\\]/g, '')}'`);
+  return !q.length ? '' : q.length === 1 ? q[0] : `OR(${q.join(',')})`;
+}
+// Pure. light rows [PID, SeasonID, PlayerID] of seasons that are NOT loaded. A row of a loaded season, or one whose PID is already in the real list, is ignored.
+function buildLightIndex(light, loadedSeasons, heroByPID) {
+  const byPid = new Map(), countByPlayer = new Map(), seasonsByClub = new Map();
+  (light || []).forEach(r => {
+    if ((loadedSeasons && loadedSeasons.has(r[1])) || (heroByPID && heroByPID.has(String(r[0])))) return;
+    byPid.set(String(r[0]), {season: r[1], player: r[2], club: r[3] || ''});
+    if (r[2]) countByPlayer.set(r[2], (countByPlayer.get(r[2]) || 0) + 1);
+    if (r[3] && r[1]) { if (!seasonsByClub.has(r[3])) seasonsByClub.set(r[3], new Set()); seasonsByClub.get(r[3]).add(r[1]); }
+  });
+  return {byPid, countByPlayer, seasonsByClub};
+}
+function loadSignature(r) { return r.all ? 'all' : r.ids.slice().sort().join(','); }
+function readLoadSelection() { try { const v = JSON.parse(localStorage.getItem(LOAD_SEL_KEY)); return v === 'all' || Array.isArray(v) ? v : null; } catch (e) { return null; } }
+function allSeasonsLoaded() { return !!LOAD_STATE.all; }
+function seasonLoaded(id) { return !id || LOAD_STATE.all || LOAD_STATE.loaded.has(id); }
+function seasonIdsForClub(clubId) {   // seasons a club has heroes in: loaded ones plus the earlier ones from the light list
+  const ids = new Set((CACHE.heroes || []).filter(h => h.ClubID === clubId).map(h => h.SeasonID).filter(Boolean));
+  const extra = typeof CACHE_MAPS !== 'undefined' && CACHE_MAPS.lightSeasonsByClub && CACHE_MAPS.lightSeasonsByClub.get(clubId);
+  if (extra) extra.forEach(i => ids.add(i));
+  return ids;
+}
+function pidIndexOk() { return !!(LOAD_STATE.all || LOAD_STATE.pidIndexReady); }   // false while earlier seasons' PIDs are still being listed
+function pidKnown(pid) { const k = String(pid); return CACHE_MAPS.heroByPID.has(k) || !!(CACHE_MAPS.lightByPid && CACHE_MAPS.lightByPid.has(k)); }
+function _heroCountFor(playerId) {   // loaded heroes (always fresh) + the ones in seasons that are not loaded
+  const n = (CACHE.heroes || []).filter(h => h.PlayerID === playerId).length;
+  return n + ((typeof CACHE_MAPS !== 'undefined' && CACHE_MAPS.lightCountByPlayer && CACHE_MAPS.lightCountByPlayer.get(playerId)) || 0);
+}
+function getCachedTableSig(k, sig) { try { const r = localStorage.getItem(k); if (!r) return null; const o = JSON.parse(r); if (Date.now() - o.ts > CACHE_TTL || o.sig !== sig) { localStorage.removeItem(k); return null; } return o.data; } catch (e) { return null; } }
+function setCachedTableSig(k, d, sig) { try { localStorage.setItem(k, JSON.stringify({data: d, ts: Date.now(), sig})); } catch (e) { /* too big for browser storage: just not cached */ } }
+// light list cache: valid if it was fetched excluding only seasons that are loaded now (so it still covers every season that is not loaded)
+function lightCacheUsable(c, loadedIds, now) { return !!(c && Array.isArray(c.rows) && Array.isArray(c.excl) && now - c.ts <= LIGHT_TTL && c.excl.every(i => loadedIds.has(i)) && (!c.rows.length || c.rows[0].length === 4)); }   // rows without the club (older format) are not usable
+let _seasonLoadInflight = new Map();
+async function ensureSeasonLoaded(seasonId) {   // loads one season's heroes on demand; true when they are in CACHE.heroes
+  if (seasonLoaded(seasonId)) return true;
+  if (_seasonLoadInflight.has(seasonId)) return _seasonLoadInflight.get(seasonId);
+  const run = (async () => {
+    try {
+      const recs = await _atGetAllPaced(TABLES.heroes, seasonHeroFormula([seasonId]));
+      const have = new Set((CACHE.heroes || []).map(h => h.id));
+      recs.forEach(r => { if (!have.has(r.id)) CACHE.heroes.push({id: r.id, ...r.fields}); });
+      LOAD_STATE.loaded.add(seasonId);
+      if (CACHE.seasons.every(se => LOAD_STATE.loaded.has(se.id))) LOAD_STATE.all = true;
+      buildCacheMaps(); updateStats();
+      if (typeof onClubFilterChange === 'function' && document.getElementById('filter-club')) onClubFilterChange(true);   // the font/kit/season lists of the search filter now include this season
+      return true;
+    } catch (e) { toast('Could not load that season: ' + e.message, 'error'); return false; }
+    finally { _seasonLoadInflight.delete(seasonId); }
+  })();
+  _seasonLoadInflight.set(seasonId, run); return run;
+}
+function needSeasonLoadedToast(seasonId) { ensureSeasonLoaded(seasonId); toast('Loading the PIDs of that season. Try again in a moment.', 'error'); }
+async function loadPidLight() {   // background: PID, SeasonID and PlayerID of every hero in seasons that are not loaded
+  if (LOAD_STATE.all) { LOAD_STATE.light = []; LOAD_STATE.pidIndexReady = true; buildCacheMaps(); return true; }
+  LOAD_STATE.pidIndexReady = false;
+  try {
+    let c = null; try { c = JSON.parse(localStorage.getItem(LIGHT_KEY)); } catch (e) { c = null; }
+    if (lightCacheUsable(c, LOAD_STATE.loaded, Date.now())) { LOAD_STATE.light = c.rows; }
+    else {
+      const excl = [...LOAD_STATE.loaded], f = seasonHeroFormula(excl);
+      const recs = await _atGetAllPaced(TABLES.heroes, f ? `NOT(${f})` : '', ['PID', 'SeasonID', 'PlayerID', 'ClubID']);
+      const rows = recs.map(r => [String(r.fields.PID || ''), r.fields.SeasonID || '', r.fields.PlayerID || '', r.fields.ClubID || '']).filter(r => r[0]);
+      LOAD_STATE.light = rows;
+      try { localStorage.setItem(LIGHT_KEY, JSON.stringify({ts: Date.now(), excl, rows})); } catch (e) { /* too big to keep: listed again next start */ }
+    }
+    LOAD_STATE.pidIndexReady = true; buildCacheMaps(); updateStats(); return true;
+  } catch (e) { toast('Could not list the earlier seasons\' PIDs: ' + e.message + '. Imports stay blocked until this works (use Refresh).', 'error'); return false; }
+}
+function loadedSeasonLabels() { return (CACHE.seasons || []).filter(se => LOAD_STATE.all || LOAD_STATE.loaded.has(se.id)).map(se => se.Label || se.id).join(', '); }
+function partialNote() { return LOAD_STATE.all ? '' : `Only these seasons are loaded: ${loadedSeasonLabels()}. Earlier seasons are NOT included.`; }
+async function loadAllSeasons() {
+  const todo = (CACHE.seasons || []).filter(se => !seasonLoaded(se.id));
+  for (let i = 0; i < todo.length; i++) { toast(`Loading ${todo[i].Label || todo[i].id} (${i + 1} of ${todo.length})...`); if (!(await ensureSeasonLoaded(todo[i].id))) return false; }
+  return allSeasonsLoaded();
+}
+async function ensureAllSeasonsLoaded(what) {   // true when every season is loaded (offers to load the rest first)
+  if (allSeasonsLoaded()) return true;
+  if (!confirm(`${what} needs every season loaded. Only ${loadedSeasonLabels()} ${loadedSeasonLabels().includes(',') ? 'are' : 'is'} loaded now. Loading the rest can take a few minutes. Load them now?`)) return false;
+  return await loadAllSeasons();
+}
+async function ensureScopeLoaded(what, seasonId) { return seasonId ? ensureSeasonLoaded(seasonId) : ensureAllSeasonsLoaded(what); }
+async function loadAllSeasonsClick() { if (await loadAllSeasons()) { toast('All seasons loaded'); if (typeof calcDataHealth === 'function') calcDataHealth(); } }
+// Pure. What a search cannot show because it sits in a season that is not loaded. A PID-like query (6+ digits) matches PIDs; otherwise the players found by name.
+function searchUnloadedHits({q, lightByPid, playerIds, filterClub, filterSeason}) {
+  const pidSeasons = new Set(), playerSeasons = new Map(), digits = /^\d{6,}$/.test(String(q || ''));
+  (lightByPid || new Map()).forEach((v, pid) => {
+    if (filterSeason && v.season !== filterSeason) return;
+    if (filterClub && v.club && v.club !== filterClub) return;
+    if (digits && pid.includes(q)) pidSeasons.add(v.season);
+    else if (playerIds && playerIds.has(v.player)) playerSeasons.set(v.season, (playerSeasons.get(v.season) || 0) + 1);
+  });
+  return {pidSeasons, playerSeasons};
+}
+async function loadSeasonsThenSearch(ids) { for (const id of ids) { if (!(await ensureSeasonLoaded(id))) return; } if (typeof runSearch === 'function') runSearch(); }
+function pidIndexBlockedToast() { toast('Still listing the PIDs of earlier seasons (about a minute after start). Try again shortly.', 'error'); }
+document.addEventListener('change', e => {   // picking a season anywhere loads its heroes if they are not loaded yet
+  const t = e.target;
+  if (t && t.tagName === 'SELECT' && /season/i.test(t.id || '') && !/^(parent-season|font-season)$/.test(t.id) && /^rec/.test(t.value || '') && typeof cacheLoaded !== 'undefined' && cacheLoaded) ensureSeasonLoaded(t.value);
+});
+function renderLoadSettings() {
+  const box = document.getElementById('load-seasons-box'); if (!box) return;
+  const sel = resolveLoadSeasons(readLoadSelection(), CACHE.seasons);
+  box.innerHTML = `<div style="font-size:12px;color:var(--text2);margin-bottom:8px;">Only these seasons' hero PIDs load at startup. Picking another season in a screen loads it then. Earlier seasons' PIDs are still listed in the background for duplicate checks.</div>`
+    + (CACHE.seasons || []).map(se => `<label style="display:flex;gap:8px;font-size:12px;margin:3px 0;"><input type="checkbox" class="load-season-cb" value="${se.id}" ${sel.ids.includes(se.id) ? 'checked' : ''}> ${_escHtml(se.Label || se.id)}</label>`).join('')
+    + `<button class="btn btn-primary" style="margin-top:10px;" onclick="saveLoadSettings()">Save and reload</button>`;
+}
+async function saveLoadSettings() {
+  const ids = [...document.querySelectorAll('.load-season-cb:checked')].map(x => x.value);
+  if (!ids.length) { toast('Tick at least one season.', 'error'); return; }
+  const r = resolveLoadSeasons(ids, CACHE.seasons);
+  try { localStorage.setItem(LOAD_SEL_KEY, JSON.stringify(r.all ? 'all' : ids)); localStorage.removeItem(LIGHT_KEY); } catch (e) { /* unavailable */ }
+  LOAD_STATE.loaded = new Set();   // a saved choice replaces whatever was opened on demand
+  await loadCache(true, true);
+}
+
 const CACHE_TTL=5*60*1000;
 const CACHE_KEYS={heroes:'hph_heroes',parents:'hph_parents',players:'hph_players'};
 function getCachedTable(k){try{const r=localStorage.getItem(k);if(!r)return null;const{data,ts}=JSON.parse(r);if(Date.now()-ts>CACHE_TTL){localStorage.removeItem(k);return null;}return data;}catch(e){return null;}}
@@ -3297,15 +3447,22 @@ async function loadCache(force, dataOnly=false){
       ]);
       CACHE.clubs=clubs.slice().sort((a,b)=>(a.Name||'').localeCompare(b.Name||'')); CACHE.seasons=seasons; CACHE.catalogues=catalogues||[]; CACHE.rosterMappings=rosterMappings||[]; CACHE.kitColours=kitColours||[];
     }
+    // v239: heroes load for the chosen seasons only (plus any season opened on demand earlier this session)
+    const _sel = resolveLoadSeasons(readLoadSelection(), CACHE.seasons);
+    const _ids = [...new Set([..._sel.ids, ...(dataOnly || force ? LOAD_STATE.loaded : [])])].filter(i => CACHE.seasons.some(se => se.id === i));
+    const _res = {all: _ids.length > 0 && CACHE.seasons.every(se => _ids.includes(se.id)), ids: _ids}, _sig = loadSignature(_res);
+    const loadHeroes = async () => { const c = getCachedTableSig(CACHE_KEYS.heroes, _sig); if (c) return c; const r = await atGetAll(TABLES.heroes, _res.all ? '' : seasonHeroFormula(_res.ids)); const m = r.map(x => ({id: x.id, ...x.fields})); setCachedTableSig(CACHE_KEYS.heroes, m, _sig); return m; };
     const[players,parents,heroes]=await Promise.all([
       loadCachedOrFetch(CACHE_KEYS.players,TABLES.players),
       loadCachedOrFetch(CACHE_KEYS.parents,TABLES.parents),
-      loadCachedOrFetch(CACHE_KEYS.heroes,TABLES.heroes),
+      loadHeroes(),
     ]);
     CACHE.players=players; CACHE.parents=parents; CACHE.heroes=heroes;
+    LOAD_STATE = {all: _res.all, loaded: new Set(_res.ids), light: [], pidIndexReady: _res.all, sig: _sig};
     // Load fonts (lightweight, no cache needed)
     if (TABLES.fonts) { try { const fr=await atGetAll(TABLES.fonts); CACHE.fonts=fr.map(x=>({id:x.id,...x.fields})); } catch(e){} }
     buildCacheMaps(); cacheLoaded=true; updateStats(); refreshFilterSelects(); refreshClubs(); refreshSeasons();
+    if (!LOAD_STATE.all) loadPidLight();   // v239: background; imports stay blocked until it finishes
     return true;   // v238: callers that need to know (the Refresh button) can tell a confirmed load from a failed one
   }catch(e){toast('Failed to load data: '+e.message,'error'); return false;}
 }
@@ -3535,7 +3692,8 @@ async function saveHero() {
   const clubId = document.getElementById('hero-club').value;
   const seasonId = document.getElementById('hero-season').value;
   if (!pid||!playerId||!clubId||!seasonId) { toast('PID, player, club and season required','error'); return; }
-  if (CACHE.heroes.find(h=>h.PID===pid)) { toast(`PID ${pid} already exists`,'error'); return; }
+  if (!pidIndexOk()) { pidIndexBlockedToast(); return; }
+  if (pidKnown(pid) || CACHE.heroes.find(h=>h.PID===pid)) { toast(`PID ${pid} already exists`,'error'); return; }
   try {
     const fontType = document.getElementById('hero-font').value;
     const kitType = document.getElementById('hero-kit').value.trim();
@@ -3612,7 +3770,7 @@ async function onClubFilterChange(skipSearch = false) {
   const seasonSel = document.getElementById('filter-season');
   if (seasonSel) {
     const sv = seasonSel.value;
-    const validSeasons = clubVal ? new Set(heroesForClub.map(h=>h.SeasonID).filter(Boolean)) : null;
+    const validSeasons = clubVal ? seasonIdsForClub(clubVal) : null;
     const sortedSeasons = [...CACHE.seasons].sort((a,b)=>(a.Label||'').localeCompare(b.Label||''));
     seasonSel.innerHTML = '<option value="">All seasons</option>' +
       sortedSeasons
@@ -3668,6 +3826,7 @@ function runSearch() {
   const raw = document.getElementById('search-q').value.trim();
   const filterClub = document.getElementById('filter-club').value;
   const filterSeason = document.getElementById('filter-season').value;
+  if (filterSeason && !seasonLoaded(filterSeason)) { ensureSeasonLoaded(filterSeason).then(ok => { if (ok) runSearch(); }); toast('Loading the PIDs of that season...'); return; }
   const filterFont = document.getElementById('filter-font').value;
   const filterStatus = document.getElementById('filter-status').value;
   const filterKit=(document.getElementById('filter-kit')?.value)||'';
@@ -3799,6 +3958,23 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
     if (searchMatch(p.Name||'',q)||searchMatch(p.ShirtName||'',q)) playerNameSet.add(p.id);
   });
   if (q && !groupByClub) CACHE.heroes.forEach(h => { if (h.PID&&h.PID.includes(q)) playerNameSet.add(h.PlayerID); });
+  // v239: heroes of seasons that are not loaded cannot be listed. A PID search loads the season that holds it; anything else gets a clear note.
+  let _ulNote = '';
+  if (!LOAD_STATE.all) {
+    const ul = searchUnloadedHits({q, lightByPid: CACHE_MAPS.lightByPid, playerIds: playerNameSet, filterClub, filterSeason});
+    const _toLoad = [...ul.pidSeasons].filter(i => !seasonLoaded(i));   // a season that is already loaded cannot be the reason: never re-run a search for it (stale list safety)
+    if (_toLoad.length) {
+      const args = Array.from(arguments), ids = _toLoad;
+      document.getElementById('result-count').textContent = 'Loading...';
+      document.getElementById('search-results').innerHTML = `<div style="padding:48px 20px;text-align:center;color:var(--text2);">That PID is in ${ids.map(i => _escHtml((CACHE.seasons.find(se => se.id === i) || {}).Label || i)).join(', ')}, which is not loaded. Loading it now...</div>`;
+      Promise.all(ids.map(i => ensureSeasonLoaded(i))).then(oks => { if (oks.every(Boolean)) executeSearch(...args); else document.getElementById('search-results').innerHTML = '<div style="padding:48px 20px;text-align:center;color:var(--red,#fc8181);">Could not load that season. Try again.</div>'; });
+      return;
+    }
+    if (ul.playerSeasons.size) {
+      const seasons = [...ul.playerSeasons], n = seasons.reduce((t, x) => t + x[1], 0);
+      _ulNote = `<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--amber);">Loaded seasons only (${_escHtml(loadedSeasonLabels())}). ${n} more PID${n !== 1 ? 's' : ''} for ${q ? 'these players' : 'these clubs'} ${n !== 1 ? 'are' : 'is'} in earlier seasons: ${seasons.map(([id, c]) => `<a href="#" onclick="loadSeasonsThenSearch(['${id}']);return false;" style="color:var(--amber);text-decoration:underline;">load ${_escHtml((CACHE.seasons.find(se => se.id === id) || {}).Label || id)} (${c})</a>`).join(' · ')}</div>`;
+    }
+  }
   const grouped = {};
   CACHE.heroes.forEach(h => {
     if (!playerNameSet.has(h.PlayerID)) return;
@@ -3826,12 +4002,12 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
   const keys = Object.keys(grouped);
   document.getElementById('result-count').textContent = keys.length+' result'+(keys.length!==1?'s':'');
   if (keys.length===0) {
-    document.getElementById('search-results').innerHTML = `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:48px 20px;text-align:center;color:var(--text3);"><div style="font-size:24px;margin-bottom:8px;">○</div><div style="font-family:'Syne',sans-serif;font-size:14px;color:var(--text2);margin-bottom:4px;">No results found</div><div style="font-size:12px;">Try just a player name first</div></div>`;
+    document.getElementById('search-results').innerHTML = _ulNote + `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:48px 20px;text-align:center;color:var(--text3);"><div style="font-size:24px;margin-bottom:8px;">○</div><div style="font-family:'Syne',sans-serif;font-size:14px;color:var(--text2);margin-bottom:4px;">No results found</div><div style="font-size:12px;">Try just a player name first</div></div>`;
     const sw = document.getElementById('select-all-wrap'); if(sw) sw.style.display='none';
     window._searchResultKeys = []; window._selectedPidKeys = new Set();
     return;
   }
-  let html = '<div class="results-wrap">';
+  let html = _ulNote + '<div class="results-wrap">';
   keys.forEach(key => {
     const [playerId, clubId, seasonId] = key.split('_');
     const player = CACHE.players.find(p=>p.id===playerId);
@@ -4390,6 +4566,7 @@ function cleanupSetStatus(tableKey, msg, isErr) {
 }
 
 function exportIncomplete(tableKey) {
+  if (tableKey === 'heroes' && !allSeasonsLoaded()) { toast('Incomplete hero PIDs of earlier seasons are not loaded, so this export would be partial. Tick all seasons in Settings (Save and reload) first.', 'error'); return; }
   const BOM = '\uFEFF';
   const esc = v => `"${String(v===null||v===undefined?'':v).replace(/"/g,'""')}"`;
   const toCSV = (hdrs, rows) => BOM + [hdrs, ...rows].map(r => r.map(esc).join(',')).join('\n');
@@ -4620,6 +4797,7 @@ const FOOTBALL_SHEET_NAMES = {
 };
 
 function exportFootballContent(playerIds) {
+  if (!allSeasonsLoaded()) { toast('This export lists every season of each player, so every season must be loaded. Tick all seasons in Settings (Save and reload) first.', 'error'); return; }
   if(typeof ExcelJS==='undefined'){toast('ExcelJS loading, try again','error');return;}
   const selected=playerIds||[...(window._selectedPids||new Set())];
   // Check for incomplete players in selection
@@ -4850,6 +5028,7 @@ function refreshSeasons() {
 }
 
 function refreshManage() {
+  { const n = document.getElementById('heroes-partial-note'); if (n) n.innerHTML = LOAD_STATE.all ? '' : `<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--amber);">This list and its count show the loaded seasons only (${_escHtml(loadedSeasonLabels())}). Earlier seasons' hero PIDs are not listed. <a href="#" onclick="loadAllSeasonsClick().then(refreshManage);return false;" style="color:var(--amber);text-decoration:underline;">Load all seasons</a></div>`; }
   const ptbody=document.getElementById('players-tbody');
   if(ptbody&&cacheLoaded){const s=manageState.players,all=CACHE.players,total=all.length;const pg=all.slice(s.page*s.perPage,(s.page+1)*s.perPage);const pgIds=pg.map(p=>p.id),allSel=pgIds.length>0&&pgIds.every(id=>s.selected.has(id)),multi=s.selected.size>1;renderSelBar('players','Delete Selected','Archive/Activate');renderPager('players',total);renderPerPage('players');const thc=document.getElementById('players-th-chk');if(thc)thc.innerHTML=`<input type="checkbox" ${allSel?'checked':''} onchange="manageToggleAll('players',this.checked,${JSON.stringify(pgIds)})" style="cursor:pointer;accent-color:var(--accent);">`;ptbody.innerHTML=total===0?`<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px;">No players yet</td></tr>`:pg.map(p=>{const cl=CACHE.clubs.find(c=>c.id===p.ClubID),sel=s.selected.has(p.id);const acts=multi?`<button class="btn btn-ghost btn-sm" onclick="deactivatePlayer('${p.id}').then(()=>refreshManage())">${p.Status==='archived'?'Activate':'Archive'}</button>`:`<button class="btn btn-ghost btn-sm" onclick="openEditPlayer('${p.id}')">Edit</button><button class="btn btn-ghost btn-sm" onclick="deactivatePlayer('${p.id}').then(()=>refreshManage())">${p.Status==='archived'?'Activate':'Archive'}</button>`;return `<tr style="${sel?'background:rgba(79,124,255,0.06);':''}"><td style="padding:8px 4px;"><input type="checkbox" ${sel?'checked':''} onchange="manageToggleOne('players','${p.id}',this.checked)" style="cursor:pointer;accent-color:var(--accent);"></td><td style="color:var(--text);font-weight:500;">${p.Name||''}</td><td class="mono">${p.ShirtName||''}</td><td class="mono">${p.SquadNumber||'—'}</td><td>${cl?.Name||'—'}</td><td class="mono" style="font-size:11px;color:var(--text3);">${p.MDMActorID||'—'}</td><td>${p.Status==='archived'?'<span class="badge badge-archived">Archived</span>':'<span class="badge badge-active">Active</span>'}</td><td style="display:flex;gap:4px;">${acts}<button class="btn btn-danger btn-sm" onclick="deletePlayer('${p.id}')">Delete</button></td></tr>`;}).join('');}
   const parbody=document.getElementById('parents-tbody');
@@ -4894,16 +5073,18 @@ function calcDataHealth() {
   const totalIncomplete = incompletePlayers + incompleteParents + incompleteHeroes + incompleteMdm;
   const totalIssues = totalIncomplete + provisionalHeroes;
   const pct = total > 0 ? (totalIncomplete / total) * 100 : 0;
-  const level = totalIssues === 0 && missingRosterLink === 0 && missingActorId === 0 ? 'green'
+  let level = totalIssues === 0 && missingRosterLink === 0 && missingActorId === 0 ? 'green'
     : missingRosterLink > 1000 || missingActorId > 1000 ? 'red'
     : pct <= 2 && provisionalHeroes < 10 && missingRosterLink < 100 && missingActorId < 100 ? 'amber'
     : 'red';
+  const partial = !LOAD_STATE.all;   // v239: earlier seasons are not in CACHE.heroes
+  if (partial && level === 'green') level = 'amber';   // never green when earlier seasons were not checked
   const colour = level === 'green' ? 'var(--green)' : level === 'amber' ? 'var(--amber)' : 'var(--red,#fc8181)';
   // Update nav icon colour
   const navCleanup = document.getElementById('nav-cleanup');
   if (navCleanup) {
     const icon = navCleanup.querySelector('.icon');
-    if (icon) icon.style.color = totalIssues === 0 ? '' : colour;
+    if (icon) icon.style.color = totalIssues === 0 && !partial ? '' : colour;
   }
   // Update Homeplate Resolver tab badge
   const hpTab = document.getElementById('import-tab-homeplate');
@@ -4914,8 +5095,11 @@ function calcDataHealth() {
   // Update cleanup page banner
   const banner = document.getElementById('data-health-banner');
   if (banner) {
-    if (totalIssues === 0) {
+    if (totalIssues === 0 && !partial) {
       banner.style.display = 'none';
+    } else if (totalIssues === 0) {
+      banner.style.display = 'block'; banner.style.borderColor = 'var(--amber)'; banner.style.background = 'rgba(255,179,64,0.08)';
+      banner.innerHTML = `<span style="color:var(--amber);font-weight:600;">🟡 No problems found in the loaded seasons</span><span style="color:var(--text2);font-size:12px;margin-left:8px;">${_escHtml(partialNote())} <a href="#" onclick="loadAllSeasonsClick();return false;" style="color:var(--amber);">Load all seasons and re-check</a></span>`;
     } else {
       banner.style.display = 'block';
       banner.style.borderColor = colour;
@@ -4931,7 +5115,8 @@ function calcDataHealth() {
       banner.innerHTML = `<span style="color:${colour};font-weight:600;">${icon} ${totalIssues} item${totalIssues !== 1 ? 's' : ''} need attention</span><span style="color:var(--text2);margin-left:8px;">— ${parts.join(', ')}.</span>`;
     }
   }
-  return { totalIncomplete, incompletePlayers, incompleteParents, incompleteHeroes, provisionalHeroes, missingRosterLink, missingActorId, level, totalIssues };
+  if (partial && totalIssues > 0 && banner) banner.insertAdjacentHTML('beforeend', `<div style="font-size:11px;color:var(--text2);margin-top:4px;">${_escHtml(partialNote())} <a href="#" onclick="loadAllSeasonsClick();return false;" style="color:${colour};">Load all seasons and re-check</a></div>`);
+  return { totalIncomplete, incompletePlayers, incompleteParents, incompleteHeroes, provisionalHeroes, missingRosterLink, missingActorId, level, totalIssues, partial };
 }
 
 function isEntryIncomplete(type, id) {
@@ -4953,26 +5138,36 @@ function isEntryIncomplete(type, id) {
   return false;
 }
 
+// Pure. Active heroes with ActorID, RosterID and RosterMemberID all real, counted PER SEASON (never all seasons mixed together).
+function mdmLinkedBySeason(heroes, seasons) {
+  const label = new Map((seasons || []).map(se => [se.id, se.Label || se.id])), by = new Map();
+  (heroes || []).forEach(h => {
+    if (h.Status !== 'active') return;
+    const k = h.SeasonID || '';
+    if (!by.has(k)) by.set(k, {id: k, label: k ? (label.get(k) || k) : '(no season)', active: 0, linked: 0});
+    const r = by.get(k); r.active++;
+    if (isRealMdmId(h.ActorID) && isRealMdmId(h.RosterID) && isRealMdmId(h.RosterMemberID)) r.linked++;
+  });
+  return [...by.values()].map(r => ({...r, pct: r.active ? Math.round(r.linked / r.active * 1000) / 10 : 0})).sort((a, b) => b.label.localeCompare(a.label));
+}
 function updateStats() {
   document.getElementById('stat-hero').textContent = CACHE.heroes.length.toLocaleString();
-  // MDM Linked % — active heroes with all three MDM fields
-  const activeHeroes = CACHE.heroes.filter(h => h.Status === 'active');
-  const fullyLinked = activeHeroes.filter(h =>
-    isRealMdmId(h.ActorID) &&
-    isRealMdmId(h.RosterID) &&
-    isRealMdmId(h.RosterMemberID)
-  ).length;
-  const mdmPct = activeHeroes.length > 0 ? Math.round((fullyLinked / activeHeroes.length) * 100) : 0;
-  const mdmEl = document.getElementById('stat-mdm-linked');
+  document.getElementById('stat-hero').title = LOAD_STATE.all ? 'All seasons are loaded' : 'Only the loaded seasons are counted here (see Settings)';
+  // MDM Linked: per season. The pill shows the main season (2026-27 when loaded, else the first); hovering lists every loaded season.
+  const mdmRows = mdmLinkedBySeason(CACHE.heroes, CACHE.seasons);
+  const mdmEl = document.getElementById('stat-mdm-linked'), mdmLbl = document.getElementById('stat-mdm-label');
   if (mdmEl) {
-    mdmEl.textContent = activeHeroes.length > 0 ? `${mdmPct}%` : '—';
-    mdmEl.style.color = mdmPct >= 90 ? 'var(--green)' : mdmPct >= 50 ? 'var(--amber)' : 'var(--red,#fc8181)';
+    const main = mdmRows.find(r => r.label === DEFAULT_LOAD_LABEL) || mdmRows[0];
+    mdmEl.textContent = main ? `${main.pct}%` : '—';
+    if (mdmLbl) mdmLbl.textContent = main ? `MDM Linked · ${main.label}` : 'MDM Linked';
+    mdmEl.title = (mdmRows.map(r => `${r.label}: ${r.pct}% (${r.linked} of ${r.active})`).join('\n') || 'No active hero PIDs loaded') + (LOAD_STATE.all ? '' : '\nEarlier seasons are not loaded.');
+    mdmEl.style.color = !main ? '' : main.pct >= 90 ? 'var(--green)' : main.pct >= 50 ? 'var(--amber)' : 'var(--red,#fc8181)';
   }
   const health = calcDataHealth();
   const healthEl = document.getElementById('stat-health');
   if (healthEl) {
-    if (health.level === 'green') { healthEl.textContent = '🟢'; }
-    else if (health.level === 'amber') { healthEl.textContent = `🟡 ${health.totalIssues}`; }
+    if (health.level === 'green') { healthEl.textContent = '🟢'; healthEl.title = ''; }
+    else if (health.level === 'amber') { healthEl.textContent = health.partial && health.totalIssues === 0 ? '🟡 partial' : `🟡 ${health.totalIssues}`; healthEl.title = health.partial ? partialNote() : ''; }
     else { healthEl.textContent = `🔴 ${health.totalIssues}`; }
   }
   populateExportFilters();
@@ -4985,8 +5180,8 @@ function pickCanonicalPlayer(players) {
   if (!players || players.length === 0) return null;
   if (players.length === 1) return players[0];
   return players.slice().sort((a, b) => {
-    const ah = CACHE.heroes.filter(h => h.PlayerID === a.id).length;
-    const bh = CACHE.heroes.filter(h => h.PlayerID === b.id).length;
+    const ah = _heroCountFor(a.id);
+    const bh = _heroCountFor(b.id);
     if (bh !== ah) return bh - ah;
     const aActive = a.Status === 'active' ? 1 : 0;
     const bActive = b.Status === 'active' ? 1 : 0;
@@ -5483,13 +5678,17 @@ function _importParseHeld(d) {   // v237.1: items the PARSER cannot decide (ambi
 }
 function _impStrictName(n) { return String(n == null ? '' : n).normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim(); }
 function planImportPlayers(incoming, cachePlayers) {
-  const plan = { existing: new Map(), created: [], held: [], resolved: new Map() };
+  const plan = { existing: new Map(), created: [], held: [], resolved: new Map(), renamed: new Map() };
   const groups = new Map();
   (incoming || []).forEach(p => { const k = importNameKey(p.name, p.clubId); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); });
   const byKey = new Map();
   (cachePlayers || []).forEach(p => { const k = importNameKey(p.Name, p.ClubID); if (!byKey.has(k)) byKey.set(k, []); byKey.get(k).push(p); });
   const realId = v => (isRealMdmId(v) ? String(v).trim() : '');
   const uniq = a => [...new Set(a)];
+  // v239: players at each club by real ActorID, so a NAME CHANGE (Mykhailo to Misha) finds the existing player instead of creating a second one
+  const byActor = new Map();
+  (cachePlayers || []).forEach(p => { const a = realId(p.MDMActorID); if (!a) return; const ak = a + '|' + (p.ClubID || ''); if (!byActor.has(ak)) byActor.set(ak, []); byActor.get(ak).push(p); });
+  const newByActor = new Map();   // ActorID|club -> keys of groups about to be CREATED with it
   groups.forEach((entries, k) => {
     const first = entries[0];
     const hold = (reason, detail) => { plan.held.push({ key: k, name: first.name, clubId: first.clubId, reason, detail: detail || '' }); };
@@ -5511,7 +5710,18 @@ function planImportPlayers(incoming, cachePlayers) {
       fontTypes: uniq(ordered.map(e => e.fontType)) };
     // 3. database candidates at this club
     const cands = byKey.get(k) || [];
-    if (!cands.length) { plan.created.push(merged); return; }
+    if (!cands.length) {
+      if (ids.length) {
+        const sameActor = byActor.get(ids[0] + '|' + (first.clubId || '')) || [];
+        if (sameActor.length) {   // same person, new spelling: use the existing player. Never renamed by the import.
+          const chosen = pickCanonicalPlayer(sameActor);
+          plan.existing.set(k, chosen); plan.resolved.set(k, merged); plan.renamed.set(k, { sheetName: first.name, record: chosen });
+          return;
+        }
+        const nk = ids[0] + '|' + (first.clubId || ''); if (!newByActor.has(nk)) newByActor.set(nk, []); newByActor.get(nk).push(k);
+      }
+      plan.created.push(merged); return;
+    }
     const actorOf = c => realId(c.MDMActorID);
     const allIds = uniq(cands.map(actorOf).filter(Boolean));
     const describe = c => `${c.Name} (ActorID ${actorOf(c) || 'none'}, ${c.id})`;
@@ -5524,6 +5734,9 @@ function planImportPlayers(incoming, cachePlayers) {
         // the sheet carries an ActorID: it must agree with a candidate
         const hit = cands.filter(c => actorOf(c) === ids[0]);
         if (hit.length) return { chosen: pickCanonicalPlayer(hit) };
+        // v239: this name has no ActorID of its own, but the sheet's ActorID already belongs to a player with ANOTHER name here: do not guess
+        const elsewhere = (byActor.get(ids[0] + '|' + (first.clubId || '')) || []).filter(c => !cands.includes(c));
+        if (!allIds.length && elsewhere.length) return { hold: ['The ActorID in the sheet belongs to a database player with a different name', `sheet ${nameRaw} (ActorID ${ids[0]})  vs  ${elsewhere.map(describe).join(' · ')}  ·  name match without ActorID: ${cands.map(describe).join(' · ')}`] };
         if (allIds.length) return { hold: ['The ActorID in the sheet differs from the database record', `sheet ${ids[0]}  vs  ${cands.map(describe).join(' · ')}`] };
         return { chosen: pickCanonicalPlayer(cands) };
       }
@@ -5546,6 +5759,13 @@ function planImportPlayers(incoming, cachePlayers) {
     plan.existing.set(k, results[0].chosen);
     plan.resolved.set(k, merged);   // v238: the fields the importer actually resolved for this player (league leads), for the preview's difference notes
   });
+  // v239: two sheet names with the SAME new ActorID would create two players for one person: hold both until the sheet agrees with itself
+  newByActor.forEach((keys, nk) => {
+    if (keys.length < 2) return;
+    const names = keys.map(k => plan.created.find(c => importNameKey(c.name, c.clubId) === k)).filter(Boolean);
+    plan.created = plan.created.filter(c => !keys.includes(importNameKey(c.name, c.clubId)));
+    names.forEach(c => plan.held.push({ key: importNameKey(c.name, c.clubId), name: c.name, clubId: c.clubId, reason: 'The sheet gives two different names the same ActorID', detail: nk.split('|')[0] + '  ·  ' + names.map(x => x.name).join('  /  ') }));
+  });
   return plan;
 }
 
@@ -5560,7 +5780,7 @@ function buildFileSummary(d, plan, heldPlayers) {
   const get = (name, clubId) => { const k = importNameKey(name, clubId); if (!rows.has(k)) rows.set(k, {key:k, name, kits:{}, newPids:0, oldPids:0, gk:false, notes:[]}); return rows.get(k); };
   (d.players||[]).forEach(p => { const r = get(p.name, p.clubId); r.gk = r.gk || !!p.goalkeeper; });
   (d.heroes||[]).forEach(h => {
-    const r = get(h.playerName, h.clubId), isNew = !CACHE_MAPS.heroByPID.has(String(h.pid));
+    const r = get(h.playerName, h.clubId), isNew = !pidKnown(h.pid);
     const kit = r.kits[h.kitType] = r.kits[h.kitType] || {n:0, o:0};
     if (isNew) { kit.n++; r.newPids++; } else { kit.o++; r.oldPids++; }
   });
@@ -5572,6 +5792,8 @@ function buildFileSummary(d, plan, heldPlayers) {
     if (heldKeys.has(r.key)) status = 'held'; else if (createdKeys.has(r.key)) status = 'new';
     const rec = plan.existing && plan.existing.get ? plan.existing.get(r.key) : null;
     if (status === 'existing' && rec) {
+      const rn = plan.renamed && plan.renamed.get ? plan.renamed.get(r.key) : null;
+      if (rn) r.notes.push(`matched by ActorID to database player "${rec.Name}" (the sheet spells it "${rn.sheetName}"; the name is not changed by import)`);
       if (r.number && rec.SquadNumber && Number(rec.SquadNumber) !== Number(r.number)) r.notes.push(`squad number: sheet ${r.number}, database ${rec.SquadNumber} (not updated by import)`);
       if (r.shirtName && rec.ShirtName && String(rec.ShirtName).trim().toUpperCase() !== String(r.shirtName).trim().toUpperCase()) r.notes.push(`shirt name: sheet ${r.shirtName}, database ${rec.ShirtName} (not updated by import)`);
     }
@@ -5847,7 +6069,7 @@ function showImportPreview(club, season, filename) {
   const brandNew = newPlayers.filter(p => !_prevPlayerMap.has(importNameKey(p.name, p.clubId)));
   const _uniqIncoming = (() => { const sk = new Set(); return d.players.filter(p => { const k = importNameKey(p.name, p.clubId); if (sk.has(k)) return false; sk.add(k); return true; }); })();
   const existingPlayers=_uniqIncoming.filter(p=>(CACHE.players||[]).some(e=>importNameKey(e.Name, '')===importNameKey(p.name, '')&&e.ClubID!==p.clubId));
-  const newHeroes=d.heroes.filter(h=>!CACHE_MAPS.heroByPID.has(String(h.pid)));
+  const newHeroes=d.heroes.filter(h=>!pidKnown(h.pid));
   const newParents=d.parents.filter(p=>!CACHE_MAPS.parentByPID.has(String(p.pid)));
   const dupHeroes=d.heroes.length-newHeroes.length;
   document.getElementById('import-preview-title').textContent=`Preview — ${filename}`;
@@ -5941,6 +6163,7 @@ let _storageImportRunning = false;   // true from the moment the first write sta
 async function confirmImport() {
   if (!importData) return;
   if (_storageImportRunning) { toast('An import is already running. Wait for it to finish.', 'error'); return; }
+  if (!pidIndexOk()) { pidIndexBlockedToast(); return; }
   // v237: never write while any player's identity is unresolved (the preview shows them in a red box)
   const _plan = planImportPlayers(importData.players, CACHE.players);
   const _heldAll = _plan.held.concat(_importParseHeld(importData));
@@ -5968,7 +6191,7 @@ async function confirmImport() {
   };
   const d=importData;
   const newParents=d.parents.filter(p=>!CACHE_MAPS.parentByPID.has(String(p.pid)));
-  const newHeroes=d.heroes.filter(h=>!CACHE_MAPS.heroByPID.has(String(h.pid)));
+  const newHeroes=d.heroes.filter(h=>!pidKnown(h.pid));
   const newPlayers = _plan.created;         // ONE entry per new player: created once, whatever fonts it appears under
   const playerMap={};
   _plan.existing.forEach((rec, key) => { playerMap[key] = rec.id; });
@@ -6213,6 +6436,7 @@ async function processCreationFiles(files) {
   const seasonId=document.getElementById('creation-season').value;
   const fontType=document.getElementById('creation-font').value;
   if (!seasonId){toast('Please select a season','error');return;}
+  if (!pidIndexOk()) { pidIndexBlockedToast(); return; }
   document.getElementById('creation-preview').classList.add('hidden');
   // Show loading state on drop zone
   const dz = document.getElementById('drop-zone-creation');
@@ -6227,7 +6451,7 @@ async function processCreationFiles(files) {
   try {
     // Use loaded cache for duplicate checks; only fetch heroes if the cache is empty.
     try {
-      if (!CACHE.heroes || CACHE.heroes.length === 0) {
+      if (!cacheLoaded) {   // v239: an empty loaded season is normal now; only a load that has not happened yet needs one
         if (dzText) dzText.textContent = 'Loading heroes...';
         localStorage.removeItem(CACHE_KEYS.heroes);
         const freshHeroes = await atGetAll(TABLES.heroes);
@@ -6391,7 +6615,7 @@ function parseCreationRows(rows,seasonId,fontType,fileNames) {
     const basePid=(row['baseProductId']||'').trim();
     if (!pid||!name) return;
     if (seen.has(pid)){creationImportData.stats.duplicate++;creationImportData.duplicatePids.push({pid,name,reason:'within-file duplicate'});return;}
-    const atMatch=CACHE.heroes.find(h=>String(h.PID)===pid);
+    const atMatch=pidKnown(pid);
     if (atMatch){creationImportData.stats.duplicate++;creationImportData.duplicatePids.push({pid,name,reason:'already in Airtable'});return;}
     seen.add(pid);
     const clubName=parseCreationFedCode(name);
@@ -6460,6 +6684,7 @@ function exportProvisionalFromCache() {
 
 async function confirmCreationImport() {
   if (!creationImportData) return;
+  if (!pidIndexOk()) { pidIndexBlockedToast(); return; }
   const btn=document.getElementById('creation-confirm-btn');
   btn.textContent='Importing...';btn.disabled=true;
   const d=creationImportData;
@@ -6917,7 +7142,14 @@ function hpBuildPlan() {
 }
 function renderHpParentsPlan() {
   renderHpRecords();
-  const d = hpParentsData; if (!d) return; d.plan = hpBuildPlan();
+  const d = hpParentsData; if (!d) return;
+  { const _s = (document.getElementById('hpp-season') || {}).value || '';
+    if (_s ? !seasonLoaded(_s) : !allSeasonsLoaded()) {
+      document.getElementById('hpp-preview').classList.add('hidden');
+      if (_s) needSeasonLoadedToast(_s); else toast('"All seasons" needs every season loaded. Pick one season, or tick all seasons in Settings (Save and reload).', 'error');
+      return;
+    } }
+  d.plan = hpBuildPlan();
   document.getElementById('hpp-preview').classList.remove('hidden'); document.getElementById('hpp-preview-content').innerHTML = hpParentsHtml(d.plan);
   const btn = document.getElementById('hpp-apply-btn'); if (btn) { btn.disabled = _hpRunning || d.plan.errors.length > 0 || d.plan.total === 0; btn.textContent = d.plan.total ? `Apply ${d.plan.total} change${d.plan.total !== 1 ? 's' : ''}` : 'Nothing to apply'; }
 }
@@ -7016,7 +7248,9 @@ function parseHomeplateProductName(name) {
 function parseHomeplateWorkbook(wb,filename) {
   const ws=wb.Sheets[wb.SheetNames[0]];
   const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+  if (!pidIndexOk()) { pidIndexBlockedToast(); return; }
   homeplateData={filename,resolutions:[],notFound:[],alreadyActive:[],review:[]};
+  const _unloaded = new Set();
   rows.forEach(row=>{
     const pid=String(row['Product ID']||row['productId']||'').trim();
     const name=fixEncoding(String(row['Name']||row['name']||'').trim());
@@ -7026,9 +7260,10 @@ function parseHomeplateWorkbook(wb,filename) {
     const {playerName,squadNumber}=parsed;
     if (parsed.ambiguous || _looksTagged(playerName)) { homeplateData.review.push({pid,playerName}); return; }   // never create a player from a name that still holds a product tag
     const hero=CACHE.heroes.find(h=>h.PID===pid&&h.Status==='provisional');
-    if (!hero){const active=CACHE.heroes.find(h=>h.PID===pid);if(active)homeplateData.alreadyActive.push({pid,playerName});else homeplateData.notFound.push({pid,playerName});return;}
+    if (!hero){const active=CACHE.heroes.find(h=>h.PID===pid);if(active)homeplateData.alreadyActive.push({pid,playerName});else if (CACHE_MAPS.lightByPid.has(pid)) _unloaded.add(CACHE_MAPS.lightByPid.get(pid).season);else homeplateData.notFound.push({pid,playerName});return;}
     homeplateData.resolutions.push({pid,playerName,squadNumber,heroId:hero.id,clubId:hero.ClubID,seasonId:hero.SeasonID});
   });
+  if (_unloaded.size) { _unloaded.forEach(id => ensureSeasonLoaded(id)); homeplateData = null; toast('Some of these PIDs are in earlier seasons. Loading them: drop the file again in a moment.', 'error'); return; }
   showHomeplatePreview(filename);
 }
 
@@ -7131,6 +7366,7 @@ function openWipeModal(target,label){
 }
 async function executeWipe(){
   const target=_wipeTarget;if(!target)return;
+  if ((target==='heroes'||target==='full') && !(await ensureAllSeasonsLoaded('Clearing hero PIDs'))) { closeModal('modal-wipe'); return; }   // a partial wipe would leave other seasons' PIDs behind
   const scopeClubId = document.getElementById('wipe-club-scope')?.value || '';
   const scopeClub = scopeClubId ? CACHE.clubs.find(c=>c.id===scopeClubId) : null;
   closeModal('modal-wipe');
@@ -7182,6 +7418,8 @@ function processImportFile(file) {
   const clubId = document.getElementById('import-club').value;
   const seasonId = document.getElementById('import-season').value;
   if (!clubId||!seasonId) { toast('Please select a club and season','error'); return; }
+  if (!pidIndexOk()) { pidIndexBlockedToast(); return; }
+  if (!seasonLoaded(seasonId)) { needSeasonLoadedToast(seasonId); return; }
   const _sdz = document.getElementById('drop-zone-storage');
   const _sdzt = _sdz?.querySelector('.drop-zone-text');
   const _sdzi = _sdz?.querySelector('.drop-zone-icon');
@@ -7227,6 +7465,7 @@ function detectGarbledName(s) {
   return null;
 }
 
+function _mdmNoNum(v) { const t = String(v == null ? '' : v).trim(); return (t !== '' && Number(t) === -999) ? '' : t; }   // v239: -999 = no number, also for numbers typed into the preview table
 function parseMdmRosterCsv(text) {   // pure: text -> {rows, hdrs} or {error}
   const lines = String(text).replace(/^\uFEFF/, '').split(/\r?\n/).filter(l => l.trim());
   if (lines.length < 2) return {error: 'No data rows'};
@@ -7238,7 +7477,8 @@ function parseMdmRosterCsv(text) {   // pure: text -> {rows, hdrs} or {error}
     const cols = parseCSVLine(lines[i]); if (!cols.length || !cols[0]) continue;
     const row = {_repaired: [], _line: i + 1};
     hdrs.forEach((h, ci) => { const raw = (cols[ci] || '').trim(), fixed = repairMojibake(raw); if (fixed !== raw) row._repaired.push({field: h, from: raw, to: fixed}); row[h] = fixed; });
-    const numA = row['jerseyNumber'] || '', numB = row['jerseyNumberString'] || '';
+    row['jerseyNumber'] = _mdmNoNum(row['jerseyNumber']); row['jerseyNumberString'] = _mdmNoNum(row['jerseyNumberString']);   // clear BOTH parsed fields
+    const numA = row['jerseyNumber'], numB = row['jerseyNumberString'];
     if (numA && numB && numA !== numB) { row._numberConflict = true; row.jerseyNumber = ''; } else { row.jerseyNumber = numA || numB; row._numberConflict = false; }
     rows.push(row);
   }
@@ -7257,7 +7497,7 @@ function planMdmImport({rows, clubId, seasonId, clubName, existing, players, her
   if (clash.length) plan.errors.push(`${clash.length} row${clash.length !== 1 ? 's' : ''} already exist in Airtable under a DIFFERENT club (RosterMemberID ${clash.slice(0, 5).map(r => r.id).join(', ')}${clash.length > 5 ? ', …' : ''}). Is the club selected above the right one? Importing would create duplicates.`);
   // ── roster members: create / update (only the fields that change) ──
   rows.forEach(r => {
-    const fields = {RosterMemberID: r.id, RosterID: r.rosterId, ActorID: r.actorId, PlayerName: r.name, JerseyName: r.jerseyName, JerseyNumber: r.jerseyNumber, Position: r.position, RosterStatus: r.rosterStatus, DisplayStatus: r.displayStatus, ClubID: clubId, Club: clubName};
+    const fields = {RosterMemberID: r.id, RosterID: r.rosterId, ActorID: r.actorId, PlayerName: r.name, JerseyName: r.jerseyName, JerseyNumber: _mdmNoNum(r.jerseyNumber), Position: r.position, RosterStatus: r.rosterStatus, DisplayStatus: r.displayStatus, ClubID: clubId, Club: clubName};
     if (r.rosterName) fields.RosterName = r.rosterName;   // the CSV has no rosterName column: never write an empty one over an existing name
     const ex = exClub.get(_mdmStr(r.id));
     if (!ex) { plan.toCreate.push(fields); return; }
@@ -7295,8 +7535,8 @@ function planMdmImport({rows, clubId, seasonId, clubName, existing, players, her
   if (noActor.length) plan.warnings.push(`${noActor.length} row${noActor.length !== 1 ? 's have' : ' has'} no real ActorID (${noActor.slice(0, 4).map(r => r.name + ' = ' + (r.actorId || 'blank')).join(', ')}). They cannot be matched to players or heroes.`);
   const mapped = new Set((rosterMappings || []).filter(m => m.Active && m.ClubID === clubId && m.SeasonID === seasonId && isRealMdmId(m.RosterID)).map(m => _mdmStr(m.RosterID)));
   const unmapped = [...byRoster.keys()].filter(k => !mapped.has(k));
-  if (!mapped.size) plan.warnings.push('This club and season has no active roster mappings, so no hero PIDs can be linked to these rosters.');
-  else if (unmapped.length) plan.warnings.push(`${unmapped.length} roster${unmapped.length !== 1 ? 's are' : ' is'} in the file but not mapped for this club and season (${unmapped.join(', ')}): hero PIDs on ${unmapped.length !== 1 ? 'them' : 'it'} will not link.`);
+  if (!mapped.size) plan.warnings.push('This club and season has no active roster mappings, so new hero PIDs will not get these rosters from the mappings. PIDs that already carry their own RosterID still link.');
+  else if (unmapped.length) plan.warnings.push(`${unmapped.length} roster${unmapped.length !== 1 ? 's are' : ' is'} in the file but not mapped for this club and season (${unmapped.join(', ')}): new hero PIDs will not get ${unmapped.length !== 1 ? 'those rosters' : 'that roster'} from the mappings. PIDs that already carry their own RosterID still link.`);
   plan.unmappedRosters = unmapped;
   // ── players: archive / reactivate / fill ActorID ──
   const actorToStatus = {}; rows.forEach(r => { if (!actorToStatus[r.actorId] || r.rosterStatus === 'A') actorToStatus[r.actorId] = r.rosterStatus === 'A' ? 'active' : 'archived'; });
@@ -7462,6 +7702,7 @@ function parseMdmRosterUpload(file) {
   if (!file) return;
   const clubId = document.getElementById('mdm-roster-club').value, seasonId = document.getElementById('mdm-roster-season').value;
   if (!clubId || !seasonId) { toast('Please select a club and season', 'error'); return; }
+  if (!seasonLoaded(seasonId)) { needSeasonLoadedToast(seasonId); return; }
   const setStatus = (msg, err) => {
     const wrap = document.getElementById('mdm-roster-status'), txt = document.getElementById('mdm-roster-status-text');
     wrap.style.display = msg ? 'block' : 'none'; txt.style.color = err ? 'var(--red)' : 'var(--text2)'; txt.textContent = msg;
@@ -7542,6 +7783,7 @@ function parseSquadUpdateUpload(file) {
   const clubId = document.getElementById('squad-update-club').value;
   const seasonId = document.getElementById('squad-update-season').value;
   if (!clubId||!seasonId) { toast('Please select a club and season','error'); return; }
+  if (!seasonLoaded(seasonId)) { needSeasonLoadedToast(seasonId); return; }
   const setStatus = (msg,err) => {
     const wrap=document.getElementById('squad-update-status');
     const txt=document.getElementById('squad-update-status-text');
@@ -8378,6 +8620,12 @@ async function renderMdmPreview() {
     document.getElementById('mdmp-summary-pills').innerHTML = '';
     return;
   }
+  if (!seasonLoaded(seasonId)) {   // v239: its heroes must be loaded BEFORE anything is counted
+    document.getElementById('mdmp-content').innerHTML = '<div style="padding:20px;text-align:center;color:var(--text3);font-size:13px;">Loading the PIDs of that season...</div>';
+    document.getElementById('mdmp-summary-pills').innerHTML = '';
+    if (!(await ensureSeasonLoaded(seasonId))) { document.getElementById('mdmp-content').innerHTML = '<div style="padding:20px;text-align:center;color:var(--red,#fc8181);font-size:13px;">Could not load that season. Pick it again to retry.</div>'; return; }
+    if ((document.getElementById('mdmp-club')?.value || '') !== clubId || (document.getElementById('mdmp-season')?.value || '') !== seasonId) return;   // the picks changed while loading: that change renders its own preview
+  }
   // Ensure mdmRosterMembers loaded
   const loading = document.getElementById('mdmp-loading');
   loading.style.display = '';
@@ -8790,7 +9038,8 @@ function getClubColour(clubId) {
 }
 
 // ─── MDM LINKAGE REPORT (Step 8.5) ───────────────────────────────────────────
-function runLinkageReport() {
+async function runLinkageReport() {
+  if (!(await ensureAllSeasonsLoaded('The linkage report'))) return;
   const statusEl = document.getElementById('linkage-report-status');
   const outputEl = document.getElementById('linkage-report-output');
   statusEl.textContent = 'Computing…';
@@ -8999,7 +9248,7 @@ function initAnalyticsPage() {
     return;
   }
   const d = computeAnalytics();
-  let html = '';
+  let html = LOAD_STATE.all ? '' : `<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;font-size:12px;color:var(--amber);">⚠ ${_escHtml(partialNote())} Every number on this page counts the loaded seasons only. <a href="#" onclick="loadAllSeasonsClick().then(initAnalyticsPage);return false;" style="color:var(--amber);">Load all seasons</a></div>`;
 
   // ── Section 1: Executive Summary ────────────────────────────────────────
   html += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;">
@@ -9198,7 +9447,8 @@ function exportAnalyticsCsv() {
 }
 
 // ─── DATA HEALTH RUN REPORT ────────────────────────────────────────────────
-function runAnalytics() {
+async function runAnalytics() {
+  if (!(await ensureAllSeasonsLoaded('The analytics run'))) return;
   const clubMap = new Map((CACHE.clubs||[]).map(c => [c.id, c.Name||'']));
   const seasonMap = new Map((CACHE.seasons||[]).map(s => [s.id, s.Label||'']));
   const activeHeroes = (CACHE.heroes||[]).filter(h => h.Status === 'active');
@@ -9464,6 +9714,7 @@ function initBackfillSelects() {
 }
 
 async function runMdmBackfill(dryRun) {
+  { const _sf = (document.getElementById('backfill-season') || {}).value || ''; if (!(await ensureScopeLoaded('The ActorID/RosterID backfill', _sf))) return; }
   initBackfillSelects();
   const clubFilter = document.getElementById('backfill-club')?.value || '';
   const seasonFilter = document.getElementById('backfill-season')?.value || '';
@@ -9795,6 +10046,10 @@ function renderRmCoverageBanner(clubFilter, seasonFilter) {
     const key = `${clubId}|${seasonId}`;
     missingByClubSeason.set(key, (missingByClubSeason.get(key)||0) + 1);
   });
+  if (missingByClubSeason.size === 0 && !LOAD_STATE.all) {
+    banner.innerHTML = `<div style="background:var(--amber-bg);border:1px solid rgba(255,179,64,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--amber);">No active hero PIDs in the loaded seasons are missing a RosterID. ${_escHtml(partialNote())}</div>`;
+    return;
+  }
   if (missingByClubSeason.size === 0) {
     banner.innerHTML = `<div style="background:var(--green-bg);border:1px solid rgba(61,214,140,0.2);border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;color:var(--green);">✓ All active hero PIDs${clubFilter||seasonFilter?' in this view':''} have a RosterID linked</div>`;
     return;
@@ -10095,7 +10350,7 @@ function initBulkExport() {
 function getExportSeasonsForClub(clubId) {
   if (!clubId) return CACHE.seasons||[];
   // Return only seasons that have at least one hero PID for this club
-  const seasonIds = new Set((CACHE.heroes||[]).filter(h=>h.ClubID===clubId).map(h=>h.SeasonID).filter(Boolean));
+  const seasonIds = seasonIdsForClub(clubId);
   return (CACHE.seasons||[]).filter(s=>seasonIds.has(s.id));
 }
 
@@ -10111,7 +10366,7 @@ function filterSeasonDropdown(seasonSelId, clubId, {allLabel='All seasons', blan
     const ids = new Set((CACHE.rosterMappings||[]).filter(r=>r.ClubID===clubId).map(r=>r.SeasonID).filter(Boolean));
     seasons = (CACHE.seasons||[]).filter(s=>ids.has(s.id));
   } else {
-    const ids = new Set((CACHE.heroes||[]).filter(h=>h.ClubID===clubId).map(h=>h.SeasonID).filter(Boolean));
+    const ids = seasonIdsForClub(clubId);
     seasons = (CACHE.seasons||[]).filter(s=>ids.has(s.id));
     // a club with NO hero PIDs yet (never imported) has no seasons of its own: offer every season, otherwise a new club could never be imported
     if (!seasons.length) seasons = CACHE.seasons||[];
@@ -10162,6 +10417,10 @@ function updateExportCounts() {
 function getFilteredHeroPids(prefix) {
   const clubId = document.getElementById('exp-'+prefix+'-club')?.value || '';
   const seasonId = document.getElementById('exp-'+prefix+'-season')?.value || '';
+  if (seasonId ? !seasonLoaded(seasonId) : !allSeasonsLoaded()) {   // v239: never export a quietly partial list
+    if (seasonId) needSeasonLoadedToast(seasonId); else toast('"All seasons" needs every season loaded. Pick one season, or tick all seasons in Settings (Save and reload).', 'error');
+    return [];
+  }
   const status = document.getElementById('exp-'+prefix+'-status')?.value || '';
   const kits = getMsValues('exp-'+prefix+'-kit');   // array, empty = all
   const fonts = getMsValues('exp-'+prefix+'-font');  // array, empty = all
