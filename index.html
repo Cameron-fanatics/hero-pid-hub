@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- HEROPID-BUILD-v239.6 -->
+<!-- HEROPID-BUILD-v239.12 -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -58,6 +58,8 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 .pv-details>.pv-body{padding:10px 12px;border-top:1px solid var(--border)}
 .pv-tech{display:none}body.pv-tech-on .pv-tech{display:inline}body.pv-tech-on .pv-plain{display:none}
 .pv-techbar{font-size:11px;color:var(--text3);margin-bottom:8px;display:flex;gap:6px;align-items:center}
+.no-edit .edit-only{display:none!important}
+.act-tab-on{border-color:var(--accent)!important;color:var(--accent)!important}
 .squad-panel{position:absolute;z-index:60;top:100%;left:0;margin-top:4px;width:320px;max-height:360px;display:flex;flex-direction:column;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--radius-sm);box-shadow:0 8px 24px rgba(0,0,0,0.35)}
 .squad-panel.hidden{display:none}
 .squad-head{display:flex;gap:6px;padding:8px;border-bottom:1px solid var(--border)}
@@ -194,7 +196,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
   <div class="sidebar-logo">
     <img class="logo-img" alt="Fanatics" src="data:image/png;base64,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">
     <div class="logo-sub">Hero PID Hub</div>
-    <div class="logo-version" id="app-version" title="Build stamp: HEROPID-BUILD-v239.6">v239.6</div>
+    <div class="logo-version" id="app-version" title="Build stamp: HEROPID-BUILD-v239.12">v239.12</div>
   </div>
   <nav class="sidebar-nav">
     <button class="nav-section nav-toggle" id="navbtn-main" aria-expanded="true" aria-controls="navgrp-main" onclick="toggleNavGroup('main')"><span class="nav-chev">▾</span> Main</button>
@@ -227,8 +229,8 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
   </div>
   <div class="sidebar-stats">
     <div class="stat-pill"><span class="stat-label">Hero PIDs</span><span class="stat-value" id="stat-hero">—</span></div>
-    <div class="stat-pill"><span class="stat-label" id="stat-mdm-label">MDM Linked</span><span class="stat-value" id="stat-mdm-linked">—</span></div>
-    <div class="stat-pill" style="cursor:pointer;" onclick="showPage('datahealth')"><span class="stat-label">Data Health</span><span class="stat-value" id="stat-health">—</span></div>
+    <div class="stat-pill" id="pill-mdm"><span class="stat-label" id="stat-mdm-label">MDM Linked</span><span class="stat-value" id="stat-mdm-linked">—</span></div>
+    <div class="stat-pill" id="pill-health" style="cursor:pointer;" onclick="showPage('datahealth')"><span class="stat-label">Data Health</span><span class="stat-value" id="stat-health">—</span></div>
   </div>
 </aside>
 
@@ -237,12 +239,31 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 <!-- ACTIVITY PAGE -->
 <div id="page-activity" class="hidden">
   <div class="topbar"><div class="page-title">Activity</div>
-    <label style="font-size:12px;color:var(--text2);display:flex;gap:6px;align-items:center;"><input type="checkbox" id="activity-errors-only" onchange="renderActivity()"> Errors only</label>
-    <button class="btn btn-ghost btn-sm" onclick="copyActivity()">Copy</button>
-    <button class="btn btn-ghost btn-sm" onclick="downloadActivity()">Download</button>
-    <button class="btn btn-ghost btn-sm" onclick="clearActivity()">Clear</button>
+    <button class="btn btn-ghost btn-sm" id="act-tab-team" onclick="setActivityTab('team')">Team log</button>
+    <button class="btn btn-ghost btn-sm" id="act-tab-local" onclick="setActivityTab('local')">This browser</button>
+    <span id="act-team-tools" style="display:flex;gap:8px;align-items:center;">
+      <button class="btn btn-ghost btn-sm" onclick="auditLoadLog()">Refresh</button>
+      <button class="btn btn-ghost btn-sm" onclick="auditDownloadCsv()">Download CSV</button>
+    </span>
+    <span id="act-local-tools" style="display:none;gap:8px;align-items:center;">
+      <label style="font-size:12px;color:var(--text2);display:flex;gap:6px;align-items:center;"><input type="checkbox" id="activity-errors-only" onchange="renderActivity()"> Errors only</label>
+      <button class="btn btn-ghost btn-sm" onclick="copyActivity()">Copy</button>
+      <button class="btn btn-ghost btn-sm" onclick="downloadActivity()">Download</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearActivity()">Clear</button>
+    </span>
   </div>
-  <div class="content"><div class="card" id="activity-list" style="max-height:75vh;overflow-y:auto;"></div></div>
+  <div class="content">
+    <div id="act-team-filters" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center;">
+      <select class="filter-select" id="act-who" onchange="renderActivity()"><option value="">Everyone</option></select>
+      <select class="filter-select" id="act-action" onchange="renderActivity()"><option value="">Add, edit, remove</option><option value="add">Added</option><option value="edit">Edited</option><option value="remove">Removed</option><option value="failed">Failed only</option></select>
+      <select class="filter-select" id="act-area" onchange="renderActivity()"><option value="">All tables</option></select>
+      <input class="form-input" id="act-from" type="date" style="max-width:160px;" onchange="renderActivity()" title="From this date">
+      <input class="form-input" id="act-text" placeholder="Search the log..." style="max-width:240px;" oninput="renderActivity()">
+      <span id="act-status" style="font-size:11px;color:var(--text3);"></span>
+    </div>
+    <div class="card" id="activity-list" style="max-height:70vh;overflow-y:auto;"></div>
+    <div style="text-align:center;margin-top:10px;"><button class="btn btn-ghost btn-sm" id="act-more" style="display:none;" onclick="auditLoadLog(true)">Load older entries</button></div>
+  </div>
 </div>
 
 <!-- SETTINGS PAGE (shown first if no API key) -->
@@ -253,6 +274,13 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
       <div class="api-setup-title">Seasons to load</div>
       <div id="load-seasons-box"></div>
     </div>
+    <div class="api-setup" style="margin-bottom:16px;">
+      <div class="api-setup-title">Activity log and access</div>
+      <div class="api-setup-sub">Every add, edit and removal is recorded in the shared Activity Log, with who did it. You are identified by the owner of your Airtable token, and the token itself is never recorded. The tabs you can see depend on your access, which an admin sets in the App Access table in Airtable.</div>
+      <div id="audit-who-line" style="font-size:12px;color:var(--text2);margin:6px 0 4px;"></div>
+      <div id="access-line" style="font-size:12px;color:var(--text2);margin:0 0 10px;"></div>
+      <div class="form-group"><label class="form-label">Your name in the log (optional)</label><input class="form-input" id="audit-name" placeholder="e.g. Cameron" onchange="auditSaveName()" /></div>
+    </div>
     <div class="api-setup">
       <div class="api-setup-title">Airtable Connection</div>
       <div id="connection-status-banner" style="display:none;border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:20px;font-size:12px;display:flex;align-items:center;gap:10px;"></div>
@@ -260,7 +288,8 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         Hero PID Hub uses Airtable as its database.<br>
         Enter your Airtable Personal Access Token to get started.<br><br>
         Create one at <strong>airtable.com/create/tokens</strong> with scopes:<br>
-        data.records:read · data.records:write · schema.bases:read · schema.bases:write
+        data.records:read · data.records:write · schema.bases:read · schema.bases:write<br>
+        <span style="font-size:11px;opacity:0.85;">Viewers can use a read-only token (data.records:read and schema.bases:read). Every token must be able to read the App Access table.</span>
       </div>
       <div class="form-group">
         <label class="form-label">Personal Access Token</label>
@@ -282,7 +311,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
 <div id="page-search" class="hidden">
   <div class="topbar">
     <div class="page-title">Search</div>
-    <button class="btn btn-primary" onclick="openModal('modal-add-hero')">+ Add Hero PID</button>
+    <button class="btn btn-primary edit-only" onclick="openModal('modal-add-hero')">+ Add Hero PID</button>
   </div>
   <div class="content">
     <div class="search-hero">
@@ -342,7 +371,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
         </label>
         <div id="export-actions" style="display:none;align-items:center;gap:6px;">
           <span style="font-size:11px;color:var(--accent);" id="selected-count-label"></span>
-          <button class="btn btn-primary btn-sm" onclick="exportSelectedPids()">⬇ Export PIDs</button><button class="btn btn-ghost btn-sm" onclick="openCataloguesWithPids([...(window._selectedPids||new Set())])" style="margin-left:4px;">📋 Catalogues</button><button class="btn btn-ghost btn-sm" id="btn-exclusions" onclick="runExclusionsExport(this)" style="margin-left:4px;">⬇ Exclusions</button><button class="btn btn-ghost btn-sm" onclick="exportFootballContent()" style="margin-left:4px;">⬇ Content</button><button class="btn btn-ghost btn-sm" onclick="archiveSelected()" style="margin-left:4px;border-color:rgba(255,92,92,0.4);color:var(--red,#ff5c5c);">Archive selected</button>
+          <button class="btn btn-primary btn-sm" onclick="exportSelectedPids()">⬇ Export PIDs</button><button class="btn btn-ghost btn-sm" onclick="openCataloguesWithPids([...(window._selectedPids||new Set())])" style="margin-left:4px;">📋 Catalogues</button><button class="btn btn-ghost btn-sm" id="btn-exclusions" onclick="runExclusionsExport(this)" style="margin-left:4px;">⬇ Exclusions</button><button class="btn btn-ghost btn-sm" onclick="exportFootballContent()" style="margin-left:4px;">⬇ Content</button><button class="btn btn-ghost btn-sm edit-only" onclick="archiveSelected()" style="margin-left:4px;border-color:rgba(255,92,92,0.4);color:var(--red,#ff5c5c);">Archive selected</button>
         </div>
       </div>
     </div>
@@ -382,7 +411,7 @@ body{font-family:'DM Mono',monospace;background:var(--bg);color:var(--text);min-
     <div id="tabcontent-hero-pids" class="hidden"><div id="heroes-partial-note"></div><div id="heroes-selection-bar"></div><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div id="heroes-perpage"></div><div id="heroes-pager" style="margin-left:auto;"></div></div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
         <span style="font-family:'Syne',sans-serif;font-size:14px;font-weight:600;">Hero PIDs</span>
-        <button class="btn btn-primary btn-sm" onclick="openModal('modal-add-hero')">+ Add Hero PID</button>
+        <button class="btn btn-primary btn-sm edit-only" onclick="openModal('modal-add-hero')">+ Add Hero PID</button>
       </div>
       <div class="card"><table class="data-table"><thead><tr><th id="heroes-th-chk" style="width:32px;padding:8px 4px;"></th><th>PID</th><th>Player</th><th>Club</th><th>Season</th><th>Font</th><th>Garment</th><th>Status</th><th></th></tr></thead><tbody id="heroes-tbody"><tr><td colspan="8" class="loading"><div class="loading-spinner"></div><br>Loading...</td></tr></tbody></table></div>
     </div>
@@ -2436,6 +2465,7 @@ async function runIntegrityCheck() {
 }
 
 async function applyIntegrityRepair() {
+  try { auditContext('Repair from integrity list'); } catch (e) { /* the log is optional */ }
   if (!allSeasonsLoaded()) { toast('The repair needs every season loaded. Run the check again (it offers to load them).', 'error'); return; }
   const sel = document.getElementById('integrity-club');
   const statusEl = document.getElementById('integrity-status'), outEl = document.getElementById('integrity-output');
@@ -2841,6 +2871,7 @@ function downloadDedupLogCsv() {
 function stopDedupRun() { _dedupStop = true; _dedupEl('dedup-exec-status').textContent = 'Stopping after the current pair…'; }
 
 async function runDedupMerge() {
+  try { auditContext('Merge duplicate players'); } catch (e) { /* the log is optional */ }
   if (!allSeasonsLoaded()) { toast('Duplicate cleanup needs every season loaded. Tick all seasons in Settings first (Save and reload).', 'error'); return; }
   const statusEl = _dedupEl('dedup-exec-status'), outEl = _dedupEl('dedup-exec-output');
   const sel = _dedupEl('dedup-exec-club'), cnt = _dedupEl('dedup-exec-count');
@@ -3167,14 +3198,22 @@ let cacheLoaded = false;
 
 // ─── AIRTABLE API ─────────────────────────────────────────────────────────────
 async function atFetch(path, options={}) {
-  if (options && options.method && String(options.method).toUpperCase() !== 'GET' && typeof invalidateIntegrityExport === 'function') invalidateIntegrityExport();   // any write makes a stored fix list stale
-  const res = await fetch(`${AT_API}/${AT_BASE}/${path}`, {
-    ...options,
-    headers: {'Authorization':`Bearer ${AT_TOKEN}`,'Content-Type':'application/json',...(options.headers||{})}
-  });
+  const _isWrite = !!(options && options.method && String(options.method).toUpperCase() !== 'GET');
+  if (_isWrite && typeof invalidateIntegrityExport === 'function') invalidateIntegrityExport();   // any write makes a stored fix list stale
+  const _audit = _isWrite && typeof auditShouldLog === 'function' && auditShouldLog(path);   // v239.7: every add, edit and removal is recorded in the shared Activity Log
+  if (_isWrite && typeof accessCanWrite === 'function' && !accessCanWrite()) throw new Error('Your access does not allow changes.');   // v239.10: a read-only person cannot change data from here either
+  let _cap = null; if (_audit) { try { _cap = auditCapture(); } catch (e) { _cap = null; } }   // who/base/tool are fixed BEFORE the request goes out
+  let res;
+  try {
+    res = await fetch(`${AT_API}/${AT_BASE}/${path}`, {
+      ...options,
+      headers: {'Authorization':`Bearer ${AT_TOKEN}`,'Content-Type':'application/json',...(options.headers||{})}
+    });
+  } catch (netErr) { if (_audit) auditRecordWrite(options.method, path, options.body, null, netErr && netErr.message || 'network error', _cap); throw netErr; }
   if (!res.ok) {
     const err = await res.json().catch(()=>({}));
     const msg = err.error?.message || `HTTP ${res.status}`;
+    if (_audit) auditRecordWrite(options.method, path, options.body, null, msg, _cap);
     // Detect auth/permission errors and prompt user to re-enter token
     if (res.status === 401 || res.status === 403 || msg.toLowerCase().includes('invalid permissions') || msg.toLowerCase().includes('not found')) {
       toast('Airtable token expired or invalid — please reconnect in Settings', 'error');
@@ -3183,7 +3222,9 @@ async function atFetch(path, options={}) {
     }
     throw new Error(msg);
   }
-  return res.json();
+  const _json = await res.json();
+  if (_audit) auditRecordWrite(options.method, path, options.body, _json, null, _cap);
+  return _json;
 }
 
 // Validate AT token is present before starting any import operation
@@ -3261,6 +3302,7 @@ function refreshSettingsStatus() {
 }
 
 function refreshData(){
+  try { accessLoad(true); } catch (e) { /* the access check is separate from the data sync */ }   // v239.11: Refresh also retries a failed access check
   try { localStorage.removeItem(LIGHT_KEY); } catch (e) { /* storage unavailable */ }   // v239: Refresh also re-lists the earlier seasons' PIDs, so changes made elsewhere are seen
   const btns = Array.from(document.querySelectorAll('.js-refresh-data'));
   const origs = btns.map(b => b.textContent);
@@ -3289,7 +3331,7 @@ function disconnectAirtable() {
   localStorage.removeItem('at_base');
   localStorage.removeItem('at_tables');
   localStorage.removeItem('at_fields_init');
-  AT_TOKEN = ''; AT_BASE = ''; TABLES = {};
+  AT_TOKEN = ''; AT_BASE = ''; TABLES = {}; auditResetWho(); try { ACCESS = {state: 'checking', role: '', name: '', allowed: new Set(ACCESS_MINIMAL), full: false, userId: '', unknownTabs: []}; accessApply(); } catch (e) { /* ignore */ }
   CACHE = {clubs:[],seasons:[],players:[],parents:[],heroes:[],mdmRosterMembers:null,catalogues:[],fonts:[],rosterMappings:[],kitColours:[]};
   invalidateDerivedReports();
   updateStats();
@@ -3309,6 +3351,8 @@ async function init() {
   }
   showPage('search');
   loadCache();
+  try { auditEnsureWho().then(() => auditSend()); } catch (e) { /* the log is optional */ }   // who am I, and send anything a previous visit could not
+  try { accessLoad(); } catch (e) { /* access stays minimal */ }
 }
 
 async function saveSettings() {
@@ -3317,6 +3361,7 @@ async function saveSettings() {
   if (!token || !base) { toast('Token and Base ID are required','error'); return; }
   AT_TOKEN = token;
   AT_BASE = base;
+  auditResetWho();
   const status = document.getElementById('settings-status');
   status.textContent = 'Connecting...';
   try {
@@ -3326,7 +3371,7 @@ async function saveSettings() {
     localStorage.setItem('at_tables', JSON.stringify(TABLES));
     status.textContent = '✓ Connected successfully!';
     toast('Connected to Airtable');
-    setTimeout(() => { showPage('search'); loadCache(); }, 1000);
+    setTimeout(() => { showPage('search'); loadCache(); try { accessLoad(); } catch (e) { /* ignore */ } }, 1000);
   } catch(e) {
     status.textContent = 'Error: ' + e.message;
     toast('Connection failed: ' + e.message, 'error');
@@ -3345,7 +3390,7 @@ async function initTables() {
   const required = ['Clubs','Seasons','Players','Parent PIDs','Hero PIDs'];
   const missing = required.filter(n => !tableMap[n]);
   if (missing.length > 0) throw new Error(`Missing tables: ${missing.join(', ')}. Please create them in Airtable first.`);
-  TABLES = {clubs:tableMap['Clubs'],seasons:tableMap['Seasons'],players:tableMap['Players'],parents:tableMap['Parent PIDs'],heroes:tableMap['Hero PIDs'],mdmRosterMembers:tableMap['MDM Roster Members'],catalogues:'tblH92885JmpxxBIM',fonts:'tblD6GssdzWoGAZ90',rosterMappings:'tblFtei2eh790LvNf',kitColours:'tblmcaKzxf2PyUma4'};
+  TABLES = {clubs:tableMap['Clubs'],seasons:tableMap['Seasons'],players:tableMap['Players'],parents:tableMap['Parent PIDs'],heroes:tableMap['Hero PIDs'],mdmRosterMembers:tableMap['MDM Roster Members'],catalogues:'tblH92885JmpxxBIM',fonts:'tblD6GssdzWoGAZ90',rosterMappings:'tblFtei2eh790LvNf',kitColours:'tblmcaKzxf2PyUma4',activityLog:tableMap['Activity Log'],appAccess:tableMap['App Access']};
   // Only run ensureFields once per session — skip if already done
   if (!localStorage.getItem('at_fields_init') && !window._fieldsInitDone) {
     window._fieldsInitDone = true;
@@ -3600,6 +3645,315 @@ function setTheme(t) { const n = applyTheme(t); try { localStorage.setItem(THEME
 function appliedTheme() { try { return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'; } catch (e) { return getTheme(); } }   // what is on screen right now
 function toggleTheme() { return setTheme(appliedTheme() === 'light' ? 'dark' : 'light'); }   // flips what is shown even when the choice cannot be saved
 
+// ─── v239.10: TAB ACCESS ─────────────────────────────────────────────────────
+// Which tabs a person sees depends on the "App Access" table in Airtable (one row per person, edited there by an admin; the app only reads it).
+// A person is recognised by the owner of their Airtable token (email, or Airtable user id), the same way the Activity Log does it.
+// This hides tools and stops writes in the app: it is a guardrail, not security. Real protection for people who must not change data is a READ-ONLY Airtable token.
+const ACCESS_DEFAULT = {base: 'app8rnP5uePGORvLC', table: 'tbl0WhvVBSjW81hGl'};
+const ACCESS_PAGES = [['search', 'Search'], ['manage', 'Manage'], ['import', 'Import'], ['bulkexport', 'Export'], ['clubs', 'Clubs'], ['seasons', 'Seasons'], ['fonts', 'Fonts'], ['rostermappings', 'Roster Mappings'], ['cleanup', 'Data Clean-up'], ['datahealth', 'Data Health'], ['analytics', 'Analytics'], ['activity', 'Activity'], ['settings', 'Settings']];
+const ACCESS_ROLES = {admin: ACCESS_PAGES.map(p => p[0]), editor: ['search', 'manage', 'import', 'bulkexport', 'datahealth', 'activity', 'settings'], viewer: ['search', 'bulkexport', 'settings']};
+const ACCESS_MINIMAL = ['search', 'settings'], ACCESS_WRITE_PAGES = ['manage', 'import', 'clubs', 'seasons', 'fonts', 'rostermappings', 'cleanup'];
+const ACCESS_ALIASES = {export: 'bulkexport', exports: 'bulkexport', mappings: 'rostermappings', rostermapping: 'rostermappings', dataclean: 'cleanup', datacleanup: 'cleanup', cleanup: 'cleanup', health: 'datahealth'};
+let ACCESS = {state: 'checking', role: '', name: '', allowed: new Set(ACCESS_MINIMAL), full: false, userId: '', unknownTabs: []}, ACCESS_SEQ = 0;   // ACCESS_SEQ numbers every access check: only the newest may apply
+function accessTableId() { return TABLES.appAccess || (AT_BASE === ACCESS_DEFAULT.base ? ACCESS_DEFAULT.table : ''); }
+function accessNorm(v) { return String(v == null ? '' : v).toLowerCase().replace(/[^a-z0-9]/g, ''); }
+function accessTabKey(label) { const n = accessNorm(label); if (!n) return ''; const hit = ACCESS_PAGES.find(p => accessNorm(p[0]) === n || accessNorm(p[1]) === n); return hit ? hit[0] : (ACCESS_ALIASES[n] || ''); }
+function accessResolve(rows, who) {   // pure: what this person may see
+  const minimal = (state, extra) => Object.assign({state, role: '', name: '', allowed: new Set(ACCESS_MINIMAL), full: false, userId: (who && who.id) || '', unknownTabs: []}, extra || {});
+  const list = (rows || []).filter(r => r && accessNorm(r.Person));
+  if (!list.length) return {state: 'setup', role: '', name: '', allowed: new Set(ACCESS_PAGES.map(p => p[0])), full: true, userId: (who && who.id) || '', unknownTabs: []};   // nobody is listed yet: full access until the first row is added
+  const email = String((who && who.email) || '').trim().toLowerCase(), id = String((who && who.id) || '').trim().toLowerCase();
+  const row = list.find(r => { const p = String(r.Person).trim().toLowerCase(); return (email && p === email) || (id && p === id); });
+  if (!row) return minimal('unlisted');
+  const name = String(row.Name || '').trim(), tabsText = String(row.Tabs || '').trim(), roleText = String(row.Role || '').trim().toLowerCase();
+  const allowedFrom = keys => new Set(keys.concat(['settings']));
+  if (tabsText) {
+    const toks = tabsText.split(/[,;\n]/).map(t => t.trim()).filter(Boolean), keys = [], unknown = [];
+    toks.forEach(t => { const k = accessTabKey(t); if (k) keys.push(k); else unknown.push(t); });
+    if (!toks.length) { /* only separators: no list at all, the role applies */ } else if (keys.length) return {state: 'ok', role: 'custom', name, allowed: allowedFrom(keys), full: false, userId: (who && who.id) || '', unknownTabs: unknown};
+    if (toks.length) return {state: 'badtabs', role: 'custom', name, allowed: new Set(['settings']), full: false, userId: (who && who.id) || '', unknownTabs: unknown};   // a Tabs list REPLACES the role even when every name in it is misspelled: Settings only, never the role's broader set
+  }
+  if (ACCESS_ROLES[roleText]) return {state: 'ok', role: roleText, name, allowed: allowedFrom(ACCESS_ROLES[roleText]), full: false, userId: (who && who.id) || '', unknownTabs: []};
+  return minimal('badrole', {name});   // a row with a role nobody recognises is not a reason to open anything
+}
+function accessAllowed(page) { return !!(ACCESS.full || (ACCESS.allowed && ACCESS.allowed.has(page))); }
+function accessReset() {   // a new connection starts with the minimum, whatever the previous person could do (also if connecting then fails)
+  ACCESS_SEQ++;   // and any check still running for the old connection can no longer apply
+  ACCESS = {state: 'checking', role: '', name: '', allowed: new Set(ACCESS_MINIMAL), full: false, userId: '', unknownTabs: []};
+  accessApply();
+  try { const g = accessGuard(currentPageKey()); if (g.blocked) showPage(g.page); } catch (e) { /* ignore */ }
+}
+function accessCanWrite() { return !!(ACCESS.full || ACCESS_WRITE_PAGES.some(p => ACCESS.allowed.has(p))); }
+function accessCanEdit() { return !!(ACCESS.full || ACCESS.allowed.has('manage')); }
+function accessLabel(page) { const hit = ACCESS_PAGES.find(p => p[0] === page); return hit ? hit[1] : page; }
+function accessFirst() { const hit = ACCESS_PAGES.find(p => accessAllowed(p[0])); return hit ? hit[0] : 'settings'; }
+function accessGuard(page) { return accessAllowed(page) ? {page, blocked: false} : {page: accessFirst(), blocked: true}; }
+function accessStatusText() {
+  const A = ACCESS, tabs = ACCESS_PAGES.filter(p => A.allowed.has(p[0]) && p[0] !== 'settings').map(p => p[1]).join(', ');
+  if (A.state === 'ok') return `Access: ${A.role === 'custom' ? 'Custom' : A.role.charAt(0).toUpperCase() + A.role.slice(1)} (${tabs}).${A.unknownTabs.length ? ' Not recognised in your Tabs: ' + A.unknownTabs.join(', ') + '.' : ''}`;
+  if (A.state === 'setup') return 'Nobody is on the access list yet, so everyone has full access. Add people to the App Access table in Airtable.';
+  if (A.state === 'unlisted') return `You are not on the access list yet, so only Search and Settings are shown. Ask an admin to add you${A.userId ? ' (your Airtable user ID is ' + A.userId + ')' : ''}.`;
+  if (A.state === 'badtabs') return `Your Tabs list in the access table has no tab the app recognises (${A.unknownTabs.join(', ')}), so only Settings is shown. Ask an admin to correct it (tab names: ${ACCESS_PAGES.filter(p => p[0] !== 'settings').map(p => p[1]).join(', ')}).`;
+  if (A.state === 'badrole') return 'Your access row has a role the app does not recognise (use Admin, Editor or Viewer), so only Search and Settings are shown. Ask an admin.';
+  if (A.state === 'error') return 'Access could not be checked, so only Search and Settings are shown. Try Refresh data.';
+  if (A.state === 'off') return 'Access control is not set up for this base.';
+  return 'Checking your access...';
+}
+function accessApply() {
+  try {
+    const setShown = (el, on) => { if (el && el.style) el.style.display = on ? '' : 'none'; };
+    ACCESS_PAGES.forEach(([k]) => { if (k !== 'settings') setShown(document.getElementById('nav-' + k), accessAllowed(k)); });
+    ['main', 'data', 'settings'].forEach(g => {   // a group with nothing to show disappears with its heading
+      const grp = document.getElementById('navgrp-' + g), btn = document.getElementById('navbtn-' + g); if (!grp || !btn) return;
+      const any = ACCESS_PAGES.some(([k]) => { const it = document.getElementById('nav-' + k); return it && it.closest && it.closest('.nav-group') === grp && accessAllowed(k); });
+      setShown(btn, any); if (!any) setShown(grp, false); else if (grp.style) grp.style.display = '';
+    });
+    setShown(document.getElementById('pill-mdm'), accessAllowed('datahealth')); setShown(document.getElementById('pill-health'), accessAllowed('datahealth'));
+    if (document.body && document.body.classList) document.body.classList.toggle('no-edit', !accessCanEdit());
+    const line = document.getElementById('access-line'); if (line) line.textContent = accessStatusText();
+  } catch (e) { /* the menu is cosmetic: the page guard and the write guard do the real work */ }
+}
+async function accessLoad(force) {
+  const seq = ++ACCESS_SEQ;   // checks can overlap (Refresh while one is running): a slower, older answer must never overwrite a newer one, even within the same connection
+  if (!AT_TOKEN || !AT_BASE) { ACCESS = {state: 'checking', role: '', name: '', allowed: new Set(ACCESS_MINIMAL), full: false, userId: '', unknownTabs: []}; accessApply(); return; }
+  const tbl = accessTableId();
+  if (!tbl) { ACCESS = {state: 'off', role: '', name: '', allowed: new Set(ACCESS_PAGES.map(p => p[0])), full: true, userId: '', unknownTabs: []}; accessApply(); return; }
+  const sess = AUDIT_SESSION;   // an answer for an earlier connection is discarded
+  let next;
+  try {
+    await auditEnsureWho(force);
+    if (!auditWhoKnown()) throw new Error('who');
+    const rows = []; let offset = null;
+    do { const params = new URLSearchParams(); params.set('pageSize', '100'); if (offset) params.set('offset', offset); const data = await atFetch(`${tbl}?${params}`); (data.records || []).forEach(r => rows.push(r.fields || {})); offset = data.offset || null; } while (offset);
+    next = accessResolve(rows, AUDIT_WHO);
+  } catch (e) { next = {state: 'error', role: '', name: '', allowed: new Set(ACCESS_MINIMAL), full: false, userId: (AUDIT_WHO && AUDIT_WHO.id) || '', unknownTabs: []}; }
+  if (sess !== AUDIT_SESSION || seq !== ACCESS_SEQ) return;
+  ACCESS = next; accessApply();
+  const g = accessGuard(currentPageKey()); if (g.blocked) showPage(g.page);   // access was reduced while a hidden page was open
+}
+function currentPageKey() { try { const hit = ACCESS_PAGES.find(([k]) => { const pg = document.getElementById('page-' + k); return pg && !pg.classList.contains('hidden'); }); return hit ? hit[0] : 'search'; } catch (e) { return 'search'; } }
+
+// ─── v239.7: TEAM ACTIVITY LOG ───────────────────────────────────────────────
+// Every add, edit and removal the app makes in Airtable is recorded in the shared "Activity Log" table, with WHO did it. Who = the owner of the Airtable token in use,
+// asked from Airtable once per session (the token itself is never stored in the log, sent anywhere else or shown). A person can add a display name in Settings.
+// Writing the log can never stop or undo an edit: a log line that cannot be saved is kept and retried.
+const AUDIT_VERSION = 'v239.12';
+const AUDIT_DEFAULT = {base: 'app8rnP5uePGORvLC', table: 'tblBi8mYu3QZAWMWe'};
+const AUDIT_QUEUE_KEY = 'hph_audit_queue', AUDIT_NAME_KEY = 'hph_display_name', AUDIT_FLUSH_MS = 2500, AUDIT_MAX_IDS = 1500, AUDIT_MAX_QUEUE = 400, AUDIT_CTX_MS = 20000, AUDIT_MAX_TRIES = 5;
+const AUDIT_AREAS = {heroes: 'Hero PIDs', parents: 'Parent PIDs', players: 'Players', clubs: 'Clubs', seasons: 'Seasons', mdmRosterMembers: 'MDM Roster Members', rosterMappings: 'Roster Mapping', fonts: 'Fonts', catalogues: 'Catalogues', kitColours: 'Kit Colours'};
+let AUDIT_WHO = null, AUDIT_PENDING = new Map(), AUDIT_TIMER = null, AUDIT_CTX = null, AUDIT_SENDING = false, AUDIT_WHO_TRIED = 0, AUDIT_LAST_ERR = 0, AUDIT_QUEUE = null, AUDIT_SESSION = auditNewSession(), AUDIT_SEQ = 0, AUDIT_WHO_PROMISE = null;
+function auditNewSession() { return 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }   // unique across visits and reconnects: a restarted counter would make an old unknown line look like it belongs to the new person
+function auditTableId() { return TABLES.activityLog || (AT_BASE === AUDIT_DEFAULT.base ? AUDIT_DEFAULT.table : ''); }
+function auditParsePath(path) { const p = String(path || '').split('?')[0].split('/'); return {tableId: p[0] || '', recordId: p[1] || ''}; }
+function auditAreaName(tableId) { for (const k in AUDIT_AREAS) if (TABLES[k] === tableId) return AUDIT_AREAS[k]; return tableId; }
+function auditShouldLog(path) { const t = auditParsePath(path).tableId; return /^tbl/.test(t) && t !== auditTableId(); }   // never the log itself
+function auditOp(method) { const m = String(method || '').toUpperCase(); return m === 'POST' ? 'add' : m === 'DELETE' ? 'remove' : (m === 'PATCH' || m === 'PUT') ? 'edit' : ''; }
+function auditTrim(v) { let s = typeof v === 'string' ? v : JSON.stringify(v); s = String(s == null ? '' : s); return s.length > 80 ? s.slice(0, 77) + '...' : s; }
+function auditWriteInfo(method, path, body, resp) {   // pure: what one write did
+  const {tableId, recordId} = auditParsePath(path), op = auditOp(method); if (!op) return null;
+  let b = null; try { b = body ? JSON.parse(body) : null; } catch (e) { b = null; }
+  let ids = [], count = 0, sample = null, clubId = '', seasonId = ''; const fields = new Set();
+  const take = r => { if (r && r.fields) { Object.keys(r.fields).forEach(f => fields.add(f)); } };
+  const first = f => { if (!f) return; sample = {}; Object.keys(f).slice(0, 8).forEach(k => { sample[k] = auditTrim(f[k]); }); if (typeof f.ClubID === 'string') clubId = f.ClubID; if (typeof f.SeasonID === 'string') seasonId = f.SeasonID; };
+  if (b && Array.isArray(b.records)) {
+    count = b.records.length; b.records.forEach(take); first(b.records[0] && b.records[0].fields);
+    ids = b.records.map(r => r && r.id).filter(Boolean);
+    if (op === 'add' && resp && Array.isArray(resp.records)) ids = resp.records.map(r => r.id).filter(Boolean);
+  } else if (b && b.fields) { count = 1; take(b); first(b.fields); if (recordId) ids = [recordId]; }
+  if (op === 'remove' && recordId) { count = 1; ids = [recordId]; }
+  else if (!count && recordId) { count = 1; ids = [recordId]; }
+  return {tableId, op, count, ids, fields: [...fields], sample, clubId, seasonId};
+}
+function auditRecordLabel(tableId, id) {   // a human name for one record, from what is already loaded
+  const f = arr => (arr || []).find(r => r.id === id) || null;
+  try {
+    if (tableId === TABLES.heroes) { const r = f(CACHE.heroes); return r ? String(r.PID || '') : ''; }
+    if (tableId === TABLES.parents) { const r = f(CACHE.parents); return r ? String(r.PID || '') : ''; }
+    if (tableId === TABLES.players) { const r = f(CACHE.players); return r ? String(r.Name || '') : ''; }
+    if (tableId === TABLES.clubs) { const r = f(CACHE.clubs); return r ? String(r.Name || '') : ''; }
+    if (tableId === TABLES.seasons) { const r = f(CACHE.seasons); return r ? String(r.Label || '') : ''; }
+    if (tableId === TABLES.fonts) { const r = f(CACHE.fonts); return r ? String(r.Name || r.FontName || '') : ''; }
+    if (tableId === TABLES.rosterMappings) { const r = f(CACHE.rosterMappings); return r ? String(r.RosterName || '') : ''; }
+  } catch (e) { /* a name is a nicety */ }
+  return '';
+}
+function auditClubSeasonNames(e) {
+  let clubId = e.clubId, seasonId = e.seasonId;
+  try {
+    if ((!clubId || !seasonId) && e.ids[0]) {
+      const src = e.tableId === TABLES.heroes ? CACHE.heroes : e.tableId === TABLES.parents ? CACHE.parents : e.tableId === TABLES.players ? CACHE.players : null;
+      const r = src && src.find(x => x.id === e.ids[0]); if (r) { clubId = clubId || (typeof r.ClubID === 'string' ? r.ClubID : ''); seasonId = seasonId || (typeof r.SeasonID === 'string' ? r.SeasonID : ''); }
+    }
+    if (e.tableId === TABLES.clubs && e.ids[0]) clubId = clubId || e.ids[0];
+    const c = clubId && (CACHE.clubs || []).find(x => x.id === clubId), se = seasonId && (CACHE.seasons || []).find(x => x.id === seasonId);
+    return {club: c ? String(c.Name || '') : '', season: se ? String(se.Label || '') : ''};
+  } catch (er) { return {club: '', season: ''}; }
+}
+function auditNumber(n) { return Number(n || 0).toLocaleString('en-GB'); }
+function auditSummary(e, names) {   // pure: the one line you read in the log
+  const verb = {add: 'Added', edit: 'Edited', remove: 'Removed'}[e.op] || 'Changed', n = e.count || e.failed || 0, one = n === 1;
+  const flds = [...e.fields].slice(0, 6).join(', ');
+  const kv = e.sample ? Object.keys(e.sample).slice(0, 3).map(k => `${k} → ${e.sample[k]}`).join(', ') : '';
+  let core;
+  if (e.label) core = `${e.label}: ${verb.toLowerCase()} ${auditNumber(n)} ${names.area} record${one ? '' : 's'}${e.op === 'edit' && flds ? ' (' + flds + ')' : ''}`;
+  else if (one && names.record) core = `${verb} ${names.area} ${names.record}${e.op !== 'remove' && kv ? ': ' + kv : ''}`;
+  else if (one) core = `${verb} 1 ${names.area} record${e.op !== 'remove' && kv ? ': ' + kv : ''}`;
+  else core = `${verb} ${auditNumber(n)} ${names.area} records${e.op === 'edit' && flds ? ' (' + flds + ')' : ''}`;
+  const where = [names.club, names.season].filter(Boolean).join(' ');
+  if (where) core += ' · ' + where;
+  if (e.failed) core += e.count ? ` · ${auditNumber(e.failed)} failed` : ` · FAILED${e.errors && e.errors[0] ? ': ' + e.errors[0] : ''}`;
+  return core.slice(0, 480);
+}
+function auditWhoKnown() { return !!(AUDIT_WHO && (AUDIT_WHO.id || AUDIT_WHO.email)); }   // Airtable has said who owns the token
+function auditWhoText() {
+  let name = ''; try { name = (localStorage.getItem(AUDIT_NAME_KEY) || '').trim(); } catch (e) { name = ''; }
+  const w = AUDIT_WHO || {};
+  return name ? (w.email ? `${name} (${w.email})` : name) : (w.email || w.id || '');
+}
+function auditRowFrom(e, when) {   // one pending action -> one Activity Log row (Airtable field names)
+  const names = auditClubSeasonNames(e), area = auditAreaName(e.tableId), record = e.count === 1 && e.ids[0] ? auditRecordLabel(e.tableId, e.ids[0]) : '';
+  const result = e.failed && !e.count ? 'failed' : e.failed ? 'partial' : 'ok';
+  return {Summary: auditSummary(e, {area, record, club: names.club, season: names.season}), When: new Date(when || e.t || Date.now()).toISOString(), Who: e.who || '', WhoId: e.whoId || '', Action: e.op, Area: area,
+    Club: names.club, Season: names.season, Records: e.count || e.failed || 0, Result: result, AppVersion: AUDIT_VERSION,
+    Details: JSON.stringify({label: e.label || undefined, ids: e.ids, fields: [...e.fields], sample: e.sample || undefined, errors: e.errors && e.errors.length ? e.errors : undefined})};
+}
+function auditContext(label, meta) { AUDIT_CTX = {label: String(label || ''), meta: meta || {}, t: Date.now()}; }   // names the big tools: "Link from stored rosters: linked 1,972 ..."
+function auditCurrentContext(now) { if (!AUDIT_CTX) return null; if ((now || Date.now()) - AUDIT_CTX.t > AUDIT_CTX_MS) { AUDIT_CTX = null; return null; } return AUDIT_CTX; }
+function auditCapture() {   // who is connected, to which base, and which tool is running: read BEFORE a request is sent, so a reconnect while it is in flight cannot change who gets the credit
+  const ctx = auditCurrentContext();
+  return {who: auditWhoKnown() ? auditWhoText() : '', whoId: (AUDIT_WHO && AUDIT_WHO.id) || '', base: AT_BASE, table: auditTableId(), session: AUDIT_SESSION, label: ctx ? ctx.label : ''};
+}
+function auditNote(info, err, now, cap) {   // one finished (or failed) write joins its action; an action is one tool, one table, one kind of change
+  cap = cap || auditCapture();
+  const t = now || Date.now(), ctx = auditCurrentContext(t), key = [cap.session, cap.base, cap.label, info.tableId, info.op].join('|');
+  let e = AUDIT_PENDING.get(key);
+  // WHO did it and WHERE it is logged are fixed when the action starts, not when the line is finally sent
+  if (!e) { e = {key, label: cap.label, tableId: info.tableId, op: info.op, count: 0, failed: 0, ids: [], fields: new Set(), sample: null, clubId: '', seasonId: '', t, errors: [],
+      who: cap.who, whoId: cap.whoId, base: cap.base, table: cap.table, session: cap.session}; AUDIT_PENDING.set(key, e); }
+  if (ctx && ctx.label === cap.label) ctx.t = t;   // a running tool keeps its label while it keeps writing
+  if (err) { e.failed += info.count || 1; const m = String(err).slice(0, 200); if (e.errors.length < 3 && !e.errors.includes(m)) e.errors.push(m); }
+  else { e.count += info.count; info.ids.forEach(id => { if (e.ids.length < AUDIT_MAX_IDS) e.ids.push(id); }); }
+  info.fields.forEach(f => e.fields.add(f)); if (!e.sample) e.sample = info.sample; if (!e.clubId) e.clubId = info.clubId || ''; if (!e.seasonId) e.seasonId = info.seasonId || '';
+  auditSchedule(); return e;
+}
+function auditRecordWrite(method, path, body, resp, err, cap) { try { const info = auditWriteInfo(method, path, body, resp); if (info) auditNote(info, err, undefined, cap); } catch (e) { /* the log must never break a write */ } }
+function auditSchedule() { if (AUDIT_TIMER) clearTimeout(AUDIT_TIMER); AUDIT_TIMER = setTimeout(() => { AUDIT_TIMER = null; auditFlush(); }, AUDIT_FLUSH_MS); }
+function auditQueueGet() {   // the real queue lives in memory; the browser copy is only a backup for the next visit
+  if (AUDIT_QUEUE === null) { try { const q = JSON.parse(localStorage.getItem(AUDIT_QUEUE_KEY)); AUDIT_QUEUE = Array.isArray(q) ? q.filter(r => r && r.fields && r.fields.Summary) : []; } catch (e) { AUDIT_QUEUE = []; } AUDIT_QUEUE.forEach(r => { if (!r.id) r.id = 'q' + (++AUDIT_SEQ) + '-' + Date.now(); if (!r.base) r.base = AT_BASE; if (!r.table) r.table = auditTableId(); }); }   // lines saved by an older version belong to the base connected now
+  return AUDIT_QUEUE;
+}
+function auditLoadQueue() { return auditQueueGet(); }
+function auditSaveQueue() { const q = auditQueueGet(); try { if (q.length) localStorage.setItem(AUDIT_QUEUE_KEY, JSON.stringify(q)); else localStorage.removeItem(AUDIT_QUEUE_KEY); } catch (e) { /* storage full or blocked: the in-memory queue still holds every line */ } return q; }
+function auditEnqueue(entries) {   // entries: {fields, base, table, session}; a line with nowhere to go is not queued
+  const q = auditQueueGet();
+  entries.forEach(en => { if (en && en.fields && en.table && en.base) q.push({id: 'q' + (++AUDIT_SEQ) + '-' + Date.now(), fields: en.fields, base: en.base, table: en.table, session: en.session, tries: 0}); });
+  if (q.length > AUDIT_MAX_QUEUE) q.splice(0, q.length - AUDIT_MAX_QUEUE);
+  return auditSaveQueue();
+}
+function auditTakePending() {   // pending actions -> queue entries, each carrying its own person, base and table
+  const out = [...AUDIT_PENDING.values()].map(e => {
+    if (!e.who && e.session === AUDIT_SESSION && auditWhoKnown()) { e.who = auditWhoText(); e.whoId = (AUDIT_WHO && AUDIT_WHO.id) || ''; }   // asked-for name arrived since the edit, same token
+    return {fields: auditRowFrom(e), base: e.base, table: e.table, session: e.session};
+  });
+  AUDIT_PENDING.clear(); return out;
+}
+function auditFlush() { const en = auditTakePending(); if (en.length) auditEnqueue(en); return auditSend(); }
+async function auditEnsureWho(force) {   // who owns the token in use? asked once per connection; everyone who asks at the same time shares that one question; a failure is retried at most once a minute
+  if (auditWhoKnown()) return AUDIT_WHO;
+  if (AUDIT_WHO_PROMISE && AUDIT_WHO_PROMISE.sess === AUDIT_SESSION) return AUDIT_WHO_PROMISE.p;
+  if (force) AUDIT_WHO_TRIED = 0;   // a person pressing Refresh data is asking again on purpose
+  if (Date.now() - AUDIT_WHO_TRIED < 60000 && AUDIT_WHO_TRIED) return AUDIT_WHO;
+  const sess = AUDIT_SESSION, token = AT_TOKEN; AUDIT_WHO_TRIED = Date.now();
+  const p = (async () => {
+    try {
+      const res = await fetch(`${AT_API}/meta/whoami`, {headers: {'Authorization': `Bearer ${token}`}});
+      if (res.ok) { const j = await res.json(); if (sess === AUDIT_SESSION) AUDIT_WHO = {id: String(j.id || ''), email: String(j.email || '')}; }   // an answer for an earlier connection is thrown away
+    } catch (e) { /* offline or no permission: the log still works, just without a name */ }
+    return AUDIT_WHO;
+  })();
+  AUDIT_WHO_PROMISE = {sess, p};
+  try { return await p; } finally { if (AUDIT_WHO_PROMISE && AUDIT_WHO_PROMISE.p === p) AUDIT_WHO_PROMISE = null; }
+}
+function auditResetWho() { AUDIT_WHO = null; AUDIT_WHO_TRIED = 0; AUDIT_SESSION = auditNewSession(); try { if (typeof accessReset === 'function') accessReset(); } catch (e) { /* ignore */ } }   // a new token: lines made before this still belong to whoever made them
+async function auditSend() {
+  if (!AT_TOKEN || !AT_BASE) return;
+  if (AUDIT_SENDING) return;   // lines queued while a send is in flight are picked up by that send: it re-reads the queue after every request
+  AUDIT_SENDING = true;
+  try {
+    {
+      if (!auditQueueGet().some(r => r.base === AT_BASE && r.table)) return;   // nothing to send to this base: no need to ask who we are
+      await auditEnsureWho();
+      for (;;) {
+        const first = auditQueueGet().find(r => r.base === AT_BASE && r.table); if (!first) break;   // lines for another base wait until that base is connected
+        const chunk = auditQueueGet().filter(r => r.base === first.base && r.table === first.table).slice(0, 10);
+        const sess = AUDIT_SESSION, who = auditWhoText(), whoId = (AUDIT_WHO && AUDIT_WHO.id) || '';
+        let ok = false, status = 0;
+        try {
+          const res = await fetch(`${AT_API}/${first.base}/${first.table}`, {method: 'POST', headers: {'Authorization': `Bearer ${AT_TOKEN}`, 'Content-Type': 'application/json'},
+            body: JSON.stringify({records: chunk.map(r => ({fields: {...r.fields, Who: r.fields.Who || (r.session === sess ? who : ''), WhoId: r.fields.WhoId || (r.session === sess ? whoId : '')}})), typecast: true})});
+          ok = res.ok; status = res.status;
+        } catch (e) { ok = false; }
+        const done = new Set(chunk.map(r => r.id));
+        if (ok) { AUDIT_QUEUE = auditQueueGet().filter(r => !done.has(r.id)); auditSaveQueue(); continue; }   // only the lines Airtable acknowledged leave the CURRENT queue
+        let dropped = 0;
+        auditQueueGet().forEach(r => { if (done.has(r.id)) r.tries = (r.tries || 0) + 1; });
+        AUDIT_QUEUE = auditQueueGet().filter(r => { const keep = (r.tries || 0) < AUDIT_MAX_TRIES; if (!keep) dropped++; return keep; }); auditSaveQueue();
+        if (Date.now() - AUDIT_LAST_ERR > 60000) { AUDIT_LAST_ERR = Date.now(); try { logActivity(`The Activity Log could not be saved to Airtable${status ? ' (HTTP ' + status + ')' : ''}${dropped ? '; ' + dropped + ' line(s) dropped after repeated failures' : '; it will retry'}`, 'error'); } catch (e) { /* ignore */ } }
+        if (auditQueueGet().length) setTimeout(() => { auditSend(); }, 20000);
+        break;
+      }
+    }
+  } finally { AUDIT_SENDING = false; }
+}
+try { window.addEventListener('pagehide', () => { try { if (AUDIT_PENDING.size) auditEnqueue(auditTakePending()); } catch (e) { /* ignore */ } }); } catch (e) { /* no window in tests */ }
+function auditSaveName() { const el = document.getElementById('audit-name'); if (!el) return; try { localStorage.setItem(AUDIT_NAME_KEY, el.value.trim()); } catch (e) { /* kept for this visit only */ } auditWhoLine(); }
+function auditWhoLine() {
+  const el = document.getElementById('audit-who-line'), nm = document.getElementById('audit-name'); if (!el) return;
+  try { if (nm && !nm.value) nm.value = localStorage.getItem(AUDIT_NAME_KEY) || ''; } catch (e) { /* ignore */ }
+  const t = auditTableId() ? '' : ' The Activity Log table was not found in this base, so changes are only listed in this browser.';
+  el.textContent = AUDIT_WHO && (AUDIT_WHO.id || AUDIT_WHO.email) ? `Recorded as: ${auditWhoText()}.${t}` : (AT_TOKEN ? 'Checking who this token belongs to...' + t : 'Connect to Airtable first.');
+}
+// The Activity page: the shared log from Airtable, filterable, plus this browser's own messages.
+let ACTIVITY_TAB = '', AUDIT_LOG = [], AUDIT_OFFSET = null, AUDIT_LOADING = false, AUDIT_LOAD_ERR = '';
+function activityTab() { try { return ACTIVITY_TAB || (auditTableId() && AT_TOKEN ? 'team' : 'local'); } catch (e) { return 'local'; } }
+function auditRowFromRecord(r) { const f = (r && r.fields) || {}; let d = null; try { d = f.Details ? JSON.parse(f.Details) : null; } catch (e) { d = null; } return {id: r.id, summary: String(f.Summary || ''), when: String(f.When || ''), who: String(f.Who || ''), whoId: String(f.WhoId || ''), action: String(f.Action || ''), area: String(f.Area || ''), club: String(f.Club || ''), season: String(f.Season || ''), records: Number(f.Records || 0), result: String(f.Result || ''), version: String(f.AppVersion || ''), details: d}; }
+function auditFilter(rows, o) {   // pure
+  o = o || {}; const q = String(o.text || '').trim().toLowerCase(), from = o.from ? Date.parse(o.from + 'T00:00:00Z') : 0;
+  return (rows || []).filter(r => (!o.who || (r.who || r.whoId) === o.who) && (!o.action || (o.action === 'failed' ? r.result !== 'ok' : r.action === o.action)) && (!o.area || r.area === o.area)
+    && (!from || Date.parse(r.when) >= from) && (!q || [r.summary, r.who, r.club, r.season, r.area].join(' ').toLowerCase().includes(q) || (r.details && JSON.stringify(r.details.ids || []).toLowerCase().includes(q))));
+}
+function auditCsv(rows) { const cell = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; return ['When (UTC)', 'Who', 'Action', 'Area', 'Club', 'Season', 'Records', 'Result', 'Summary'].map(cell).join(',') + '\r\n' + (rows || []).map(r => [r.when, r.who || r.whoId, r.action, r.area, r.club, r.season, r.records, r.result, r.summary].map(cell).join(',')).join('\r\n'); }
+async function auditLoadLog(more) {
+  const tbl = auditTableId(); if (!tbl || !AT_TOKEN || AUDIT_LOADING) return;
+  AUDIT_LOADING = true; AUDIT_LOAD_ERR = ''; renderActivity();
+  try {
+    if (!more) { AUDIT_LOG = []; AUDIT_OFFSET = null; }
+    for (let page = 0; page < 3; page++) {
+      const params = new URLSearchParams(); params.set('pageSize', '100'); params.set('sort[0][field]', 'When'); params.set('sort[0][direction]', 'desc'); if (AUDIT_OFFSET) params.set('offset', AUDIT_OFFSET);
+      const data = await atFetch(`${tbl}?${params}`);
+      AUDIT_LOG.push(...(data.records || []).map(auditRowFromRecord)); AUDIT_OFFSET = data.offset || null; if (!AUDIT_OFFSET) break;
+    }
+  } catch (e) { AUDIT_LOAD_ERR = e && e.message || 'could not load'; }
+  AUDIT_LOADING = false; renderActivity();
+}
+function setActivityTab(t) { ACTIVITY_TAB = t === 'local' ? 'local' : 'team'; if (ACTIVITY_TAB === 'team' && !AUDIT_LOG.length && !AUDIT_LOADING) auditLoadLog(); renderActivity(); }
+function auditFilterState() { const g = id => (document.getElementById(id) || {}).value || ''; return {who: g('act-who'), action: g('act-action'), area: g('act-area'), text: g('act-text'), from: g('act-from')}; }
+function auditFillSelect(id, values, label) { const el = document.getElementById(id); if (!el) return; const cur = el.value; el.innerHTML = `<option value="">${label}</option>` + [...new Set(values.filter(Boolean))].sort().map(v => `<option value="${_escHtml(v)}">${_escHtml(v)}</option>`).join(''); el.value = cur; }
+function renderTeamLog() {
+  const box = document.getElementById('activity-list'); if (!box) return;
+  auditFillSelect('act-who', AUDIT_LOG.map(r => r.who || r.whoId), 'Everyone'); auditFillSelect('act-area', AUDIT_LOG.map(r => r.area), 'All tables');
+  const rows = auditFilter(AUDIT_LOG, auditFilterState());
+  const status = document.getElementById('act-status'); if (status) status.textContent = AUDIT_LOADING ? 'Loading...' : AUDIT_LOAD_ERR ? 'Could not load the shared log: ' + AUDIT_LOAD_ERR : `${rows.length} of ${AUDIT_LOG.length} shown${AUDIT_OFFSET ? ' (older entries available)' : ''}`;
+  const more = document.getElementById('act-more'); if (more) more.style.display = AUDIT_OFFSET && !AUDIT_LOADING ? '' : 'none';
+  box.innerHTML = rows.length ? rows.map(r => {
+    const t = r.when ? new Date(r.when).toLocaleString('en-GB', {day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'}) : '';
+    const det = r.details ? `<div class="act-det hidden" id="actdet-${_escHtml(r.id)}"><pre style="white-space:pre-wrap;word-break:break-all;margin:6px 0 0;font-size:11px;">${_escHtml(JSON.stringify(r.details, null, 1))}</pre></div>` : '';
+    return `<div class="activity-row ${r.result && r.result !== 'ok' ? 'error' : 'ok'}" style="flex-wrap:wrap;cursor:pointer;" onclick="auditToggleDetails('${_escHtml(r.id)}')"><span class="t">${_escHtml(t)}</span><span class="act-who" style="min-width:120px;color:var(--text2);">${_escHtml(r.who || r.whoId || 'unknown')}</span><span class="m" style="flex:1;">${_escHtml(r.summary)}</span>${det}</div>`;
+  }).join('') : `<div style="padding:24px;text-align:center;color:var(--text3);">${AUDIT_LOADING ? 'Loading...' : AUDIT_LOG.length ? 'Nothing matches these filters.' : 'No changes recorded yet.'}</div>`;
+}
+function auditToggleDetails(id) { const el = document.getElementById('actdet-' + id); if (el) el.classList.toggle('hidden'); }
+function auditDownloadCsv() { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([auditCsv(auditFilter(AUDIT_LOG, auditFilterState()))], {type: 'text/csv'})); a.download = `hero-pid-hub-team-log-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(a.href); }
+
 // ─── v239: ACTIVITY LOG ──────────────────────────────────────────────────────
 // Everything the app tells you in a toast (and the result lines of the long write tools) is kept here, so a message that vanished after 3 seconds can still be read.
 const ACTIVITY_KEY = 'hph_activity', ACTIVITY_MAX = 300;
@@ -3621,6 +3975,11 @@ function activityPageOpen() { try { const pg = document.getElementById('page-act
 function updateActivityBadge() { try { const g = document.getElementById('nav-settings-badge'); if (g) { g.textContent = String(ACTIVITY_UNSEEN); g.classList.toggle('hidden', ACTIVITY_UNSEEN === 0); }   // also on the Settings heading, which shows it only while that group is closed
     const b = document.getElementById('activity-badge'); if (!b) return; b.textContent = String(ACTIVITY_UNSEEN); b.classList.toggle('hidden', ACTIVITY_UNSEEN === 0); } catch (e) { /* the badge is cosmetic */ } }
 function renderActivity() {
+  const tab = activityTab(), tt = document.getElementById('act-team-tools'), lt = document.getElementById('act-local-tools'), tf = document.getElementById('act-team-filters');
+  const show = (el, on) => { if (el && el.style) el.style.display = on ? '' : 'none'; };
+  show(tt, tab === 'team'); show(lt, tab !== 'team'); show(tf, tab === 'team');
+  const b1 = document.getElementById('act-tab-team'), b2 = document.getElementById('act-tab-local'); if (b1 && b1.classList) b1.classList.toggle('act-tab-on', tab === 'team'); if (b2 && b2.classList) b2.classList.toggle('act-tab-on', tab === 'local');
+  if (tab === 'team') { renderTeamLog(); return; }
   const box = document.getElementById('activity-list'); if (!box) return;
   const only = !!(document.getElementById('activity-errors-only') || {}).checked, list = ACTIVITY.filter(e => !only || e.type === 'error').slice().reverse();
   box.innerHTML = list.length ? list.map(e => `<div class="activity-row ${e.type}"><span class="t">${_escHtml(new Date(e.t).toLocaleTimeString())}</span><span class="m">${_escHtml(e.text)}</span></div>`).join('') : '<div style="padding:24px;text-align:center;color:var(--text3);">Nothing here yet.</div>';
@@ -3717,6 +4076,7 @@ async function loadCache(force, dataOnly=false){
 
 // ─── PAGES ────────────────────────────────────────────────────────────────────
 function showPage(page) {
+  try { const g = accessGuard(page); if (g.blocked) { toast(`You do not have access to ${accessLabel(page)}.`, 'error'); page = g.page; } } catch (e) { /* access control not loaded: nothing to enforce */ }
   ['search','manage','import','clubs','seasons','settings','cleanup','bulkexport','fonts','rostermappings','datahealth','analytics','activity'].forEach(p => {
     document.getElementById('page-'+p)?.classList.add('hidden');
     document.getElementById('nav-'+p)?.classList.remove('active');
@@ -3735,7 +4095,8 @@ function showPage(page) {
   if (page==='cleanup') { initBackfillSelects(); if (typeof initRosterFixSelects === 'function') initRosterFixSelects(); if (typeof dedupRenderJournalWarning === 'function') dedupRenderJournalWarning(); }
   if (page==='datahealth') calcDataHealth();
   if (page==='analytics') initAnalyticsPage();
-  if (page==='activity') { ACTIVITY_UNSEEN = 0; updateActivityBadge(); renderActivity(); }
+  if (page==='activity') { ACTIVITY_UNSEEN = 0; updateActivityBadge(); renderActivity(); if (activityTab() === 'team' && !AUDIT_LOG.length && !AUDIT_LOADING) auditLoadLog(); }
+  if (page==='settings') { try { auditWhoLine(); auditEnsureWho().then(auditWhoLine); accessApply(); if (ACCESS.state === 'error') accessLoad(); } catch (e) { /* cosmetic */ } }
   if (page==='search') {
     const sf = document.getElementById('filter-status');
     if (sf && sf.value === '') sf.value = 'active';
@@ -4456,7 +4817,7 @@ function executeSearch(nameQ, resolvedGarment, resolvedFont, resolvedKit, filter
     const allCardPids = heroes.map(h=>h.PID).filter(Boolean);
     const incompletePlayer = isEntryIncomplete('player', player.id);
     const incompleteBadge = incompletePlayer ? `<span class="badge" style="background:rgba(252,129,129,0.15);color:#fc8181;border:1px solid rgba(252,129,129,0.3);" title="Missing data — see Data Clean-up">⚠ Incomplete</span>` : '';
-    html += `<div class="player-card" data-key="${cardKey}" data-pids="${allCardPids.join(',')}"><div class="player-header" onclick="togglePlayer(this)"><label class="pid-select-check" onclick="event.stopPropagation()" style="display:flex;align-items:center;padding:0 8px 0 4px;cursor:pointer;"><input type="checkbox" class="card-select-chk" data-key="${cardKey}" data-pids="${allCardPids.join(',')}" onchange="onCardSelectChange(this)" style="cursor:pointer;accent-color:var(--accent);width:14px;height:14px;"></label><div class="player-avatar" style="background:${avatarBg};color:${avatarText};border-color:${avatarBorder};">${initials}</div><div class="player-info"><div class="player-name">${player.Name}</div><div class="player-meta">${displayShirtName||''}${displayNumber?' · #'+displayNumber:''}${club?' · '+(club.Name||club.name):''}${season?' · '+(season.Label||season.label):''}${mdmSourceLabel}</div></div><div class="player-badges">${statusBadge}${typeBadge}${gkBadge}${incompleteBadge}${club?`<span class="badge badge-club" style="background:${avatarBg};color:${avatarText};border-color:${avatarBorder};">${club.Name||club.name}</span>`:''}${season?`<span class="badge badge-season">${season.Label||season.label}</span>`:''}<span style="font-size:12px;color:var(--text3);margin-left:4px;">${heroes.length} PIDs</span>${allPids?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();copyAll('${allPids}',this)">⎘ Copy all</button>`:''}<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();openEditPlayer('${player.id}')" style="margin-left:2px;">✎ Edit</button><button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();deactivatePlayer('${player.id}').then(()=>runSearch())" style="margin-left:2px;">${player.Status==='archived'?'Activate':'Archive'}</button></div><span class="chevron">▶</span></div><div class="player-pids">${pidsHtml}</div></div>`;
+    html += `<div class="player-card" data-key="${cardKey}" data-pids="${allCardPids.join(',')}"><div class="player-header" onclick="togglePlayer(this)"><label class="pid-select-check" onclick="event.stopPropagation()" style="display:flex;align-items:center;padding:0 8px 0 4px;cursor:pointer;"><input type="checkbox" class="card-select-chk" data-key="${cardKey}" data-pids="${allCardPids.join(',')}" onchange="onCardSelectChange(this)" style="cursor:pointer;accent-color:var(--accent);width:14px;height:14px;"></label><div class="player-avatar" style="background:${avatarBg};color:${avatarText};border-color:${avatarBorder};">${initials}</div><div class="player-info"><div class="player-name">${player.Name}</div><div class="player-meta">${displayShirtName||''}${displayNumber?' · #'+displayNumber:''}${club?' · '+(club.Name||club.name):''}${season?' · '+(season.Label||season.label):''}${mdmSourceLabel}</div></div><div class="player-badges">${statusBadge}${typeBadge}${gkBadge}${incompleteBadge}${club?`<span class="badge badge-club" style="background:${avatarBg};color:${avatarText};border-color:${avatarBorder};">${club.Name||club.name}</span>`:''}${season?`<span class="badge badge-season">${season.Label||season.label}</span>`:''}<span style="font-size:12px;color:var(--text3);margin-left:4px;">${heroes.length} PIDs</span>${allPids?`<button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();copyAll('${allPids}',this)">⎘ Copy all</button>`:''}<button class="btn btn-ghost btn-sm edit-only" onclick="event.stopPropagation();openEditPlayer('${player.id}')" style="margin-left:2px;">✎ Edit</button><button class="btn btn-ghost btn-sm edit-only" onclick="event.stopPropagation();deactivatePlayer('${player.id}').then(()=>runSearch())" style="margin-left:2px;">${player.Status==='archived'?'Activate':'Archive'}</button></div><span class="chevron">▶</span></div><div class="player-pids">${pidsHtml}</div></div>`;
   });
   html += '</div>';
   document.getElementById('search-results').innerHTML = html;
@@ -4996,6 +5357,7 @@ function exportIncomplete(tableKey) {
 }
 
 async function importCleanup(tableKey, file) {
+  try { auditContext('Data clean-up import'); } catch (e) { /* the log is optional */ }
   if (!file) return;
   const setStatus = (msg, isErr) => cleanupSetStatus(tableKey, msg, isErr);
   setStatus('Reading...');
@@ -6329,6 +6691,7 @@ function exportRelinkRecovery(which) {   // retry path: rebuilds the CSV from re
   return ok;
 }
 async function applyRelink() {
+  try { auditContext('Re-link products to base products'); } catch (e) { /* the log is optional */ }
   const plan = window._relinkPlan, d = importData, st = document.getElementById('relink-status'), btn = document.getElementById('relink-btn');
   if (!plan || !plan.relink.length || !d) return;
   const _held = planImportPlayers(d.players, CACHE.players).held.concat(_importParseHeld(d));
@@ -6534,6 +6897,7 @@ function showAllImportPreview() {
 
 let _storageImportRunning = false;   // true from the moment the first write starts until it has finished or failed: nothing may clear, reload or re-run the import meanwhile
 async function confirmImport() {
+  try { auditContext('Storage Sheet import'); } catch (e) { /* the log is optional */ }
   if (!importData) return;
   if (_storageImportRunning) { toast('An import is already running. Wait for it to finish.', 'error'); return; }
   if (!pidIndexOk()) { pidIndexBlockedToast(); return; }
@@ -6757,6 +7121,7 @@ async function storedLinksPreview() {
   } catch (e) { out.innerHTML = `<div style="font-size:12px;color:var(--red);">Could not read Airtable: ${_escHtml(e.message || e)}</div>`; }
 }
 async function storedLinksApply() {
+  try { auditContext('Link from stored rosters'); } catch (e) { /* the log is optional */ }
   if (_storedLinksRunning || !_storedLinksPlan) return;
   const prev = _storedLinksPlan, out = document.getElementById('stored-links-out'), btn = document.getElementById('stored-links-apply-btn');
   _storedLinksRunning = true; if (btn) { btn.disabled = true; btn.textContent = 'Linking…'; }
@@ -6896,6 +7261,7 @@ async function rosterFixPreview() {
   } catch (e) { if (seq === _rosterFixSeq) out.innerHTML = `<div style="font-size:12px;color:var(--red);">Could not read Airtable: ${_escHtml(e.message || e)}</div>`; }
 }
 async function rosterFixApply() {
+  try { auditContext('RosterID correction'); } catch (e) { /* the log is optional */ }
   if (_rosterFixRunning || !_rosterFixPlan) return;
   const prev = _rosterFixPlan, out = document.getElementById('rfix-out'), btn = document.getElementById('rfix-apply-btn');
   if (document.getElementById('rfix-club').value !== prev.clubId || document.getElementById('rfix-season').value !== prev.seasonId) {   // the plan belongs to another club or season than the one now selected
@@ -7220,6 +7586,7 @@ function exportProvisionalFromCache() {
 }
 
 async function confirmCreationImport() {
+  try { auditContext('Creation import'); } catch (e) { /* the log is optional */ }
   if (!creationImportData) return;
   if (!pidIndexOk()) { pidIndexBlockedToast(); return; }
   const btn=document.getElementById('creation-confirm-btn');
@@ -7723,6 +8090,7 @@ async function processHpParentsFile(file) {
   } catch (e) { toast('Could not read that file: ' + e.message, 'error'); }
 }
 async function applyHpParents() {
+  try { auditContext('Homeplate Parents import'); } catch (e) { /* the log is optional */ }
   const d = hpParentsData; if (!d || !d.plan || _hpRunning) return;
   if (d.plan.errors.length || !d.plan.total) return;
   if (!checkAuthBeforeImport()) return;
@@ -7828,6 +8196,7 @@ function showHomeplatePreview(filename) {
 }
 
 async function confirmHomeplateResolve() {
+  try { auditContext('Homeplate resolver'); } catch (e) { /* the log is optional */ }
   if (!homeplateData) return;
   let resolved=0;
   for (const r of homeplateData.resolutions) {
@@ -8199,6 +8568,7 @@ function mdmPlanHtml(plan, ctx) { return mdmPlanTopHtml(plan, ctx) + mdmPlanList
 
 // ─── execution: exactly the plan, per-batch error handling, one overall progress bar ───
 async function runMdmImportPlan(plan, ui) {
+  try { auditContext('MDM roster import'); } catch (e) { /* the log is optional */ }
   const rep = {created: 0, updated: 0, players: 0, heroes: 0, failed: [], aborted: null};
   const total = plan.total; let done = 0;
   const fail = (phase, what, e) => { rep.failed.push({phase, what, error: (e && e.message) || String(e)}); if (rep.failed.length >= 10 && !rep.aborted) rep.aborted = '10 failures: stopped so a connection or permission problem is not repeated hundreds of times'; };
@@ -8681,6 +9051,7 @@ function updateMissingPlayer(idx) {
 }
 
 async function applySquadUpdate() {
+  try { auditContext('Squad update'); } catch (e) { /* the log is optional */ }
   if (!squadUpdateData) return;
   if (!checkAuthBeforeImport()) return;
   const {changes, clubMembers, newSquad, clubId, seasonId, clubName} = squadUpdateData;
@@ -9427,6 +9798,7 @@ function parseCorrectionRow(row) {
 }
 
 async function runCorrectionImport(dryRun) {
+  try { auditContext('Correction import'); } catch (e) { /* the log is optional */ }
   const statusEl = document.getElementById('correction-status');
   const previewEl = document.getElementById('correction-preview');
   const applyBtn = document.getElementById('correction-apply-btn');
@@ -11046,7 +11418,7 @@ function exportExclusionsFromFilters() {
   toast(`Exported ${rows.length} exclusion${rows.length!==1?'s':''}`);
 }
 
-try { loadActivity(); applyTheme(getTheme()); pvApplyTech(); initNavGroups(); } catch (e) { /* the app starts without them */ }
+try { loadActivity(); applyTheme(getTheme()); pvApplyTech(); initNavGroups(); accessApply(); } catch (e) { /* the app starts without them */ }
 init();
 </script>
 
